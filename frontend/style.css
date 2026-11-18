@@ -1042,3 +1042,37 @@ button{color:var(--on-accent)}
 .run.active{box-shadow:none}
 .run-entry:hover{background:light-dark(#efeff1,#18181b)}
 .app-sidebar .run.active,.app-sidebar .run-entry.active{background:light-dark(#ececef,#1f1f23)}
+
+/* The composer as a home: a greeting, one input, the rest folded away. */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.composer.composer-home{position:relative;max-width:780px;margin:28px auto 36px;padding:0}
+.composer-home .composer-close{position:absolute;top:0;right:0}
+.composer-home .composer-greeting{flex-direction:column;align-items:center;gap:14px;margin:0 0 22px;text-align:center}
+.composer-home .composer-greeting h3{font-size:28px;font-weight:600;letter-spacing:-.015em}
+.composer-home form{border:1px solid var(--line);border-radius:20px;background:var(--panel);box-shadow:0 1px 2px light-dark(#1114180a,#0000),0 10px 32px light-dark(#1114180f,#0006)}
+.composer-home form:focus-within{border-color:light-dark(#cfcfd4,#3a3a40)}
+.composer-home textarea{min-height:92px;padding:18px 20px 6px;font-size:15.5px;resize:none}
+.composer-home .project-field,.composer-home .project-picker{margin:0 12px}
+.composer-row{display:flex;align-items:center;gap:6px;padding:8px 10px 10px}
+.composer-spacer{flex:1}
+.composer-home .attach-button{width:34px;height:34px;padding:0;justify-content:center;font-size:0;border:0;background:transparent;color:var(--muted)}
+.composer-home .attach-button:hover{background:var(--accent-bg);color:var(--text)}
+.composer-home .attach-button .icon{margin:0}
+.options-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line);border-radius:99px;background:var(--panel);color:var(--muted);font-size:12.5px;font-weight:500}
+.options-chip[aria-expanded="true"]{color:var(--text);background:var(--accent-bg)}
+.composer-home .mode-switch{background:transparent;padding:0;margin-right:4px}
+.composer-home .mode-switch button{height:28px;padding:0 9px;font-size:12.5px}
+.composer-home .mode-switch button[aria-pressed="true"]{background:var(--accent-bg);box-shadow:none}
+.send-button{display:grid;place-items:center;width:36px;height:36px;padding:0;border-radius:50%}
+.send-button.busy{width:auto;padding:0 14px;border-radius:99px;font-size:12.5px}
+.send-button .icon{width:18px;height:18px}
+.composer-options{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 10px 10px;padding:12px 14px;border-radius:12px;background:var(--panel-2)}
+.composer-options[hidden]{display:none}
+.composer-hint{margin:12px 0 0;text-align:center;font-size:12.5px;color:var(--faint)}
+.composer-row button,.options-chip{white-space:nowrap}
+.options-chip{min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:600px){
+  .composer-row{flex-wrap:wrap}
+  .composer-home .options-chip{order:5;flex-basis:100%;justify-content:center}
+  .composer-home .composer-greeting h3{font-size:22px}
+}

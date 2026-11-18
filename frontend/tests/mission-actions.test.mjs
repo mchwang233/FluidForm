@@ -2100,7 +2100,19 @@ test("the composer greets you as your partner, by the time of day and what it is
   const composer = document.querySelector(".composer");
   assert.ok(composer.querySelector(".partner-avatar"));
   assert.match(composer.querySelector("h3").textContent, /(早上好|中午好|下午好|晚上好|夜深了)，今天想做点什么？/);
-  assert.match(composer.querySelector(".composer-greeting p").textContent, /问题我直接回答/);
+  assert.match(composer.querySelector(".composer-hint").textContent, /问题我直接回答/);
   await click(button("任务", composer.querySelector(".mode-switch")));
   assert.equal(composer.querySelector("h3").textContent, "要我做什么？");
+});
+
+test("the composer folds budget, models and permissions behind one summary", async t => {
+  const { document, act, click } = await setup(t, [mission("finished-task", "succeeded")]);
+  const chip = document.querySelector(".composer .options-chip");
+  const panel = document.querySelector(".composer .composer-options");
+  assert.match(chip.textContent, /预算 \$2.*自动选模型/);
+  assert.equal(panel.hidden, true);
+  await click(chip);
+  assert.equal(panel.hidden, false);
+  await act(async () => panel.querySelector('.switch input[type="checkbox"]').click());
+  assert.match(chip.textContent, /不用会员 CLI/);
 });
