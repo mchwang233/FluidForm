@@ -984,7 +984,6 @@ input.choice-own:focus{outline:0;border-color:var(--accent)}
 .task-tabs-anchor{height:0}
 
 /* Chats: only a conversation with one model (chat.tsx), started from the composer's 对话 mode. */
-.composer-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .mode-switch{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:light-dark(#f1f4f7,#151c25)}
 .mode-switch button{height:28px;padding:0 14px;border-radius:7px;font-size:13px;background:transparent;color:var(--muted)}
 .mode-switch button[aria-pressed="true"]{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 2px light-dark(#10182814,#0006)}
@@ -997,3 +996,12 @@ input.choice-own:focus{outline:0;border-color:var(--accent)}
 .chat-page .lead-panel>.diagnosis-head{padding-top:8px}
 .auto-note{margin:0 0 12px;font-size:13px;color:var(--muted)}
 .auto-note .link-button{margin-left:6px}
+
+/* The composer greets you as your partner: its avatar, a greeting, what it will do. */
+.composer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.composer-greeting{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.partner-avatar{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:12px;font:700 13px Manrope,sans-serif;color:#fff;background:linear-gradient(135deg,var(--accent),light-dark(#0e7490,#38bdf8));box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 30%,transparent)}
+.composer-greeting h3{margin:1px 0 0;font-size:18px;font-weight:650;letter-spacing:-.01em}
+.composer-greeting p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.composer-tools{display:flex;align-items:center;gap:8px;flex:none}
+@media (max-width:820px){.composer-head{flex-direction:column}.composer-tools{align-self:stretch;justify-content:space-between}}

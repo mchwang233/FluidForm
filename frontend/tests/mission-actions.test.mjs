@@ -401,7 +401,7 @@ test("native dialogs unavailable: list/detail clicks open confirmation, cancel p
   assert.equal(dialog(), null);
   assert.equal(document.querySelectorAll(".run-entry").length, 1);
   assert.doesNotMatch(document.querySelector(".mission-history").textContent, /finished-task/);
-  assert.match(document.querySelector(".detail").textContent, /在左侧选择一个任务/);
+  assert.match(document.querySelector(".detail").textContent, /在左侧选一条记录/);
   assert.equal(state.nativeConfirms, 0);
 });
 
@@ -1215,14 +1215,14 @@ test("the new-task form stays folded behind the sidebar button once tasks exist"
   const open = document.querySelector(".app-sidebar .new-task");
   await click(open);
   assert.ok(document.querySelector(".composer textarea"));
-  await click(document.querySelector('.composer [aria-label="收起新任务"]'));
+  await click(document.querySelector('.composer [aria-label="收起"]'));
   assert.equal(document.querySelector(".composer"), null);
 });
 
 test("with no tasks the new-task form is open and cannot be folded away", async t => {
   const { document } = await setup(t, [], [], { openComposer: false });
   assert.ok(document.querySelector(".composer textarea"));
-  assert.equal(document.querySelector('.composer [aria-label="收起新任务"]'), null);
+  assert.equal(document.querySelector('.composer [aria-label="收起"]'), null);
 });
 
 test("the task page shows its phase, progress and spend, and notices tell when a task finishes", async t => {
@@ -1978,7 +1978,7 @@ test("the composer starts a chat with the chosen model instead of planning a tas
   assert.ok(document.querySelector(".composer .attach-button") && document.querySelector(".composer .fleet-anchor"));
   await click(button("对话", document.querySelector(".mode-switch")));
   const composer = document.querySelector(".composer");
-  assert.match(composer.querySelector("h3").textContent, /新对话/);
+  assert.match(composer.querySelector("h3").textContent, /想聊点什么/);
   // A chat takes attachments but no network or fleet; it picks the model to talk with.
   assert.ok(composer.querySelector(".attach-button"));
   assert.equal(composer.querySelector(".fleet-anchor"), null);
@@ -2092,4 +2092,15 @@ test("a chat can be started with attachments, which its page shows", async t => 
   state.records[0] = { ...state.records[0], attachments: [{ id: "a1", name: "error.png", size: 4, kind: "image", media_type: "image/png" }] };
   await act(async () => state.poll());
   assert.match(document.querySelector(".chat-page .task-attachments").textContent, /error\.png/);
+});
+
+test("the composer greets you as your partner, by the time of day and what it is about to do", async t => {
+  const { document, button, click } = await setup(t, [mission("finished-task", "succeeded")]);
+  assert.match(document.querySelector(".app-sidebar .new-task").textContent, /新建/);
+  const composer = document.querySelector(".composer");
+  assert.ok(composer.querySelector(".partner-avatar"));
+  assert.match(composer.querySelector("h3").textContent, /(早上好|中午好|下午好|晚上好|夜深了)，今天想做点什么？/);
+  assert.match(composer.querySelector(".composer-greeting p").textContent, /问题我直接回答/);
+  await click(button("任务", composer.querySelector(".mode-switch")));
+  assert.equal(composer.querySelector("h3").textContent, "要我做什么？");
 });
