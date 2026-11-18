@@ -85,9 +85,9 @@ const SHOWN_THREADS = 6;
 // Capabilities and skills the side panel lists; 更多 shows them all.
 const SIDE_ITEMS = 5;
 
-export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities, onSkills }: {
+export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities, onSkills, openThread = null }: {
   apiBase: string; runs: RunRef[]; onOpenRun: (id: string) => void;
-  onRecords: (jobId?: string) => void; onCapabilities: () => void; onSkills: () => void;
+  onRecords: (jobId?: string) => void; onCapabilities: () => void; onSkills: () => void; openThread?: string | null;
 }) {
   const { jobs, act, available } = useEngineerJobs(apiBase, null, "", true);
   const [capabilities, setCapabilities] = useState<Capability[]>([]), [skills, setSkills] = useState<Skill[]>([]);
@@ -97,7 +97,8 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   }, [apiBase]);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
   const all = threads(jobs, runs);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(openThread);
+  useEffect(() => { if (openThread) setOpenId(openThread); }, [openThread]);
   const open = all.find(thread => thread.id === openId);
   return <div className="platform-page">
     <section className="platform-main">

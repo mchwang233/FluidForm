@@ -1475,3 +1475,7 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .platform-card-text.full{display:block;-webkit-line-clamp:unset}
 .engineer-head p{margin:6px 0 18px;font-size:13px;color:var(--muted)}
 .engineer-page .platform-cards{margin-top:4px}
+.engineer-go-on{margin-top:20px}
+.engineer-go-on .platform-input{border-radius:16px}
+.engineer-go-on p{margin:6px 2px 0;font-size:12.5px}
+.engineer-open-thread{display:inline-block;margin-top:12px;font-size:12.5px}

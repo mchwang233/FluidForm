@@ -195,7 +195,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.engineerActions = [...(state.engineerActions ?? []), { path, body }];
       const engineer = state.engineer ?? (state.engineer = { available: true, jobs: [] });
       if (path === "/api/engineer/jobs") {
-        const job = { id: `job${engineer.jobs.length + 1}`, kind: body.kind, origin: "user", title: body.request.slice(0, 40),
+        const job = { id: `job${engineer.jobs.length + 1}`, kind: body.kind, origin: "user", title: body.request.slice(0, 40), thread_id: body.thread_id ?? null,
           request: body.request, status: "queued", messages: [], budget_usd: 2, cost_usd: 0,
           created_at: "2026-10-19T08:00:00Z", updated_at: "2026-10-19T08:00:00Z" };
         engineer.jobs = [job, ...engineer.jobs];
@@ -2307,4 +2307,30 @@ test("the 平台 page's 技能 更多 shows every skill with its whole descripti
   const cards = document.querySelector('[aria-label="技能"]').textContent;
   assert.match(cards, /synopsys-vcs.*平台自带.*Compile and simulate SystemVerilog with Synopsys VCS\..*涉及：vcs、urg.*cmake.*本机/s);
   assert.ok(button("← 平台"));
+});
+
+test("in 全部记录 any piece of work can be talked on about, and opened in its conversation", async t => {
+  const { state, window, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.engineer = { available: true, jobs: [engineerJob({ id: "done", title: "修复状态", headline: "步骤结果误判", status: "applied", kind: "repair",
+    report: "改好了", messages: [{ role: "user", text: "步骤明明没阻塞却算失败", created_at: "2026-10-28T10:00:00Z" }] })] };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  await click(button("全部 1 条记录 ›"));
+  await settle();
+  // A finished job has no question waiting, yet the box is there: new work in its conversation.
+  const detail = document.querySelector(".engineer-job");
+  const box = detail.querySelector('[aria-label="接着说"]');
+  assert.ok(box);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, "超时也一起放宽");
+    box.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => detail.querySelector(".engineer-go-on").requestSubmit());
+  assert.deepEqual(state.engineerActions.at(-1), { path: "/api/engineer/jobs", body: { request: "超时也一起放宽", kind: "repair", thread_id: "done" } });
+  // And its conversation is one click away, to go on there.
+  await click(button("在对话里打开 ›", document.querySelector(".engineer-job")));
+  await settle();
+  assert.match(document.querySelector(".platform-thread").textContent, /步骤明明没阻塞却算失败/);
+  assert.ok(document.querySelector(".platform-composer textarea"));
 });

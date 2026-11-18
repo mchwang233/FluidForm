@@ -1,10 +1,11 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { CapabilityShelf } from "./capabilities";
-import { PlatformHome, SkillsPage, headlineOf } from "./platform";
+import { PlatformHome, SkillsPage, headlineOf, threadOf } from "./platform";
 import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
+import { kindOf } from "./lead-engineer";
 
 export type EngineerMessage = { role: "user" | "engineer" | "lead" | "system"; text: string; created_at: string };
 export type EngineerJob = {
@@ -96,13 +97,16 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
   type View = "home" | "capabilities" | "skills" | "records";
   const [tab, setTab] = useState<View>(focusId ? "records" : "home");
   useEffect(() => { if (focusId) setTab("records"); }, [focusId]);
-  const pick = (next: View) => setTab(next);
+  // The conversation to show when going back to the page from a record (在对话里打开).
+  const [thread, setThread] = useState<string | null>(null);
+  const pick = (next: View) => { if (next !== "home") setThread(null); setTab(next); };
+  const openThread = (id: string) => { setThread(id); setTab("home"); };
   const open = (id: string) => { setSelectedId(id); pick("records"); };
   const row = (job: EngineerJob) => <button type="button" key={job.id} aria-pressed={selected?.id === job.id} onClick={() => setSelectedId(job.id)}>
     <span className="engineer-list-title">{headlineOf(job)}</span>
     <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
   </button>;
-  if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun}
+  if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} openThread={thread}
     onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} onSkills={() => pick("skills")} />;
   return <div className="engineer-page">
     <button type="button" className="platform-back" onClick={() => pick("home")}>← 平台</button>
@@ -116,10 +120,35 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
         {!!applied.length && <><h4>已生效</h4>{applied.map(row)}</>}
         {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
-      {selected ? <JobDetail job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} />
+      {selected ? <JobDetail job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread} />
         : <section className="engineer-job empty big">还没有记录。</section>}
     </div>}
   </div>;
+}
+
+/** Saying more about a job that does not wait for an answer: new work in its conversation, told
+ * what came before (engineer.thread_of); one under way takes it up after the work in hand. */
+function GoOn({ job, act }: { job: EngineerJob; act: Act }) {
+  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [sent, setSent] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const said = text.trim();
+    if (!said || busy) return;
+    setBusy(true); setError(""); setSent(false);
+    const problem = await act("jobs", { request: said, kind: kindOf(said), thread_id: threadOf(job) });
+    setBusy(false);
+    if (problem) setError(problem); else { setText(""); setSent(true); }
+  }
+  return <form className="engineer-go-on" onSubmit={submit} aria-label="接着和平台工程师说">
+    <div className="platform-input">
+      <textarea aria-label="接着说" rows={2} maxLength={20000} value={text} onChange={event => setText(event.target.value)}
+        onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
+        placeholder={DONE.has(job.status) ? "接着说：还要改什么、加什么，它会带着这段对话之前的经过去做…" : "接着说：它做完这一项后接着处理…"} />
+      <button type="submit" className="primary send-button" disabled={busy || !text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+    </div>
+    {sent && <p className="muted" role="status">已经交给平台工程师，作为这段对话里的新工作。</p>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </form>;
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -127,8 +156,8 @@ function StatusChip({ status }: { status: string }) {
   return <span className={`dx-chip ${known.tone}`}>{known.tone === "busy" && <i className="pulse" aria-hidden="true" />}{known.label}</span>;
 }
 
-function JobDetail({ job, working, runs, act, onOpenRun }: {
-  job: EngineerJob; working: boolean; runs: RunRef[]; act: Act; onOpenRun: (id: string) => void;
+function JobDetail({ job, working, runs, act, onOpenRun, onOpenThread }: {
+  job: EngineerJob; working: boolean; runs: RunRef[]; act: Act; onOpenRun: (id: string) => void; onOpenThread?: (threadId: string) => void;
 }) {
   const [busy, setBusy] = useState(""), [error, setError] = useState("");
   const run = job.run_id ? runs.find(item => item.id === job.run_id) : undefined;
@@ -180,6 +209,8 @@ function JobDetail({ job, working, runs, act, onOpenRun }: {
       waiting={job.status === "needs_input"} disabled={false} onReply={reply}
       sendLabel={job.status === "needs_input" ? "回复" : job.status === "plan_ready" ? "按这个意见改方案" : "按这个意见再改"}
       placeholder={job.status === "needs_input" ? "回答工程师的问题" : "写下要改的地方"} />}
+    {!WAITING.has(job.status) && <GoOn job={job} act={act} />}
+    {onOpenThread && <button type="button" className="link-button engineer-open-thread" onClick={() => onOpenThread(threadOf(job))}>在对话里打开 ›</button>}
     {open && job.status !== "plan_ready" && job.status !== "ready" && <div className="engineer-actions">
       <button type="button" className="ghost" disabled={!!busy} onClick={() => post("reject", "reject")}>{busy === "reject" ? "提交中…" : "放弃这项工作"}</button>
     </div>}
