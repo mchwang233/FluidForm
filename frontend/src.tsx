@@ -271,7 +271,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
   // The conversation opens when it starts waiting for you, and is never closed under you.
   useEffect(()=>{if(!picked.current)setTab(current=>waiting?"chat":current==="chat"?current:defaultTab(run?.status??""))},[run?.status,!!waiting]);
   useEffect(()=>{if(run?.status!=="running")return;const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer)},[run?.status]);
-  if(!run)return <section className="panel detail"><div className="empty big">在左侧选择一个任务，或点右上角的“＋ 新任务”。</div></section>;
+  if(!run)return <section className="panel detail"><div className="empty big">在左侧选择一个任务，或点左上角的“新任务”。</div></section>;
   const needsConfirm=(run.status==="awaiting_confirmation"||run.status==="paused")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
   const canResume=(run.status==="failed"||run.status==="cancelled"||run.status==="incomplete")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
   const planner=run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${run.plan.planner_model_id} 规划`:"规则规划";

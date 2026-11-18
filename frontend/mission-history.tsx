@@ -224,7 +224,7 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
     {searchable && <input className="history-search" type="search" value={query} placeholder="搜索标题、需求或项目" aria-label="搜索任务"
       onChange={event => setQuery(event.target.value)} />}
     {error && <p className="mission-delete-error" role="alert">{error}</p>}
-    {runs.length === 0 ? <p className="empty">还没有任务。点右上角的“＋ 新任务”开始。</p> : shown.length === 0 ? <p className="empty">没有匹配的任务。</p> : <div className="run-list">{groups.map(group => <div className={`run-group ${group.id}`} key={group.id}>
+    {runs.length === 0 ? <p className="empty">还没有任务。点上方的“新任务”开始。</p> : shown.length === 0 ? <p className="empty">没有匹配的任务。</p> : <div className="run-list">{groups.map(group => <div className={`run-group ${group.id}`} key={group.id}>
       <p className="run-group-title">{group.label}<span>{group.runs.length}</span></p>
       {group.runs.map(run => {
         const { done, total } = progressOf(run);
