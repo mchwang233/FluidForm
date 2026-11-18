@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # Opt in to reusing general/local skills, then public discovery (only for tasks allowing
     # network), before bounded generation. Existing installations retain their old policy.
     skill_reuse_first: bool = False
+    # When a task succeeds, ask its lead whether it built a reusable capability (a tool, an
+    # automation) for the user to solidify (capabilities.py). Off by default: one more lead call.
+    capability_proposals: bool = False
     skill_generation_max_turns: int = Field(default=6, ge=1, le=30)
     # Optional post-task learning; the UI can persist overrides. Its budget is separate and shown.
     learning_enabled: bool = False

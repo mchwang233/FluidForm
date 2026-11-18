@@ -143,6 +143,18 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
   state.poll = () => [...polls.values()][0]();
   window.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
+    if (path.startsWith("/api/capabilities")) {
+      const items = state.capabilities ??= [];
+      const id = decodeURIComponent(path.split("/")[3] ?? "");
+      (state.capabilityCalls ??= []).push([options.method ?? "GET", id]);
+      if (options.method === "PATCH") {
+        const { enabled } = JSON.parse(options.body);
+        state.capabilities = items.map(item => item.id === id ? { ...item, status: enabled ? "active" : "disabled" } : item);
+        return json(state.capabilities.find(item => item.id === id));
+      }
+      if (options.method === "DELETE") { state.capabilities = items.filter(item => item.id !== id); return new Response(null, { status: 204 }); }
+      return json(items);
+    }
     if (/^\/api\/tasks\/[^/]+\/calls$/.test(path)) {
       return json(state.calls ?? { calls: [], limit: 1000, summary: { calls: 0 } });
     }
@@ -280,6 +292,15 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       const id = decodeURIComponent(path.slice("/api/tasks/".length));
       state.deletes.push(id);
       return state.deleteResponse(id, options.signal);
+    }
+    if (options.method === "POST" && /\/capabilities\/\d+\/(solidify|dismiss)$/.test(path)) {
+      const [, , , id, , index, action] = path.split("/");
+      (state.capabilityActions ??= []).push([decodeURIComponent(id), Number(index), action]);
+      const current = state.records.find(run => run.id === decodeURIComponent(id));
+      const proposals = current.capability_proposals.map((item, at) => at === Number(index) ? { ...item, status: action === "solidify" ? "solidified" : "dismissed" } : item);
+      const updated = { ...current, capability_proposals: proposals };
+      state.records = state.records.map(run => run.id === updated.id ? updated : run);
+      return json(updated);
     }
     if (path === "/api/chats/models") return json(state.chatModels ?? [{ id: "cli:claude", display_name: "Claude Code CLI" }, { id: "x:fast", display_name: "Fast" }]);
     if (path === "/api/chats" && options.method === "POST") {
@@ -2171,4 +2192,44 @@ test("the sidebar's foot is 模型 · 平台工程师 · 设置, the theme and c
   assert.equal(button("深色", settings).getAttribute("aria-pressed"), "true");
   await click(button("常见故障", settings));
   assert.ok(document.querySelector('[aria-label="常见故障"]'));
+});
+
+
+const FEISHU = { name: "飞书发消息", kind: "tool", summary: "向飞书群发一条消息。", usage: "python send.py --chat <id> --text <内容>",
+  files: ["feishu"], check: "python3 feishu/send.py --help", secrets: ["FEISHU_APP_ID"], domains: ["open.feishu.cn"] };
+
+test("a finished task's result page offers what its lead found reusable, to solidify or dismiss", async t => {
+  const run = { ...mission("built-task", "succeeded"), capability_proposals: [{ ...FEISHU, status: "proposed" }, { ...FEISHU, name: "飞书读文档", status: "proposed" }] };
+  const { state, document, button, click } = await setup(t, [run], [], { openComposer: false });
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent === "结果"));
+  const panel = () => document.querySelector(".capability-proposals");
+  assert.match(panel().textContent, /这个任务做出了可以复用的能力.*飞书发消息.*工具.*向飞书群发一条消息.*飞书读文档/s);
+  await click(button("固化", panel().querySelectorAll(".capability-proposal")[0]));
+  assert.match(panel().querySelectorAll(".capability-proposal")[0].textContent, /已固化/);
+  await click(button("忽略", panel().querySelectorAll(".capability-proposal")[1]));
+  assert.deepEqual(state.capabilityActions, [["built-task", 0, "solidify"], ["built-task", 1, "dismiss"]]);
+  assert.equal(panel().querySelectorAll(".capability-proposal").length, 1);
+});
+
+test("the platform engineer page lists the capabilities on this machine, to switch off or remove", async t => {
+  const run = { ...mission("built-task", "succeeded") };
+  run.plan = { ...run.plan, title: "接飞书" };
+  const { state, document, button, click, act } = await setup(t, [run], [], { openComposer: false });
+  state.capabilities = [{ ...FEISHU, id: "feishu-send", status: "active", source_run_id: "built-task", check_ok: true, check_output: "ok", created_at: "2026-11-18T08:00:00Z" },
+    { ...FEISHU, id: "feishu-reply", name: "飞书自动回复", kind: "automation", status: "failed", check_ok: false, check_output: "Exit code 1", created_at: "2026-11-18T07:00:00Z" }];
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台工程师"));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const shelf = document.querySelector(".capability-shelf");
+  const [send, reply] = shelf.querySelectorAll(".capability");
+  assert.match(send.textContent, /飞书发消息.*工具.*可用.*python send\.py.*FEISHU_APP_ID.*open\.feishu\.cn.*接飞书/s);
+  assert.match(reply.textContent, /飞书自动回复.*自动化.*检查未通过.*后台运行器/s);
+  assert.equal(button("启用", reply), undefined);
+  const first = () => document.querySelector(".capability-shelf .capability");
+  await click(button("停用", send));
+  assert.match(first().textContent, /已停用/);
+  await click(button("删除", first()));
+  await click(button("确认删除", first()));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.deepEqual(state.capabilities.map(item => item.id), ["feishu-reply"]);
+  assert.equal(document.querySelectorAll(".capability-shelf .capability").length, 1);
 });

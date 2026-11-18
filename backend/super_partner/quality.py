@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from . import skills
+from . import capabilities, skills
 from .models import ArtifactEvidence, ExecutionRun, NodeInput, NodeStatus, TaskNode
 
 # Marks a review request so the offline demo model can answer it with a verdict.
@@ -179,6 +179,9 @@ def node_prompt(node: TaskNode, run: ExecutionRun, limit: int) -> tuple[str, lis
     if known := skills.section(skills.for_step("\n".join([node.title, node.instructions, node.check or "",
                                                            node.acceptance_criteria or ""]))):
         sections.append(known)
+    # Tools earlier tasks built and the user solidified (capabilities.py).
+    if built := capabilities.section():
+        sections.append(built)
     sections.append(UNABLE_RULE)
     if node.verifies:
         sections.append(_verdict_rule(node, by_id))

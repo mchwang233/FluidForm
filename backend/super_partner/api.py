@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from . import attachments as files
 from . import (
     briefing,
+    capabilities,
     cli_quota,
     folders,
     learning,
@@ -40,6 +41,7 @@ from .executor import Executor
 from .models import (
     FINISHED,
     Attachment,
+    Capability,
     DiagnosisMessage,
     Event,
     ExecutionRun,
@@ -549,6 +551,9 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
     lessons = learning.selected(db, request)
     if note := learning.instruction(lessons):
         request += "\n\n" + note
+    # The planner knows the tools earlier tasks built, so it plans to use them (capabilities.py).
+    if built := capabilities.section():
+        request += "\n\n" + built
     # The lead plans from the project brief, so it can cut the work into scoped packages.
     root = Path(project_dir) if project_dir else settings.workspace_root / parent.folder_id if parent else None
     brief, brief_cost = None, 0.0
@@ -829,7 +834,7 @@ def read_task(run_id: str):
 @app.delete("/api/tasks/{run_id}", status_code=204)
 async def delete_task(run_id: str):
     if any(task and not task.done() for task in (executor.tasks.get(run_id), executor.diagnosing.get(run_id),
-                                               executor.learning_tasks.get(run_id))):
+                                               executor.learning_tasks.get(run_id), executor.capability_tasks.get(run_id))):
         raise HTTPException(409, "任务仍在执行或结束处理中，请稍后再删除。")
     existing = db.get_run(run_id)
     if any(job.run_id == run_id and job.improvement_id and job.status not in {"applied", "failed", "rejected", "cancelled"}
@@ -1277,6 +1282,72 @@ async def cancel_task(run_id: str):
 
 class GithubToken(BaseModel):
     token: str = Field(min_length=10, max_length=500)
+
+
+# ---- Capabilities: what finished tasks left the platform able to do (capabilities.py) ----
+
+@app.get("/api/capabilities", response_model=list[Capability])
+def list_capabilities():
+    return capabilities.library()
+
+
+class CapabilitySwitch(BaseModel):
+    enabled: bool
+
+
+@app.patch("/api/capabilities/{capability_id}", response_model=Capability)
+def switch_capability(capability_id: str, body: CapabilitySwitch):
+    """Use it again, or stop telling later work about it. A failed one stays failed until fixed."""
+    capability = capabilities.load(capability_id)
+    if not capability:
+        raise HTTPException(404, "没有这个能力。")
+    if capability.status == "failed" and body.enabled:
+        raise HTTPException(409, "这个能力的检查没有通过，修好之前不能启用。")
+    capability.status = "active" if body.enabled else "disabled"
+    capabilities.save(capability)
+    return capability
+
+
+@app.delete("/api/capabilities/{capability_id}", status_code=204)
+def delete_capability(capability_id: str):
+    if not capabilities.remove(capability_id):
+        raise HTTPException(404, "没有这个能力。")
+
+
+def _proposal(run: ExecutionRun, index: int):
+    if not 0 <= index < len(run.capability_proposals):
+        raise HTTPException(404, "没有这条提议。")
+    proposal = run.capability_proposals[index]
+    if proposal.status != "proposed":
+        raise HTTPException(409, "这条提议已经处理过。")
+    return proposal
+
+
+@app.post("/api/tasks/{run_id}/capabilities/{index}/solidify", response_model=ExecutionRun)
+async def solidify_capability(run_id: str, index: int):
+    """The user keeps what the task built: copied out of the task's folder and checked in a
+    step's sandbox; later steps and planners are told about it (docs/design/capabilities.md)."""
+    run = get_task(run_id)
+    proposal = _proposal(run, index)
+    try:
+        capability = await capabilities.solidify(run, proposal)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    latest = get_task(run_id)
+    latest.capability_proposals[index].status = "solidified"
+    latest.capability_proposals[index].capability_id = capability.id
+    db.save_run(latest)
+    db.add_event(Event(run_id=run_id, kind="capability.solidified",
+                       data={"capability_id": capability.id, "status": capability.status}))
+    return latest
+
+
+@app.post("/api/tasks/{run_id}/capabilities/{index}/dismiss", response_model=ExecutionRun)
+def dismiss_capability(run_id: str, index: int):
+    run = get_task(run_id)
+    _proposal(run, index).status = "dismissed"
+    db.save_run(run)
+    return run
 
 
 class PublishRequest(BaseModel):

@@ -675,6 +675,37 @@ class Improvement(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class CapabilityCard(BaseModel):
+    """Something a task built that later work can use (capabilities.py, docs/design/capabilities.md)."""
+    name: str
+    kind: str = "tool"  # tool | automation
+    summary: str = ""
+    usage: str = ""
+    # Paths, relative to the task's folder, that make it up.
+    files: list[str] = Field(default_factory=list)
+    # A command, run in its folder, that shows it works without side effects.
+    check: str = ""
+    # Environment variables it needs, and hosts it must reach.
+    secrets: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+
+
+class CapabilityProposal(CapabilityCard):
+    """A card the task's lead proposed when the task ended, and what the user did with it."""
+    status: str = "proposed"  # proposed | solidified | dismissed
+    capability_id: Optional[str] = None
+
+
+class Capability(CapabilityCard):
+    """A solidified capability, kept in <tools_dir>/capabilities/<id>/capability.json."""
+    id: str
+    status: str = "active"  # active | disabled | failed
+    source_run_id: Optional[str] = None
+    check_ok: Optional[bool] = None
+    check_output: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class ExecutionRun(BaseModel):
     id: str
     prompt: str
@@ -685,6 +716,8 @@ class ExecutionRun(BaseModel):
     kind: str = "task"
     # Super Partner told chat from task itself (triage.py), rather than the user choosing.
     auto_routed: bool = False
+    # What the lead found reusable when the task succeeded (capabilities.py).
+    capability_proposals: list[CapabilityProposal] = Field(default_factory=list)
     budget_usd: float
     use_cli: bool = True
     # Commands may reach the internet (never this machine's local services); off by default.

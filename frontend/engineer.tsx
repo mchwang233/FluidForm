@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { CapabilityShelf } from "./capabilities";
 import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
@@ -13,7 +14,7 @@ export type EngineerJob = {
   error?: string | null; created_at: string; updated_at: string; finished_at?: string | null;
 };
 export type EngineerOverview = { available: boolean; working_on?: string | null; pending?: string | null; jobs: EngineerJob[] };
-type RunRef = { id: string; plan: { summary: string } };
+type RunRef = { id: string; plan: { summary: string; title?: string } };
 
 export const ENGINEER_STATUS: Record<string, { label: string; tone: string }> = {
   queued: { label: "排队中", tone: "busy" }, planning: { label: "写方案中", tone: "busy" },
@@ -94,6 +95,7 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
       {error && <p className="error" role="alert">{error}</p>}
       {data?.available && <RequestForm act={act} />}
     </section>
+    <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} />
     <div className="engineer-layout">
       <nav className="panel engineer-list" aria-label="平台工程师的工作">
         <h3>工作记录{!!jobs.length && <small>{jobs.length}</small>}</h3>

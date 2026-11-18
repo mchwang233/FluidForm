@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from . import contracts, quality, replan, supervisor
+from . import capabilities, contracts, quality, replan, supervisor
 from .budget import BudgetExceeded
 from .config import settings
 from .models import (
@@ -370,6 +370,33 @@ class Leading:
         if decision != "budget":
             await self._apply_decision(run_id, node_id, decision, verdict, outcome, "repair_done")
         return True
+
+    def start_capability_proposals(self, run_id: str) -> None:
+        """When a task succeeds, ask its lead in the background what it built that is reusable;
+        never holds up the task's end (docs/design/capabilities.md)."""
+        if settings.capability_proposals:
+            self.capability_tasks[run_id] = asyncio.create_task(self._propose_capabilities(run_id))
+
+    async def _propose_capabilities(self, run_id: str) -> None:
+        try:
+            run = self.db.get_run(run_id)
+            if not run or not (run.supervisor and run.supervisor.model_id):
+                return
+            cards = capabilities.read_cards(await self.ask_lead(run_id, capabilities.PROMPT))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # proposing is a courtesy: a lead that cannot answer leaves none
+            capabilities.log.warning("capability proposals for %s failed: %s", run_id, exc)
+            return
+        if not cards:
+            return
+        async with self.locks.setdefault(run_id, asyncio.Lock()):
+            run = self.db.get_run(run_id)
+            if not run:
+                return
+            run.capability_proposals = cards
+            self._save(run)
+        self.emit(run_id, "run.capabilities_proposed", names=[card.name for card in cards])
 
     def start_lead_chat(self, run_id: str, text: str) -> bool:
         """The user writes to the lead: the message and a pending reply are saved at once, and the

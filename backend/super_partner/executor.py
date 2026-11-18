@@ -99,6 +99,8 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
         self.lead_locks: dict[str, asyncio.Lock] = {}
         # The user's messages to each task's lead, answered in the background.
         self.lead_tasks: dict[str, asyncio.Task] = {}
+        # A succeeded task's lead, asked what it built that is reusable (capabilities.py).
+        self.capability_tasks: dict[str, asyncio.Task] = {}
         # Steps working in one folder at once (scopes.py).
         self.folder_locks: dict[str, scopes.FolderLock] = {}
         # Files a step changed outside its own that a step alongside it reads (Scope.intrusions).
@@ -258,6 +260,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
                 self._save(run)
                 self.emit(run.id, "run.succeeded", actual_cost_usd=run.actual_cost_usd)
                 self._forget(run_id)
+                self.start_capability_proposals(run_id)
                 return
         except asyncio.CancelledError:
             await self._stop_nodes(running)

@@ -1205,3 +1205,32 @@ button{color:var(--on-accent)}
   .app-content{padding:16px 16px 32px}
   .task-metrics{gap:6px 20px}
 }
+
+/* Capabilities: the shelf on the platform engineer page, and a task's proposals (capabilities.tsx). */
+.capability-shelf{margin:16px 0}
+.capability-shelf h3{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:15px}
+.capability-shelf h3 small{font-size:12px;color:var(--faint);font-weight:400}
+.capability-shelf>.muted{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.capability-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.capability{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.capability.disabled{opacity:.7}
+.capability-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.capability-head b{font-size:14px}
+.capability-kind{font-size:12px;color:var(--faint)}
+.capability-status{font-size:12px;color:var(--muted)}
+.capability-status.active{color:var(--ok)}
+.capability-status.failed{color:var(--danger)}
+.capability-actions{margin-left:auto;display:flex;gap:6px}
+.capability-actions button{height:30px;padding:0 12px;font-size:12.5px}
+.capability p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.capability dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:8px 0 0;font-size:12.5px}
+.capability dt{color:var(--faint)}
+.capability dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.capability-note{font-size:12px!important;color:var(--faint)!important}
+.capability-check pre{max-height:200px;overflow:auto;font-size:12px;background:var(--panel-2);padding:8px;border-radius:8px}
+.capability-proposals{margin:0 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)}
+.capability-proposals-head{display:flex;align-items:center;gap:6px;margin:0 0 8px;font-size:13px;font-weight:600}
+.capability-proposal{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line-soft)}
+.capability-proposal>div{flex:1;min-width:0}
+.capability-proposal b{margin-right:8px;font-size:13.5px}
+.capability-proposal p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
