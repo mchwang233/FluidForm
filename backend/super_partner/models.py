@@ -680,6 +680,8 @@ class ExecutionRun(BaseModel):
     # "task": planned and executed. "chat": only a conversation with a model, kept as a draft with
     # no steps until the user turns it into a task (api.create_chat, api.promote_chat).
     kind: str = "task"
+    # Super Partner told chat from task itself (triage.py), rather than the user choosing.
+    auto_routed: bool = False
     budget_usd: float
     use_cli: bool = True
     # Commands may reach the internet (never this machine's local services); off by default.

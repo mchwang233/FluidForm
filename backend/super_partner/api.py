@@ -18,7 +18,18 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel, Field
 
 from . import attachments as files
-from . import briefing, cli_quota, folders, learning, publish, retrospect, skills, supervisor, team
+from . import (
+    briefing,
+    cli_quota,
+    folders,
+    learning,
+    publish,
+    retrospect,
+    skills,
+    supervisor,
+    team,
+    triage,
+)
 from . import diagnosis as diagnosis_module
 from .benchmarks import BenchmarkCatalog
 from .catalog_sync import CatalogSync, seed_catalog
@@ -1008,29 +1019,82 @@ async def create_chat(body: CreateChat):
     """Only a conversation: no plan, no steps. The model may read the project folder, if one is
     given (a CLI's read-only lead conversation there); it edits nothing. The first message is
     answered in the background, as in a task's conversation with its lead."""
-    available = chat_models(body.use_cli)
-    pick = next((model for model in available if model.id == body.model_id), None) if body.model_id else \
-        next(iter(available), None)
+    return _start_chat(body.message, body.budget_usd, body.use_cli, body.project_dir, body.model_id)
+
+
+def _start_chat(message: str, budget_usd: float, use_cli: bool, project_dir: Optional[str], model_id: Optional[str],
+                auto_routed: bool = False, spent: float = 0.0) -> ExecutionRun:
+    """Save a new chat and send its first message (create_chat, start)."""
+    available = chat_models(use_cli)
+    pick = next((model for model in available if model.id == model_id), None) if model_id else next(iter(available), None)
     if pick is None:
-        raise HTTPException(422, "这个模型不能用来对话。" if body.model_id else "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
-    project_dir = None
-    if body.project_dir and body.project_dir.strip():
+        raise HTTPException(422, "这个模型不能用来对话。" if model_id else "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
+    folder = None
+    if project_dir and project_dir.strip():
         try:
-            project_dir = str(resolve_project_dir(body.project_dir.strip()))
+            folder = str(resolve_project_dir(project_dir.strip()))
         except ProjectDirError as exc:
             raise HTTPException(400, str(exc)) from exc
-    message = body.message.strip()
-    title = message.splitlines()[0][:CHAT_TITLE_CHARS] if message else "对话"
+    message = message.strip()
     run = ExecutionRun(
-        id=str(uuid4()), prompt=message, kind="chat", status=RunStatus.DRAFT,
-        plan=TaskPlan(summary=title, nodes=[], request=message, in_project=bool(project_dir)),
-        budget_usd=body.budget_usd, use_cli=body.use_cli, project_dir=project_dir,
-        supervisor=supervisor.new_session(pick, folder=project_dir),
+        id=str(uuid4()), prompt=message, kind="chat", status=RunStatus.DRAFT, plan=_chat_plan(message, folder),
+        budget_usd=budget_usd, use_cli=use_cli, project_dir=folder, auto_routed=auto_routed, actual_cost_usd=round(spent, 6),
+        supervisor=supervisor.new_session(pick, folder=folder),
     )
     db.save_run(run)
-    db.add_event(Event(run_id=run.id, kind="chat.created", data={"model_id": pick.id, "project_dir": project_dir}))
+    db.add_event(Event(run_id=run.id, kind="chat.created", data={"model_id": pick.id, "project_dir": folder, "auto_routed": auto_routed}))
     executor.start_lead_chat(run.id, message)
     return get_task(run.id)
+
+
+def _chat_plan(message: str, project_dir: Optional[str]) -> TaskPlan:
+    """A chat's plan: no steps, titled by its first line."""
+    title = message.splitlines()[0][:CHAT_TITLE_CHARS] if message else "对话"
+    return TaskPlan(summary=title, nodes=[], request=message, in_project=bool(project_dir))
+
+
+class StartRequest(CreateTask):
+    # The model to chat with, if it turns out to be a chat.
+    model_id: Optional[str] = Field(default=None, max_length=200)
+
+
+@app.post("/api/start", response_model=ExecutionRun, status_code=201)
+async def start(body: StartRequest):
+    """Start what the user typed as a chat or a task, decided by triage.classify. Attachments
+    make it a task (a chat takes none). Deciding is billed to whichever it becomes."""
+    kind, spent = "task", 0.0
+    if not body.attachments:
+        configured = providers.configured_models(list(models))
+        kind, spent = await triage.classify(body.prompt, providers, brief_writer(list(models.values()), configured))
+    if kind == "chat":
+        return _start_chat(body.prompt, body.budget_usd, body.use_cli, body.project_dir, body.model_id,
+                           auto_routed=True, spent=spent)
+    run = await _new_task(body)
+    latest = get_task(run.id)
+    latest.auto_routed = True
+    latest.actual_cost_usd = round(latest.actual_cost_usd + spent, 6)
+    db.save_run(latest)
+    return latest
+
+
+@app.post("/api/tasks/{run_id}/as-chat", response_model=ExecutionRun)
+async def task_to_chat(run_id: str):
+    """A task waiting for confirmation was only a question: keep it as a chat instead, answered
+    by the best chat model from its request. Its plan is dropped; planning stays paid."""
+    run = get_task(run_id)
+    if run.kind != "task" or run.status != RunStatus.AWAITING_CONFIRMATION or run.parent_run_id:
+        raise HTTPException(409, "只有待确认的新任务可以改成对话。")
+    if run_id in REPLANNING:
+        raise HTTPException(409, "正在重新规划，请稍候。")
+    pick = next(iter(chat_models(run.use_cli)), None)
+    if pick is None:
+        raise HTTPException(422, "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
+    run.kind, run.status, run.plan = "chat", RunStatus.DRAFT, _chat_plan(run.prompt, run.project_dir)
+    run.supervisor = supervisor.new_session(pick, folder=run.project_dir)
+    db.save_run(run)
+    db.add_event(Event(run_id=run_id, kind="task.to_chat", data={"model_id": pick.id}))
+    executor.start_lead_chat(run_id, run.prompt)
+    return get_task(run_id)
 
 
 class PromoteChat(BaseModel):

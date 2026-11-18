@@ -995,3 +995,5 @@ input.choice-own:focus{outline:0;border-color:var(--accent)}
 .chat-page .promote-panel{margin:4px 0 18px}
 .chat-page .lead-panel{margin-top:8px}
 .chat-page .lead-panel>.diagnosis-head{padding-top:8px}
+.auto-note{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.auto-note .link-button{margin-left:6px}

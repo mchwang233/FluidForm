@@ -7,8 +7,8 @@ export type PromoteOptions = { prompt: string; budget_usd: number; use_cli: bool
 type ChatRun = { id: string; prompt?: string; project_dir?: string | null; use_cli: boolean; actual_cost_usd: number; budget_usd: number;
   lead_messages?: { status: string }[]; plan: { summary: string } };
 
-export function ChatDetail({ run, model, conversation, deleteButton, onPromote }: {
-  run: ChatRun; model: string; conversation: React.ReactNode; deleteButton: React.ReactNode;
+export function ChatDetail({ run, model, auto = false, conversation, deleteButton, onPromote }: {
+  run: ChatRun; model: string; auto?: boolean; conversation: React.ReactNode; deleteButton: React.ReactNode;
   onPromote: (options: PromoteOptions) => Promise<string | null>;
 }) {
   const [promoting, setPromoting] = useState(false);
@@ -17,7 +17,7 @@ export function ChatDetail({ run, model, conversation, deleteButton, onPromote }
   return <section className="panel detail task-page chat-page" aria-label="对话">
     <div className="task-header">
       <div className="task-title">
-        <p className="eyebrow task-meta"><span className="pill chat">对话</span>{model} · 已花 {formatUsd(run.actual_cost_usd)} / {formatUsd(run.budget_usd)}
+        <p className="eyebrow task-meta"><span className="pill chat">对话</span>{auto && "自动识别 · "}{model} · 已花 {formatUsd(run.actual_cost_usd)} / {formatUsd(run.budget_usd)}
           {run.project_dir && <span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13} /> {run.project_dir}</span>}</p>
         <h3 title={run.plan.summary}>{run.plan.summary}</h3>
       </div>

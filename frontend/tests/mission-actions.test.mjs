@@ -302,7 +302,19 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.records = state.records.map(run => run.id === id ? updated : run);
       return json(updated);
     }
-    if (path === "/api/tasks" && options.method === "POST") {
+    if (options.method === "POST" && path.endsWith("/as-chat")) {
+      const id = decodeURIComponent(path.split("/")[3]);
+      (state.toChats ??= []).push(id);
+      const current = state.records.find(run => run.id === id);
+      const updated = { ...current, kind: "chat", status: "draft", plan: { ...current.plan, nodes: [] }, supervisor: { model_id: "cli:claude", calls: 0 },
+        lead_messages: [{ id: "u1", role: "user", text: current.prompt, status: "done", created_at: "2026-10-16T04:00:00Z" },
+          { id: "l1", role: "lead", text: "", status: "pending", created_at: "2026-10-16T04:00:01Z" }] };
+      state.records = state.records.map(run => run.id === id ? updated : run);
+      return json(updated);
+    }
+    // Starting from the composer: "auto" (the default) posts to /api/start, "任务" to /api/tasks.
+    if ((path === "/api/tasks" || path === "/api/start") && options.method === "POST") {
+      (state.postPaths ??= []).push(path);
       state.taskPosts++; state.taskBodies.push(JSON.parse(options.body));
       if (state.createError) return new Response(JSON.stringify({ detail: state.createError }), { status: 422, headers: { "content-type": "application/json" } });
       return json(state.records[0]);
@@ -2014,4 +2026,45 @@ test("chats sit in their own sidebar group, can be deleted, and turn into a task
   assert.equal(document.querySelector(".chat-page"), null);
   assert.match(document.querySelector(".task-page .task-meta").textContent, /待确认/);
   assert.ok(document.querySelector(".task-tabs"));
+});
+
+
+test("by default the composer leaves it to Super Partner to tell a chat from a task", async t => {
+  const { state, window, document, act, button, click } = await setup(t, [mission("finished-task", "succeeded")]);
+  const composer = document.querySelector(".composer");
+  assert.equal(button("自动", composer.querySelector(".mode-switch")).getAttribute("aria-pressed"), "true");
+  // Everything a task may need stays at hand: it may well become one.
+  assert.ok(composer.querySelector(".attach-button") && composer.querySelector(".fleet-anchor"));
+  assert.match(composer.textContent, /允许联网/);
+  const submit = async (text) => {
+    const box = document.querySelector(".composer textarea");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, text);
+      box.dispatchEvent(new window.Event("input", { bubbles: true }));
+    });
+    await act(async () => document.querySelector(".composer form").requestSubmit());
+  };
+  await submit("WAL 是什么？");
+  assert.deepEqual(state.postPaths, ["/api/start"]);
+  assert.equal(state.taskBodies[0].prompt, "WAL 是什么？");
+
+  if (!document.querySelector(".composer")) await click(document.querySelector(".app-sidebar .new-task"));
+  await click(button("任务", document.querySelector(".mode-switch")));
+  await submit("修复登录页的测试");
+  assert.deepEqual(state.postPaths, ["/api/start", "/api/tasks"]);
+});
+
+test("a task told apart automatically can still become a chat before it is confirmed", async t => {
+  const task = { ...mission("auto-task", "awaiting_confirmation"), auto_routed: true, prompt: "WAL 和回滚日志有什么区别？" };
+  const manual = mission("manual-task", "awaiting_confirmation");
+  const { state, document, button, click } = await setup(t, [task, manual], [], { openComposer: false });
+  await click([...document.querySelectorAll(".run")].find(node => node.textContent.includes("manual-task")));
+  assert.equal(document.querySelector(".auto-note"), null);
+  await click([...document.querySelectorAll(".run")].find(node => node.textContent.includes("auto-task")));
+  assert.match(document.querySelector(".auto-note").textContent, /已自动识别为任务/);
+  await click(button("改成对话，直接回答"));
+  assert.deepEqual(state.toChats, ["auto-task"]);
+  const page = document.querySelector(".chat-page");
+  assert.match(page.querySelector(".task-meta").textContent, /对话自动识别/);
+  assert.match(page.querySelector(".lead-panel").textContent, /WAL 和回滚日志.*正在思考/s);
 });

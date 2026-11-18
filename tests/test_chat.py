@@ -130,3 +130,80 @@ async def test_a_chat_can_be_deleted(task_api, monkeypatch):
 def test_records_saved_before_chats_existed_are_tasks():
     stored = {"id": "old", "prompt": "p", "status": "succeeded", "budget_usd": 1, "plan": {"summary": "s", "nodes": []}}
     assert ExecutionRun.model_validate(stored).kind == "task"
+
+
+CHEAP = ModelProfile(id="x:cheap", provider="x", display_name="Cheap", channel="api", context_window=1_000_000,
+                     input_per_million=0.1, output_per_million=0.1, execution_priority=10,
+                     scores=CapabilityScore(coding=50, planning=50, reliability=80))
+
+
+def triaging(api, monkeypatch, verdict):
+    """``chatting``, plus the cheap model that tells a chat from a task and a stub planner."""
+    sent = chatting(api, monkeypatch)
+    models = {**api.models, CHEAP.id: CHEAP}
+    monkeypatch.setattr(api, "models", models)
+    monkeypatch.setattr(api.executor, "model_lookup", models)
+    monkeypatch.setattr(api.providers, "configured_models", lambda _ids: set(models))
+    asked = []
+
+    async def complete(model_id, prompt, *_args, **_kwargs):
+        asked.append((model_id, prompt))
+        if isinstance(verdict, Exception):
+            raise verdict
+        return ProviderResult(verdict, 1000, 10)
+
+    async def plan(prompt, *_args, **_kwargs):
+        return TaskPlan(summary="加缓存", nodes=[TaskNode(id="a", title="加缓存", instructions="i", capability="coding")])
+
+    monkeypatch.setattr(api.providers, "complete", complete)
+    monkeypatch.setattr(api, "autonomous_plan", plan)
+    return sent, asked
+
+
+async def test_a_question_left_to_super_partner_becomes_a_chat(task_api, monkeypatch):
+    api, client = task_api
+    sent, asked = triaging(api, monkeypatch, '{"kind": "chat"}')
+    response = await client.post("/api/start", json={"prompt": "WAL 和回滚日志有什么区别？"}, headers=ORIGIN)
+    assert response.status_code == 201, response.text
+    run = response.json()
+    await api.executor.lead_tasks[run["id"]]
+    # The cheapest model decided; deciding is paid by the chat, which the best chat model answers.
+    assert [model for model, _ in asked] == ["x:cheap"] and "WAL 和回滚日志" in asked[0][1]
+    saved = api.db.get_run(run["id"])
+    assert (saved.kind, saved.status, saved.auto_routed) == ("chat", RunStatus.DRAFT, True)
+    assert saved.actual_cost_usd > 0 and sent[0][0] == "x:best"
+
+
+async def test_work_left_to_super_partner_is_planned_as_a_task_and_can_still_become_a_chat(task_api, monkeypatch):
+    api, client = task_api
+    sent, _ = triaging(api, monkeypatch, '{"kind": "task"}')
+    run = (await client.post("/api/start", json={"prompt": "给商品接口加 Redis 缓存"}, headers=ORIGIN)).json()
+    saved = api.db.get_run(run["id"])
+    assert (saved.kind, saved.status, saved.auto_routed) == ("task", RunStatus.AWAITING_CONFIRMATION, True)
+    assert [node.title for node in saved.plan.nodes] == ["加缓存"]
+
+    # It was only a question after all: the plan goes, the request is answered as a chat.
+    response = await client.post(f"/api/tasks/{run['id']}/as-chat", headers=ORIGIN)
+    assert response.status_code == 200, response.text
+    await api.executor.lead_tasks[run["id"]]
+    chat = api.db.get_run(run["id"])
+    assert (chat.kind, chat.status, chat.plan.nodes) == ("chat", RunStatus.DRAFT, [])
+    assert [m.role for m in chat.lead_messages] == ["user", "lead"] and "给商品接口加 Redis 缓存" in sent[0][2]
+    # Only a task waiting for confirmation.
+    assert (await client.post(f"/api/tasks/{run['id']}/as-chat", headers=ORIGIN)).status_code == 409
+
+
+async def test_without_a_clear_answer_or_with_attachments_it_is_a_task(task_api, monkeypatch):
+    api, client = task_api
+    _, asked = triaging(api, monkeypatch, RuntimeError("provider down"))
+    run = (await client.post("/api/start", json={"prompt": "随便看看这个"}, headers=ORIGIN)).json()
+    # The model was asked and failed: as before chats existed, it is planned as a task.
+    assert len(asked) == 1 and api.db.get_run(run["id"]).kind == "task"
+    # A chat takes no attachments, so with them it is a task without asking.
+    monkeypatch.setattr(api.files, "resolve", lambda _ids: [])
+    run = (await client.post("/api/start", json={"prompt": "看看这张图怎么样", "attachments": ["a" * 32]}, headers=ORIGIN)).json()
+    assert len(asked) == 1 and api.db.get_run(run["id"]).kind == "task"
+
+    from super_partner.triage import read_kind
+    assert [read_kind(text) for text in ['{"kind": "chat"}', "```json\n{\"kind\":\"chat\"}\n```", "chat", "", '{"kind": "task"}']] == \
+        ["chat", "chat", "task", "task", "task"]
