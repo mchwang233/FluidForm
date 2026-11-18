@@ -1484,3 +1484,6 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .platform-search input{flex:1;min-width:0;height:auto;padding:0;border:0;background:transparent;box-shadow:none;font-size:13px;color:var(--text)}
 .platform-search input:focus,.platform-search input:focus-visible{outline:none;border:0;box-shadow:none}
 .platform-side .platform-threads{max-height:none}
+/* The platform composer focuses like the home composer: the box darkens, no green ring on the textarea. */
+.platform-input:focus-within{border-color:light-dark(#cfcfd4,#3a3a40)}
+.platform-input textarea:focus,.platform-input textarea:focus-visible{outline:none;box-shadow:none}
