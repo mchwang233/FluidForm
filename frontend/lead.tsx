@@ -95,9 +95,10 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   const count = entries.length + (run.lead_thinking ? 1 : 0);
   // Opening the conversation shows its newest message; new ones keep it there while you have not scrolled up to read.
   useEffect(() => {
-    const track = () => { following.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160; };
-    window.addEventListener("scroll", track, { passive: true });
-    return () => window.removeEventListener("scroll", track);
+    // Whichever element scrolls the conversation (the window, or the task's tab area), you follow while its end is in view.
+    const track = () => { const mark = end.current; if (mark) following.current = mark.getBoundingClientRect().top <= window.innerHeight + 160; };
+    document.addEventListener("scroll", track, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", track, { capture: true });
   }, []);
   useEffect(() => {
     const opened = shown.current.run !== run.id;
