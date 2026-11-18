@@ -167,8 +167,24 @@ function Stepper({status}:{status:string}){
   })}</ol>;
 }
 
+/** A model id as people say it, for the event log, which has no model list at hand: cli:codex is Codex CLI. */
+const CLI_NAMES:Record<string,string>={"cli:codex":"Codex CLI","cli:claude":"Claude Code","cli:gemini":"Gemini CLI"};
+function modelLabel(id?:string|null){return !id?"—":CLI_NAMES[id]??(id.includes(":")?id.slice(id.indexOf(":")+1):id)}
+
 const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>string)=>string> = {
-  "plan.created":data=>`生成执行计划（${data.planning_method==="model"?`由 ${data.planner_model_id} 规划`:"规则规划"}）`,
+  "run.skill_searching":data=>`为「${data.name}」查找现成的技能${data.tools?.length?`（${data.tools.join("、")}）`:""}`,
+  "run.skill_search_finished":data=>data.found?`找到「${data.name}」的现成技能`:`没找到「${data.name}」的现成技能，自己写一份`,
+  "run.skill_reference":data=>`「${data.name}」参考现成技能${data.cached?"（已缓存）":""}`,
+  "run.skill_selected":data=>`选用已有技能「${data.name}」`,
+  "run.skill_generating":data=>`编写技能「${data.name}」`,
+  "run.skills_prepared":data=>{const parts=[data.prepared?.length?`新写 ${data.prepared.length} 个`:"",data.reused?.length?`沿用 ${data.reused.length} 个`:"",data.failed?.length?`${data.failed.length} 个没写成`:""].filter(Boolean);return `技能准备好了${parts.length?`：${parts.join("，")}`:""}`},
+  "node.critical_overrun_check":(data,title)=>data.stop?`${title(data.node_id)}：运行 ${data.minutes} 分钟（预计 ${data.expected_minutes} 分钟），负责人判断卡住并停止（${data.reason??""}）`:`${title(data.node_id)}：运行 ${data.minutes} 分钟（预计 ${data.expected_minutes} 分钟），负责人判断仍在推进，继续执行`,
+  "node.limit_extended":(data,title)=>`${title(data.node_id)}：负责人放宽了这一步的调用次数`,
+  "node.blocked":(data,title)=>`${title(data.node_id)}：受阻${data.reason?`（${data.reason}）`:""}`,
+  "part.refine_attempt":data=>`细化大项，由 ${modelLabel(data.model_id)} 处理`,
+  "part.refine_correcting":data=>`细化结果不合格式，第 ${data.attempt}/${data.limit} 次修正`,
+  "run.capabilities_proposed":data=>`负责人提议固化 ${(data.names??[]).length} 项能力：${(data.names??[]).join("、")}`,
+  "plan.created":data=>`生成执行计划（${data.planning_method==="model"?`由 ${modelLabel(data.planner_model_id)} 规划`:"规则规划"}）`,
   "run.network_changed":data=>data.allow?"允许本任务联网":"关闭本任务联网",
   "run.confirmed":data=>`确认执行，预算 ${formatUsd(data.budget_usd??0)}`,
   "run.resumed":data=>`从中断处继续，预算 ${formatUsd(data.budget_usd??0)}`,
@@ -190,14 +206,14 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "run.recovered":data=>data.reason==="lead"?"负责人已处理你的回答，任务继续":"诊断已处理阻碍，任务自动继续",
   "run.decision":(data,title)=>`负责人决定${data.node_id?`（${title(data.node_id)}）`:""}：${({retry:"按要求重试",switch_model:`换成 ${data.model_id??"其它模型"}`,accept:"接受当前结果",unable:"判定无法完成",ask_user:"需要问你",repair_environment:"修复环境",repair_platform:"修复平台",request_component:"请平台工程师添加组件",rework:`返工 ${(data.targets??[]).map(title).join("、")}`,replan:"调整计划",done:"确认任务完成",fallback:"暂时无法决策，交给诊断"} as Record<string,string>)[data.action]??data.action}${data.reason?` · ${data.reason}`:""}`,
   "run.plan_changed":data=>`负责人调整了计划：${[data.added?.length?`新增 ${data.added.join("、")}`:"",data.removed?.length?`删除 ${data.removed.join("、")}`:"",data.updated?.length?`修改 ${data.updated.join("、")}`:""].filter(Boolean).join("；")}`,
-  "run.lead_thinking":(data,title)=>`负责人开始判断${data.node_id?`（${title(data.node_id)}）`:""}：${({attempt_failed:"尝试失败后怎么处理",verify_failed:"验证没通过是否返工",user_answer:"根据你的回答下一步做什么",all_done:"整体结果是否满足需求",repair_done:"修复是否真的生效",engineer_done:"平台工程师的结果如何处理",overrun:"超出预计轮数是否继续"} as Record<string,string>)[data.event]??data.event}`,
+  "run.lead_thinking":(data,title)=>`负责人开始判断${data.node_id?`（${title(data.node_id)}）`:""}：${({attempt_failed:"尝试失败后怎么处理",verify_failed:"验证没通过是否返工",user_answer:"根据你的回答下一步做什么",all_done:"整体结果是否满足需求",repair_done:"修复是否真的生效",engineer_done:"平台工程师的结果如何处理",overrun:"超出预计轮数是否继续",critical_overrun:"运行时间远超预计是否继续"} as Record<string,string>)[data.event]??data.event}`,
   "node.delegated":(data,title)=>`${title(data.node_id)} 委派了 ${data.children?.length??0} 个子任务，等待验收结果`,
   "run.engineer_requested":(data,title)=>`负责人请平台工程师添加组件${data.node_id?`（${title(data.node_id)}）`:""}，等你在负责人对话里批准方案`,
   "run.lead_changed":data=>`负责人换成 ${data.model_id}${data.previous_model_id?`（原为 ${data.previous_model_id}）`:""}`,
   "node.succeeded":(data,title)=>`${title(data.node_id)}：完成`,
   "node.overrun_check":(data,title)=>data.stop?`${title(data.node_id)}：已用 ${data.turns} 轮（预计 ${data.expected} 轮），负责人停止了这次尝试（${data.reason??""}）`:`${title(data.node_id)}：已用 ${data.turns} 轮（预计 ${data.expected} 轮），负责人判断仍在推进，继续执行`,
   "node.progress_check":(data,title)=>data.stop?`${title(data.node_id)}：运行 ${data.minutes} 分钟后检查，判断已卡住并停止（${data.reason??""}）`:`${title(data.node_id)}：运行 ${data.minutes} 分钟后检查，仍在推进，继续执行`,
-  "node.retry":(data,title)=>data.reason==="environment_fixed"?`${title(data.node_id)}：环境已修复，重新执行`:`${title(data.node_id)}：未通过，准备重试（${data.reason??""}）`,
+  "node.retry":(data,title)=>data.reason==="environment_fixed"?`${title(data.node_id)}：环境已修复，重新执行`:`${title(data.node_id)}：未通过，${data.reason==="lead"?"负责人决定重试":`准备重试（${data.reason??""}）`}`,
   "node.failed":(data,title)=>`${title(data.node_id)}：失败（${data.error??""}）`,
   "run.rework":(data,title)=>`${title(data.verifier)} 发现问题，第 ${data.round} 轮返工：${data.problems??""}`,
   "approval.required":data=>`暂停：${({budget_insufficient:"预算不足以启动下一步",budget_exceeded:"花费超过预算",interrupted:"服务重启打断了执行",user_paused:"你手动暂停了任务",quota_exhausted:"模型额度用完，且没有其它可用模型",model_unavailable:"模型服务不可用，且没有其它可用模型",diagnosis_unresolved:"诊断后仍无法自动解决，请查看诊断报告",preflight_failed:"执行前检查没有通过，缺少任务需要的工具或环境",decision_limit:"负责人决策次数已用完，等你查看后继续"} as Record<string,string>)[data.reason]??data.reason}`,
@@ -241,7 +257,7 @@ function TaskDetails({run,onNetwork}:{run:Run;onNetwork:SetNetwork}){
     <TaskAttachments apiBase={API} attachments={run.attachments}/>
     {run.plan.planning_note&&<section><h5>规划说明</h5><p className="planning-note">{run.plan.planning_note}</p></section>}
     <dl className="task-facts">
-      <div><dt>规划方式</dt><dd>{run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${run.plan.planner_model_id} 规划`:"规则规划"}</dd></div>
+      <div><dt>规划方式</dt><dd>{run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${modelLabel(run.plan.planner_model_id)} 规划`:"规则规划"}</dd></div>
       <div><dt>预计花费</dt><dd>{formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</dd></div>
       <div><dt>预算上限</dt><dd>{formatUsd(run.budget_usd)}</dd></div>
       <div><dt>会员 CLI</dt><dd>{run.use_cli?"允许":"不使用"}</dd></div>
@@ -379,7 +395,7 @@ const NOTICE: Record<string,{text:string;tone:Toast["tone"]}> = {
 
 function App() {
   const [runs,setRuns]=useState<Run[]>([]),[models,setModels]=useState<Model[]>([]),[providerList,setProviderList]=useState<Provider[]>([]);
-  const [view,setView]=useState<"missions"|"models"|"engineer"|"problems">("missions"),[engineerFocus,setEngineerFocus]=useState<string|null>(null),[selectedModelId,setSelectedModelId]=useState("");
+  const [view,setView]=useState<"missions"|"models"|"engineer"|"problems">("missions"),[engineerFocus,setEngineerFocus]=useState<string|null>(null),[platformVisit,setPlatformVisit]=useState(0),[selectedModelId,setSelectedModelId]=useState("");
   const [selected,setSelected]=useState<Run|null>(null),[selectedProvider,setSelectedProvider]=useState<Provider|null>(null),[prompt,setPrompt]=useState(""),[budget,setBudget]=useState(2),[useCli,setUseCli]=useState(true),[allowNetwork,setAllowNetwork]=useState(false),[busy,setBusy]=useState(false),[projectDir,setProjectDir]=useState(savedProjectDir);
   // The composer starts a task (planned, then run), a chat (only a conversation with one model), or
   // leaves it to the platform to tell which ("auto", the default: POST /api/start).
@@ -536,14 +552,14 @@ function App() {
       <MissionHistory runs={runs} selectedId={view==="missions"?selected?.id:undefined} deletingId={deletingRunId} error={deleteTarget?"":deleteError} onSelect={run=>{setSelected(run);setView("missions");setComposerOpen(false)}} onDelete={requestDeleteRun} collapsed={historyCollapsed} onToggle={()=>setHistoryCollapsed(value=>!value)}/>
       <nav className="app-nav" aria-label="页面导航">
         <button type="button" aria-pressed={view==="models"} title="模型" onClick={()=>setView("models")}><Icon name="cpu"/><span>模型</span></button>
-        <button type="button" aria-pressed={view==="engineer"} title="平台：能力和平台工程师" onClick={()=>{setEngineerFocus(null);setView("engineer")}}><Icon name="wrench"/><span>平台</span></button>
+        <button type="button" aria-pressed={view==="engineer"} title="平台：能力和平台工程师" onClick={()=>{setEngineerFocus(null);setView("engineer");setPlatformVisit(visit=>visit+1)}}><Icon name="wrench"/><span>平台</span></button>
         <SettingsMenu active={view==="problems"} onProblems={()=>setView("problems")}/>
       </nav>
     </aside>
     <main className={`app-content${view==="models"?" profiles-view":""}${view==="missions"&&composerOpen?" composing":""}`}>
     {quota.length>0&&<QuotaBanner quota={quota} models={models} onReset={id=>loadQuota({method:"DELETE"},`/${encodeURIComponent(id)}`)}/>}
     {offline&&<p className="offline" role="status">无法连接本地 API（{API}），正在重试…</p>}
-    {view==="problems"?<ProblemsPage apiBase={API} runs={runs} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="engineer"?<EngineerPage apiBase={API} runs={runs} focusId={engineerFocus} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="models"?<ModelProfiles apiBase={API} models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} onToggle={toggleModel} onConfigure={configureModel}/>:<>
+    {view==="problems"?<ProblemsPage apiBase={API} runs={runs} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="engineer"?<EngineerPage apiBase={API} runs={runs} focusId={engineerFocus} visit={platformVisit} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="models"?<ModelProfiles apiBase={API} models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} onToggle={toggleModel} onConfigure={configureModel}/>:<>
     <div className="workbench-main">
     {composerOpen&&<section className={`composer composer-home${mode==="chat"?" chat-mode":""}`} aria-label="新建">
       {runs.length>0&&<button type="button" className="modal-close composer-close" onClick={()=>setComposerOpen(false)} aria-label="收起">×</button>}

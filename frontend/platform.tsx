@@ -93,9 +93,11 @@ const SHOWN_THREADS = 6;
 // Capabilities and skills the side panel lists; 更多 shows them all.
 const SIDE_ITEMS = 5;
 
-export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities, onSkills, openThread = null }: {
+export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities, onSkills, openThread = null, visit = 0 }: {
   apiBase: string; runs: RunRef[]; onOpenRun: (id: string) => void;
   onRecords: (jobId?: string) => void; onCapabilities: () => void; onSkills: () => void; openThread?: string | null;
+  // Changes when 平台 is picked again in the sidebar: back to the page itself, out of any conversation.
+  visit?: number;
 }) {
   const { jobs, act, available } = useEngineerJobs(apiBase, null, "", true);
   const [capabilities, setCapabilities] = useState<Capability[]>([]), [skills, setSkills] = useState<Skill[]>([]);
@@ -109,6 +111,8 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   const needle = query.trim().toLowerCase();
   const found = needle ? all.filter(thread => matches(thread, needle)) : all.slice(0, SHOWN_THREADS);
   useEffect(() => { if (openThread) setOpenId(openThread); }, [openThread]);
+  const seenVisit = useRef(visit);
+  useEffect(() => { if (visit !== seenVisit.current) { seenVisit.current = visit; setOpenId(null); setQuery(""); } }, [visit]);
   const open = all.find(thread => thread.id === openId);
   return <div className="platform-page">
     <section className="platform-main">
@@ -288,9 +292,11 @@ function Message({ job, message, runs, onOpenRun }: { job: EngineerJob; message:
 /** A long message shows its start; the rest opens in place. */
 function Folded({ text, plain = false }: { text: string; plain?: boolean }) {
   const [open, setOpen] = useState(false);
-  if (text.length <= LONG_MESSAGE || open) return <div className="platform-text">{plain ? <p>{text}</p> : <MarkdownView text={text} />}</div>;
-  const start = text.replace(/[*_`#>|]+/g, "").replace(/\s+/g, " ").slice(0, LONG_MESSAGE);
-  return <div className="platform-text"><p>{start}… <button type="button" className="link-button" onClick={() => setOpen(true)}>展开</button></p></div>;
+  const body = plain ? <p>{text}</p> : <MarkdownView text={text} />;
+  if (text.length <= LONG_MESSAGE || open) return <div className="platform-text">{body}</div>;
+  // Folded, it is the same message cut to its first lines, formatting and all.
+  return <div className="platform-text folded"><div className="platform-text-clip">{body}</div>
+    <button type="button" className="link-button" onClick={() => setOpen(true)}>展开</button></div>;
 }
 
 /** The box at the foot: a new request, or a reply to what waits for the user. */

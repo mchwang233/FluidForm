@@ -52,8 +52,9 @@ export function waitingJobs(jobs: EngineerJob[] = []) {
 type Act = (path: string, body?: unknown) => Promise<string | null>;
 
 /** The platform engineer: ask it for a repair or a component, approve its plans and changes. */
-export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
-  apiBase: string; runs: RunRef[]; focusId?: string | null; onOpenRun: (id: string) => void;
+export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
+  // ``visit`` changes each time 平台 is picked in the sidebar: the page goes back to its home.
+  apiBase: string; runs: RunRef[]; focusId?: string | null; visit?: number; onOpenRun: (id: string) => void;
 }) {
   const [data, setData] = useState<EngineerOverview | null>(null), [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
@@ -102,12 +103,13 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
   const [thread, setThread] = useState<string | null>(null);
   const pick = (next: View) => { if (next !== "home") setThread(null); setTab(next); };
   const openThread = (id: string) => { setThread(id); setTab("home"); };
+  useEffect(() => { if (visit) { setThread(null); setTab("home"); } }, [visit]);
   const open = (id: string) => { setSelectedId(id); pick("records"); };
   const row = (job: EngineerJob) => <button type="button" key={job.id} aria-pressed={selected?.id === job.id} onClick={() => setSelectedId(job.id)}>
     <span className="engineer-list-title">{headlineOf(job)}</span>
     <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
   </button>;
-  if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} openThread={thread}
+  if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} openThread={thread} visit={visit}
     onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} onSkills={() => pick("skills")} />;
   return <div className="engineer-page">
     <button type="button" className="platform-back" onClick={() => pick("home")}>← 平台</button>

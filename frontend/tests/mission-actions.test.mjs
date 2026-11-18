@@ -1682,7 +1682,7 @@ test("the lead panel shows its decisions and questions, takes replies, and lets 
   state.records[0] = { ...state.records[0], lead_messages: [state.records[0].lead_messages[0],
     { ...state.records[0].lead_messages[1], status: "done", text: "因为写出的 **0 秒** 会让数据读不回来。" }] };
   await act(async () => state.poll());
-  assert.match(panel().querySelector(".markdown-body").textContent, /0 秒/);
+  assert.match(panel().querySelector(".dx-report .markdown-body").textContent, /0 秒/);
   assert.equal(document.querySelector('[aria-label="给负责人的消息"]').closest("fieldset").disabled, false);
 });
 
@@ -2304,6 +2304,50 @@ test("files pasted or dropped into the task's conversation and the 平台 box go
   await act(async () => document.querySelector(".platform-composer").requestSubmit());
   assert.deepEqual(state.engineerActions.at(-1), { path: "/api/engineer/jobs",
     body: { request: "修一下截图里的报错", kind: "repair", attachments: ["att3".padEnd(32, "0")] } });
+});
+
+test("the event log names every step in words, and models as people call them", async t => {
+  const run = mission("logged", "succeeded");
+  run.plan.nodes = [{ id: "a", title: "实现", dependencies: [], status: "succeeded", estimated_cost_usd: 0, attempts: [] }];
+  run.plan.planning_method = "model"; run.plan.planner_model_id = "cli:codex";
+  const { state, document, click } = await setup(t, [run], [], { openComposer: false });
+  state.timeline = [
+    { id: 1, kind: "plan.created", data: { planning_method: "model", planner_model_id: "cli:codex" }, created_at: "2026-10-28T03:00:00Z" },
+    { id: 2, kind: "run.skill_searching", data: { name: "ibus", tools: ["ibus"] }, created_at: "2026-10-28T03:00:01Z" },
+    { id: 3, kind: "run.skills_prepared", data: { prepared: ["ibus"], reused: ["cmake", "gdb"], failed: [] }, created_at: "2026-10-28T03:00:02Z" },
+    { id: 4, kind: "node.critical_overrun_check", data: { node_id: "a", minutes: 43, expected_minutes: 10, stop: false }, created_at: "2026-10-28T03:00:03Z" },
+    { id: 5, kind: "run.lead_thinking", data: { node_id: "a", event: "critical_overrun" }, created_at: "2026-10-28T03:00:04Z" },
+    { id: 6, kind: "node.retry", data: { node_id: "a", reason: "lead" }, created_at: "2026-10-28T03:00:05Z" },
+  ];
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("详情")));
+  const log = [...document.querySelectorAll(".event-log li span")].map(item => item.textContent);
+  assert.deepEqual(log, ["生成执行计划（由 Codex CLI 规划）", "为「ibus」查找现成的技能（ibus）", "技能准备好了：新写 1 个，沿用 2 个",
+    "01 实现：运行 43 分钟（预计 10 分钟），负责人判断仍在推进，继续执行", "负责人开始判断（01 实现）：运行时间远超预计是否继续",
+    "01 实现：未通过，负责人决定重试"]);
+  assert.doesNotMatch(document.querySelector(".task-details, .details-panel, main").textContent, /cli:codex/);
+});
+
+test("picking 平台 again goes back to its home, and a long message folds keeping its formatting", async t => {
+  const { state, window, document, click, act } = await setup(t, [], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const report = "- 根本原因：`quality.py:398`\n- 回归测试：test_unable.py 覆盖两种模式\n\n" + "说明。".repeat(300);
+  state.engineer = { available: true, jobs: [engineerJob({ id: "mine", headline: "判定", status: "applied", kind: "repair",
+    messages: [{ role: "engineer", text: report, created_at: "2026-11-18T06:00:00Z" }] })] };
+  const platform = () => click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await platform(); await settle();
+  await click([...document.querySelectorAll(".platform-side button")].find(node => node.textContent.includes("更多")));
+  assert.equal(document.querySelector(".engineer-head h2").textContent, "能力");
+  await platform(); await settle();
+  assert.ok(document.querySelector(".platform-greeting"));
+  await click(document.querySelector(".platform-side .platform-thread-row"));
+  const folded = document.querySelector(".platform-text.folded");
+  assert.ok(folded.querySelector("li code"));
+  assert.match(folded.textContent, /test_unable\.py/);
+  await click([...folded.querySelectorAll("button")].find(node => node.textContent === "展开"));
+  assert.equal(document.querySelector(".platform-text.folded"), null);
+  // Back home from inside a conversation too.
+  await platform(); await settle();
+  assert.ok(document.querySelector(".platform-greeting"));
 });
 
 test("the 平台 page lists its conversations beside the one open, each one to go on talking in", async t => {

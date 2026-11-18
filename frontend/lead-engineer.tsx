@@ -137,7 +137,7 @@ function JobCard({ job, act, onOpenEngineer }: { job: EngineerJob; act: Act; onO
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
     </div>
     {job.status === "plan_ready" && job.plan && <details className="lead-instructions" open><summary>方案</summary><div className="dx-report"><MarkdownView text={job.plan} /></div></details>}
-    {job.status === "needs_input" && job.question && <p className="lead-question">{job.question}</p>}
+    {job.status === "needs_input" && job.question && <div className="lead-question"><MarkdownView text={job.question} /></div>}
     {job.status === "ready" && <p className="engineer-ready">改动已通过检查{job.files?.length ? `，涉及 ${job.files.join("、")}` : ""}。应用后服务会重启一次。</p>}
     {job.report && (job.status === "ready" || ENGINEER_DONE.has(job.status))
       && !(job.messages ?? []).some(item => item.role === "engineer" && item.text === job.report) && <details className="lead-instructions"><summary>改动说明</summary><div className="dx-report"><MarkdownView text={job.report} /></div></details>}

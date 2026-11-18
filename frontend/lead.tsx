@@ -245,7 +245,7 @@ function RepairProgress({ repair, model, waiting, onReply }: { repair: Repair; m
     {repair.report && <details className="lead-instructions" open={waiting}><summary>修复报告</summary><div className="dx-report"><MarkdownView text={repair.report} /></div></details>}
     {(repair.messages ?? []).map((message, i) => <UserMessage key={i} message={message} />)}
     {waiting && <>
-      {repair.question && <p className="lead-question">{repair.question}</p>}
+      {repair.question && <div className="lead-question"><MarkdownView text={repair.question} /></div>}
       <Composer item={repair} waiting disabled={false} onReply={onReply} sendLabel="回复" placeholder="补充说明，或写下你的决定" />
     </>}
     {repair.status !== "running" && !waiting && <p className="muted lead-repair-next">修复结果已交回负责人，由它决定这一步接下来怎么做。</p>}
@@ -257,7 +257,7 @@ function QuestionMessage({ item, step, waiting, onReply }: { item: Diagnosis; st
     <article className="dx-msg dx-ai lead-said">
       <LeadMeta note={["提问", step].filter(Boolean).join(" · ")} at={item.created_at} />
       {item.report && <p className="lead-verdict">{item.report}</p>}
-      {!waiting && item.question && <p className="lead-question">{item.question}</p>}
+      {!waiting && item.question && <div className="lead-question"><MarkdownView text={item.question} /></div>}
     </article>
     {(item.messages ?? []).map((message, i) => <UserMessage key={i} message={message} />)}
     {waiting && <Composer item={item} waiting disabled={false} onReply={onReply} sendLabel="回复负责人"

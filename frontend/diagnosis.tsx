@@ -1,6 +1,6 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachments, type Attachment } from "./attachments";
-import { MarkdownView } from "./markdown";
+import { Markdown, MarkdownView } from "./markdown";
 
 const FILES_ONLY = "（见附件）";
 export type DiagnosisMessage = { text: string; choice?: string | null; created_at?: string; attachments?: Attachment[] };
@@ -130,7 +130,7 @@ export function Composer({ item, waiting, disabled, onReply, sendLabel = "发送
   }
   return <form ref={form} className={`dx-composer${waiting ? " waiting" : ""}${asking ? "" : " compact"}`} onSubmit={submit} aria-label="回复诊断">
     <fieldset disabled={disabled || busy}>
-      <legend className={asking ? "dx-question" : "dx-sr"}>{item.question || (asking ? "选择一个方案" : "告诉我你的想法")}</legend>
+      <legend className={asking ? "dx-question" : "dx-sr"}>{item.question ? <Markdown text={item.question} /> : asking ? "选择一个方案" : "告诉我你的想法"}</legend>
       {choices.length > 0 && <div className="diagnosis-choices" role="radiogroup" aria-label="可选方案">
         {choices.map((option, index) => <label className={choice === option ? "selected" : ""} key={option}>
           <input type="radio" name={`diagnosis-${item.id}`} value={option} checked={choice === option}
