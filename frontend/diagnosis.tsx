@@ -23,9 +23,9 @@ const VERDICTS: Record<string, { label: string; tone: string; note: (model: stri
   blocked: { label: "需要你处理", tone: "warn", note: (model, item) => `${model} 判断需要你先处理。${item.user_action ?? "处理后在下方告诉我，或补充信息。"}` },
   unable: { label: "无法完成", tone: "warn", note: (model, item) => `${model} 判断这一步在当前环境中做不到，不再重试，其余步骤继续。${item.user_action ? `需要你处理：${item.user_action}` : ""}` },
   needs_input: { label: "等你回复", tone: "warn", note: () => "诊断需要你的意见，选择方案或写下想法后会继续。" },
-  platform_pending: { label: "平台修复生效中", tone: "ok", note: () => "Super Partner 修复已通过验证，正在自动生效；完成后继续原任务。" },
-  platform_fixed: { label: "平台已修复", tone: "ok", note: () => "Super Partner 修复已生效，所有项目都将使用修复后的版本。" },
-  platform_failed: { label: "平台修复失败", tone: "warn", note: () => "Super Partner 修复未通过验证或生效检查，任务数据已保留。" },
+  platform_pending: { label: "平台修复生效中", tone: "ok", note: () => "平台修复已通过验证，正在自动生效；完成后继续原任务。" },
+  platform_fixed: { label: "平台已修复", tone: "ok", note: () => "平台修复已生效，所有项目都将使用修复后的版本。" },
+  platform_failed: { label: "平台修复失败", tone: "warn", note: () => "平台修复未通过验证或生效检查，任务数据已保留。" },
 };
 
 /** Diagnoses grouped into conversations: a reply's follow-up joins the one it answers. */
@@ -72,13 +72,13 @@ function Report({ text }: { text: string }) {
 
 function AssistantMessage({ item, model, node, run }: { item: Diagnosis; model: string; node?: string; run: RunLike }) {
   const verdict = item.verdict ? VERDICTS[item.verdict] : undefined;
-  const running = item.scope === "super_partner" ? `${model} 正在修复 Super Partner 自身问题，并验证修改…`
+  const running = item.scope === "super_partner" ? `${model} 正在修复平台自身问题，并验证修改…`
     : item.reply_to ? `${model} 正在结合你的回复继续诊断…`
     : item.trigger === "auto" ? `${model} 正在排查卡住的原因，并尝试修复…`
     : `正在由 ${model} 分析任务的计划、每次尝试和改动…`;
   return <article className="dx-msg dx-ai">
     <div className="dx-meta">
-      <span className="dx-avatar" aria-hidden="true">{item.trigger === "lead" ? "🧭" : "🩺"}</span>
+      <span className="dx-avatar" aria-hidden="true">{item.trigger === "lead" ? "负" : "诊"}</span>
       <b>{model}</b>
       <small>{item.trigger === "lead" ? "负责人提问" : item.reply_to ? "回复" : item.trigger === "auto" ? "自动诊断" : "手动诊断"}{node ? ` · ${node}` : ""} · {when(item.created_at)}</small>
     </div>
@@ -166,7 +166,7 @@ export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models:
   const waiting = run.waiting_diagnosis_id === last.id;
   return <section className={`diagnosis-card dx-panel${waiting ? " waiting" : ""}`} aria-label="诊断报告">
     <div className="diagnosis-head">
-      <b>诊断{last.scope === "super_partner" ? " · Super Partner 自身问题" : ""}</b>
+      <b>诊断{last.scope === "super_partner" ? " · 平台自身问题" : ""}</b>
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
       {groups.length > 1 && <span className="diagnosis-nav">
         <button type="button" className="ghost" disabled={index <= 0} onClick={() => setIndex(i => i - 1)} aria-label="上一次诊断">‹</button>

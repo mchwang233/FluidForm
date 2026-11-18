@@ -15,7 +15,7 @@ import { ProjectField, rememberProject } from "./project-picker";
 import { EngineerPage } from "./engineer";
 import { EngineerBubble } from "./engineer-bubble";
 import { canCancelMission, canDeleteMission, CancelMissionDialog, DeleteMissionButton, DeleteMissionDialog, formatUsd, estimateNote, MissionHistory, needsAttention, statusLabel, detailText } from "./mission-history";
-import { Icon, type IconName } from "./icons";
+import { BrandMark, Icon, PRODUCT_NAME, type IconName } from "./icons";
 import { ChatDetail, type PromoteOptions } from "./chat";
 import "./style.css";
 
@@ -179,7 +179,7 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "node.model_switched":(data,title)=>`${title(data.node_id)}：${data.model_id} ${data.reason==="model_configuration_changed"?"配置已变更":data.reason==="model_unavailable"?"服务暂时不可用":"额度用完"}，换用 ${data.next_model_id}`,
   "node.superseded":(data,title)=>`${title(data.node_id)}：上游已返工，旧结果失效，将重新执行`,
   "run.recovered":data=>data.reason==="lead"?"负责人已处理你的回答，任务继续":"诊断已处理阻碍，任务自动继续",
-  "run.decision":(data,title)=>`负责人决定${data.node_id?`（${title(data.node_id)}）`:""}：${({retry:"按要求重试",switch_model:`换成 ${data.model_id??"其它模型"}`,accept:"接受当前结果",unable:"判定无法完成",ask_user:"需要问你",repair_environment:"修复环境",repair_platform:"修复 Super Partner",request_component:"请平台工程师添加组件",rework:`返工 ${(data.targets??[]).map(title).join("、")}`,replan:"调整计划",done:"确认任务完成",fallback:"暂时无法决策，交给诊断"} as Record<string,string>)[data.action]??data.action}${data.reason?` · ${data.reason}`:""}`,
+  "run.decision":(data,title)=>`负责人决定${data.node_id?`（${title(data.node_id)}）`:""}：${({retry:"按要求重试",switch_model:`换成 ${data.model_id??"其它模型"}`,accept:"接受当前结果",unable:"判定无法完成",ask_user:"需要问你",repair_environment:"修复环境",repair_platform:"修复平台",request_component:"请平台工程师添加组件",rework:`返工 ${(data.targets??[]).map(title).join("、")}`,replan:"调整计划",done:"确认任务完成",fallback:"暂时无法决策，交给诊断"} as Record<string,string>)[data.action]??data.action}${data.reason?` · ${data.reason}`:""}`,
   "run.plan_changed":data=>`负责人调整了计划：${[data.added?.length?`新增 ${data.added.join("、")}`:"",data.removed?.length?`删除 ${data.removed.join("、")}`:"",data.updated?.length?`修改 ${data.updated.join("、")}`:""].filter(Boolean).join("；")}`,
   "run.lead_thinking":(data,title)=>`负责人开始判断${data.node_id?`（${title(data.node_id)}）`:""}：${({attempt_failed:"尝试失败后怎么处理",verify_failed:"验证没通过是否返工",user_answer:"根据你的回答下一步做什么",all_done:"整体结果是否满足需求",repair_done:"修复是否真的生效",engineer_done:"平台工程师的结果如何处理",overrun:"超出预计轮数是否继续"} as Record<string,string>)[data.event]??data.event}`,
   "node.delegated":(data,title)=>`${title(data.node_id)} 委派了 ${data.children?.length??0} 个子任务，等待验收结果`,
@@ -206,9 +206,9 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "run.repair_shared":data=>`公共环境修复已保存，供其他项目复用：${(data.files??[]).join("、")}`,
   "run.diagnosis_question":data=>`诊断等待你的回复：${data.question}`,
   "run.diagnosis_reply":data=>`收到你的回复：${[data.choice,data.text].filter(Boolean).join("；")}`,
-  "run.platform_repair":data=>data.phase==="validating"?"正在验证 Super Partner 修复":"开始修复 Super Partner 自身问题",
+  "run.platform_repair":data=>data.phase==="validating"?"正在验证 平台修复":"开始修复平台自身问题",
   "run.platform_waiting":()=>"平台修复已验证，等待在途步骤结束后自动生效",
-  "run.platform_activated":()=>"Super Partner 修复已生效，任务按原预算继续",
+  "run.platform_activated":()=>"平台修复已生效，任务按原预算继续",
   "run.platform_failed":data=>`平台修复未生效：${data.error??"任务数据已保留"}`,
 };
 
@@ -361,7 +361,7 @@ function App() {
   const [view,setView]=useState<"missions"|"models"|"engineer"|"problems">("missions"),[engineerFocus,setEngineerFocus]=useState<string|null>(null),[selectedModelId,setSelectedModelId]=useState("");
   const [selected,setSelected]=useState<Run|null>(null),[selectedProvider,setSelectedProvider]=useState<Provider|null>(null),[prompt,setPrompt]=useState(""),[budget,setBudget]=useState(2),[useCli,setUseCli]=useState(true),[allowNetwork,setAllowNetwork]=useState(false),[busy,setBusy]=useState(false),[projectDir,setProjectDir]=useState(savedProjectDir);
   // The composer starts a task (planned, then run), a chat (only a conversation with one model), or
-  // leaves it to Super Partner to tell which ("auto", the default: POST /api/start).
+  // leaves it to the platform to tell which ("auto", the default: POST /api/start).
   const [mode,setMode]=useState<"auto"|"task"|"chat">("auto"),[chatModel,setChatModel]=useState(""),[chatModels,setChatModels]=useState<{id:string;display_name:string}[]>([]);
   useEffect(()=>{if(mode!=="chat")return;let live=true;fetch(`${API}/api/chats/models?use_cli=${useCli}`).then(r=>r.ok?r.json():[]).then(list=>{if(live)setChatModels(Array.isArray(list)?list:[])}).catch(()=>{});return()=>{live=false}},[mode,useCli]);
   const [formError,setFormError]=useState(""),[offline,setOffline]=useState(false);
@@ -415,7 +415,7 @@ function App() {
     }
     if(fresh.length)setToasts(current=>[...current,...fresh].slice(-4));
     const attention=runs.filter(run=>needsAttention(run.status)).length,running=runs.some(run=>run.status==="running");
-    document.title=`${running?"● ":""}${attention?`(${attention}) `:""}Super Partner`;
+    document.title=`${running?"● ":""}${attention?`(${attention}) `:""}${PRODUCT_NAME}`;
   },[runs]);
   useEffect(()=>{if(!toasts.length)return;const timer=window.setTimeout(()=>setToasts(current=>current.slice(1)),8000);return()=>window.clearTimeout(timer)},[toasts]);
   useEffect(()=>{if(!selectedProvider)return;const close=(event:KeyboardEvent)=>{if(event.key==="Escape")setSelectedProvider(null)};window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close)},[selectedProvider]);
@@ -501,7 +501,7 @@ function App() {
   function configureModel(model:Model){setSelectedProvider(providerList.find(provider=>provider.id===model.provider)||null)}
   return <div className={`app-shell${historyCollapsed?" history-collapsed":""}`}>
     <aside className="app-sidebar" aria-label="侧栏">
-      <div className="brand"><span className="logo">SP</span><h1>Super Partner</h1></div>
+      <div className="brand"><BrandMark/><h1>{PRODUCT_NAME}</h1></div>
       <button type="button" className="primary new-task" title="新建：提个问题，或交给团队去做" aria-expanded={view==="missions"&&composerOpen} onClick={()=>{setView("missions");setComposerOpen(open=>view!=="missions"||!open);window.scrollTo({top:0})}}><Icon name="plus"/><span>新建</span></button>
       <MissionHistory runs={runs} selectedId={view==="missions"?selected?.id:undefined} deletingId={deletingRunId} error={deleteTarget?"":deleteError} onSelect={run=>{setSelected(run);setView("missions")}} onDelete={requestDeleteRun} collapsed={historyCollapsed} onToggle={()=>setHistoryCollapsed(value=>!value)}/>
       <nav className="app-nav" aria-label="页面导航">
@@ -516,7 +516,7 @@ function App() {
     {offline&&<p className="offline" role="status">无法连接本地 API（{API}），正在重试…</p>}
     {view==="problems"?<ProblemsPage apiBase={API} runs={runs} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="engineer"?<EngineerPage apiBase={API} runs={runs} focusId={engineerFocus} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="models"?<ModelProfiles apiBase={API} models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} onToggle={toggleModel} onConfigure={configureModel}/>:<>
     <div className="workbench-main">
-    {composerOpen&&<section className={`composer${mode==="chat"?" chat-mode":""}`} aria-label="新建"><div className="composer-head"><div className="composer-greeting"><span className="partner-avatar" aria-hidden="true">SP</span><div><h3>{greeting(mode)}</h3><p>{mode==="auto"?"问题我直接回答；要动手的事，我先拆成计划和预算，你点头了再开工。":mode==="chat"?"直接聊，不规划也不执行。选了项目时，会员 CLI 能读项目文件（只读）；需要动手时再转成任务。":"说清想要的结果，我先拆成几个大项、算好预算，你确认后才开始执行。"}</p></div></div><div className="composer-tools"><div className="mode-switch" role="group" aria-label="新建什么">{([["auto","自动"],["task","任务"],["chat","对话"]] as const).map(([id,label])=><button key={id} type="button" aria-pressed={mode===id} onClick={()=>setMode(id)}>{label}</button>)}</div>{runs.length>0&&<button type="button" className="modal-close" onClick={()=>setComposerOpen(false)} aria-label="收起">×</button>}</div></div><form onSubmit={submit} className={dragging?"dragging":undefined}
+    {composerOpen&&<section className={`composer${mode==="chat"?" chat-mode":""}`} aria-label="新建"><div className="composer-head"><div className="composer-greeting"><span className="partner-avatar" aria-hidden="true"><BrandMark size={40}/></span><div><h3>{greeting(mode)}</h3><p>{mode==="auto"?"问题我直接回答；要动手的事，我先拆成计划和预算，你点头了再开工。":mode==="chat"?"直接聊，不规划也不执行。选了项目时，会员 CLI 能读项目文件（只读）；需要动手时再转成任务。":"说清想要的结果，我先拆成几个大项、算好预算，你确认后才开始执行。"}</p></div></div><div className="composer-tools"><div className="mode-switch" role="group" aria-label="新建什么">{([["auto","自动"],["task","任务"],["chat","对话"]] as const).map(([id,label])=><button key={id} type="button" aria-pressed={mode===id} onClick={()=>setMode(id)}>{label}</button>)}</div>{runs.length>0&&<button type="button" className="modal-close" onClick={()=>setComposerOpen(false)} aria-label="收起">×</button>}</div></div><form onSubmit={submit} className={dragging?"dragging":undefined}
       onDragOver={e=>{if(e.dataTransfer.types.includes("Files")){e.preventDefault();setDragging(true)}}}
       onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as globalThis.Node|null))setDragging(false)}}
       onDrop={e=>{if(e.dataTransfer.files.length){e.preventDefault();attachments.add([...e.dataTransfer.files])}setDragging(false)}}>

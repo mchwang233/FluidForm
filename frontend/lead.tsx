@@ -53,7 +53,7 @@ const TONES: Record<string, string> = { unable: "warn", ask_user: "warn", fallba
 function actionLabel(item: Decision, title: (id: string) => string, model: (id?: string | null) => string) {
   const labels: Record<string, string> = {
     retry: "按要求重试", switch_model: `换成 ${model(item.model_id)}`, accept: "接受结果", unable: "判定无法完成",
-    ask_user: "问你", repair_environment: "修复环境", repair_platform: "修复 Super Partner",
+    ask_user: "问你", repair_environment: "修复环境", repair_platform: "修复平台",
     request_component: "请平台工程师添加组件",
     rework: `返工 ${(item.targets ?? []).map(title).join("、")}`, fallback: "交给诊断处理",
     replan: "调整计划", done: "确认完成",
@@ -122,7 +122,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   return <section className={`diagnosis-card dx-panel lead-panel${waiting ? " waiting" : ""}`} aria-label="负责人">
     <div className="diagnosis-head">
       {chat ? <span className="lead-who"><span className="dx-avatar" aria-hidden="true"><Icon name="chat" size={14} /></span><b>{chat}</b>{run.project_dir && <span className="lead-model">{run.supervisor?.model_id?.startsWith("cli:") ? "可读项目，不改动文件" : "API 模型看不到项目文件"}</span>}</span>
-        : <span className="lead-who"><span className="dx-avatar" aria-hidden="true">🧭</span><b>负责人</b><span className="lead-model">{model(run.supervisor?.model_id)}</span></span>}
+        : <span className="lead-who"><span className="dx-avatar" aria-hidden="true">负</span><b>负责人</b><span className="lead-model">{model(run.supervisor?.model_id)}</span></span>}
       {jobs.length > 0 && <span className="lead-who engineer" title="平台工程师在这个对话里"><span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span><b>平台工程师</b></span>}
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
       {!joining && <button type="button" className="ghost lead-invite" onClick={() => setJoining(true)}>拉平台工程师进来</button>}
@@ -149,7 +149,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
 
 function LeadMeta({ note, at, tag, who }: { note: string; at: string; tag?: React.ReactNode; who?: string | null }) {
   return <div className="dx-meta">
-    <span className="dx-avatar" aria-hidden="true">{who ? <Icon name="chat" size={15} /> : "🧭"}</span>
+    <span className="dx-avatar" aria-hidden="true">{who ? <Icon name="chat" size={15} /> : "负"}</span>
     <b>{who ?? "负责人"}</b>
     {tag}
     <small>{note} · {when(at)}</small>

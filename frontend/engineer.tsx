@@ -82,7 +82,7 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
         <span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
         <div>
           <h2>平台工程师</h2>
-          <p className="muted">修复 Super Partner 自身的缺陷，或给它添加组件：模型和渠道、工具和技能、界面功能、调度和流程。</p>
+          <p className="muted">修复平台自身的缺陷，或给它添加组件：模型和渠道、工具和技能、界面功能、调度和流程。</p>
         </div>
       </div>
       <ul className="engineer-rules" aria-label="工作方式">
@@ -90,7 +90,7 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
         <li>组件先由你批准方案，生效前再确认改动</li>
         <li>生效后在本地提交 git，不会推送</li>
       </ul>
-      {data && !data.available && <p className="error">平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的 Super Partner 源码。</p>}
+      {data && !data.available && <p className="error">平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的平台源码。</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {data?.available && <RequestForm act={act} />}
     </section>

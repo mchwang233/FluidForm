@@ -106,7 +106,7 @@ export function EngineerEntry({ job, message, first, last, act, onOpenEngineer }
       : <UserMessage message={{ text: said, created_at: message.created_at }} />
     : message.role === "lead"
       ? <article className="dx-msg dx-ai">
-          <div className="dx-meta"><span className="dx-avatar" aria-hidden="true">🧭</span><b>负责人</b><small>请平台工程师加入 · {when(message.created_at)}</small></div>
+          <div className="dx-meta"><span className="dx-avatar" aria-hidden="true">负</span><b>负责人</b><small>请平台工程师加入 · {when(message.created_at)}</small></div>
           <div className="dx-report"><MarkdownView text={message.text} /></div>
         </article>
       : message.role === "engineer"
@@ -169,7 +169,7 @@ export function JoinEngineer({ runId, act, onDone }: { runId: string; act: Act; 
         <button type="button" key={value} role="radio" aria-checked={kind === value} className={kind === value ? "on" : ""} onClick={() => setKind(value)}>{label}</button>)}
     </div>
     <textarea aria-label="要平台工程师做的事" rows={3} maxLength={20000} value={text} onChange={event => setText(event.target.value)}
-      placeholder={kind === "repair" ? "Super Partner 自身哪里有问题，比如：步骤沙箱连不到宿主机的许可证端口 26585" : "Super Partner 缺什么能力，要它添加什么"} />
+      placeholder={kind === "repair" ? "平台自身哪里有问题，比如：步骤沙箱连不到宿主机的许可证端口 26585" : "平台缺什么能力，要它添加什么"} />
     <small className="dx-hint">{kind === "repair" ? "修复通过检查后自动生效。" : "组件先写方案给你批准，改好后再由你确认生效。"}它的方案、提问和进度都会出现在这里，负责人也能看到。</small>
     <div className="engineer-join-bar">
       <button type="button" className="ghost" onClick={onDone}>取消</button>

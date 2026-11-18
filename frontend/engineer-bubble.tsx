@@ -46,7 +46,7 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
   const taskOf = (job: EngineerJob) => runs.find(run => run.id === job.run_id)?.plan.summary;
   return <>
     <button type="button" className={`engineer-bubble${open ? " open" : ""}`} aria-expanded={open} aria-label="平台工程师"
-      title="和平台工程师聊：修复 Super Partner 自身，或给它添加组件" onClick={() => setOpen(value => !value)}>
+      title="和平台工程师聊：修复平台自身，或给它添加组件" onClick={() => setOpen(value => !value)}>
       <span aria-hidden="true">{open ? "×" : <Icon name="wrench" size={20} />}</span>
       {!open && waiting.length > 0 && <i className="engineer-bubble-badge" title="等你处理">{waiting.length}</i>}
     </button>
@@ -54,11 +54,11 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
       <div className="engineer-chat-head">
         {/* The same mark as the engineer's avatar in a task's conversation. */}
         <span className="dx-avatar engineer-avatar engineer-chat-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
-        <div><b>平台工程师</b><small>修复 Super Partner 自身，或给它添加组件</small></div>
+        <div><b>平台工程师</b><small>修复平台自身，或给它添加组件</small></div>
         <button type="button" className="modal-close" onClick={() => setOpen(false)} aria-label="关闭平台工程师聊天">×</button>
       </div>
       <div className="engineer-chat-body dx-thread">
-        {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的 Super Partner 源码。</p>}
+        {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
         {!threads.length && <p className="muted engineer-chat-empty">还没有工作记录。直接在下面说要修什么、加什么；修复通过检查后自动生效，组件先写方案给你批准。</p>}
         {threads.map((job, index) => {
           const done = ["applied", "failed", "rejected", "cancelled"].includes(job.status) && index < threads.length - 1;

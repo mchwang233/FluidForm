@@ -71,7 +71,7 @@ export function AttachmentTray({ attachments }: { attachments: ReturnType<typeof
   if (!attachments.items.length) return null;
   return <ul className="attachment-tray" aria-label="已添加的附件">
     {attachments.items.map(item => <li key={item.key} className={`attachment-chip ${item.status}`} title={item.error ?? item.name}>
-      {item.preview ? <img src={item.preview} alt="" /> : <span className="attachment-icon" aria-hidden="true">📄</span>}
+      {item.preview ? <img src={item.preview} alt="" /> : <span className="attachment-icon" aria-hidden="true"><Icon name="file" size={18} /></span>}
       <span className="attachment-text"><b>{item.name}</b><small>{item.status === "uploading" ? "上传中…" : item.status === "error" ? item.error : fileSize(item.size)}</small></span>
       <button type="button" className="attachment-remove" onClick={() => attachments.remove(item.key)} aria-label={`移除 ${item.name}`}>×</button>
     </li>)}
@@ -86,7 +86,7 @@ export function TaskAttachments({ apiBase, attachments }: { apiBase: string; att
       const url = `${apiBase}/api/attachments/${item.id}/content`;
       return <li key={item.id} className="attachment-chip ready">
         <a href={url} target="_blank" rel="noreferrer" title={item.kind === "image" ? "查看原图" : "下载"}>
-          {item.kind === "image" ? <img src={url} alt={item.name} /> : <span className="attachment-icon" aria-hidden="true">📄</span>}
+          {item.kind === "image" ? <img src={url} alt={item.name} /> : <span className="attachment-icon" aria-hidden="true"><Icon name="file" size={18} /></span>}
           <span className="attachment-text"><b>{item.name}</b><small>{fileSize(item.size)}</small></span>
         </a>
       </li>;
