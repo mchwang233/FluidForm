@@ -2,12 +2,12 @@
 :root{
   --bg:light-dark(#f3f6f9,#080b10);--panel:light-dark(#ffffff,#0e131a);--panel-2:light-dark(#f8fafc,#10161e);--line:light-dark(#e1e7ee,#222a34);--line-soft:light-dark(#edf1f5,#1b222b);
   --text:light-dark(#1b2430,#e9edf2);--muted:light-dark(#5b6878,#8693a1);--faint:light-dark(#8391a1,#5f6c79);--accent:light-dark(#0c8a68,#69dbb7);--accent-bg:light-dark(#e2f5ee,#142b25);
-  --warn:light-dark(#b86e00,#ffbd59);--partial:light-dark(#b4531a,#f5a76c);--partial-bg:light-dark(#fdf1e7,#33241a);--danger:light-dark(#c42f4a,#ff8b9c);--danger-bg:light-dark(#fde7eb,#3a2026);
+  --warn:light-dark(#b86e00,#ffbd59);--partial:light-dark(#b4531a,#f5a76c);--partial-bg:light-dark(#fdf1e7,#33241a);--danger:light-dark(#c42f4a,#ff8b9c);--danger-bg:light-dark(#fde7eb,#3a2026);--sidebar:light-dark(#f5f7f9,#0b1016);
   font-family:'DM Sans','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;color:var(--text);background:var(--bg);font-synthesis:none;color-scheme:light
 }
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:light-dark(#c9d3dd,#2e3946) transparent}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:light-dark(#c9d3dd,#2e3946);border-radius:8px}::-webkit-scrollbar-track{background:transparent}
-body{margin:0;background:radial-gradient(circle at 50% -10%,light-dark(#dcefe8,#15273b) 0,transparent 35%),var(--bg)}
+body{margin:0;background:var(--bg)}
 main{max-width:1480px;margin:auto;padding:0 28px 48px}
 header{height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid light-dark(#e2e8ef,#202630)}
 header div{display:flex;align-items:center;gap:12px}
@@ -907,3 +907,38 @@ input.choice-own{width:100%;border-color:var(--accent)!important;margin:0;paddin
 input.choice-own:focus{outline:0;border-color:var(--accent)}
 .choice-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft)}
 .choice-actions span{font-size:12px;color:var(--muted)}
+
+/* App shell: a full-height sidebar (brand, new task, tasks, pages, theme) beside the page. */
+.app-shell{display:grid;grid-template-columns:272px minmax(0,1fr);min-height:100vh}
+.app-shell.history-collapsed{grid-template-columns:64px minmax(0,1fr)}
+.app-sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:12px;padding:16px 12px 12px;background:var(--sidebar);border-right:1px solid var(--line);min-width:0}
+.app-sidebar .brand{display:flex;align-items:center;gap:10px;padding:2px 6px}
+.app-sidebar .brand .logo{width:28px;height:28px;border:0;border-radius:8px;background:var(--accent);color:light-dark(#fff,#07100e);font-size:12px;flex:none}
+.app-sidebar .brand h1{font-size:15px;white-space:nowrap}
+.app-sidebar .new-task{display:flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 14px;font-size:14px}
+.app-sidebar .mission-history{flex:1;min-height:0;overflow:hidden;position:static;max-height:none;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}
+.app-sidebar .mission-history .title{padding:0 6px}
+.app-sidebar .run-list{flex:1;overflow-x:hidden;margin:0;padding:0 2px}
+.app-sidebar .run.active,.app-sidebar .run-entry.active{background:var(--panel)}
+.app-sidebar .app-nav{display:flex;flex-direction:column;align-items:stretch;gap:2px;margin:0;padding:10px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+.app-sidebar .app-nav button,.app-sidebar .theme-switch{display:flex;align-items:center;gap:10px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-size:13px;font-weight:500;text-align:left;box-shadow:none;cursor:pointer}
+.app-sidebar .app-nav button:hover,.app-sidebar .theme-switch:hover{background:light-dark(#e9edf1,#151c25);color:var(--text)}
+.app-sidebar .app-nav button[aria-pressed=true]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+.app-sidebar .app-nav button span{font:inherit;margin:0;opacity:1}
+.app-sidebar .app-nav .nav-count{margin-left:auto;font-family:inherit;font-size:12px;opacity:1;color:var(--faint)}
+.app-sidebar .icon{flex:none}
+.app-content{min-width:0;max-width:none;margin:0;padding:20px 32px 48px}
+.app-content .workbench-main{min-width:0}
+.app-shell.history-collapsed .app-sidebar{padding:16px 8px 12px;align-items:center}
+.app-shell.history-collapsed .app-sidebar .brand h1,.app-shell.history-collapsed .app-sidebar .new-task span,.app-shell.history-collapsed .app-sidebar .app-nav span,.app-shell.history-collapsed .app-sidebar .theme-switch span{display:none}
+.app-shell.history-collapsed .app-sidebar .new-task{width:40px;padding:0}
+.app-shell.history-collapsed .app-sidebar .app-nav{width:100%}
+.app-shell.history-collapsed .app-sidebar .app-nav button,.app-shell.history-collapsed .app-sidebar .theme-switch{justify-content:center;padding:8px 0}
+@media (max-width:820px){
+  .app-shell,.app-shell.history-collapsed{grid-template-columns:minmax(0,1fr)}
+  .app-sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .app-sidebar .mission-history{max-height:300px}
+  .app-sidebar .app-nav{flex-direction:row;flex-wrap:wrap}
+  .app-sidebar .app-nav button,.app-sidebar .theme-switch{width:auto}
+  .app-content{padding:16px 16px 32px}
+}

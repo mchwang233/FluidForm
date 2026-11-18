@@ -83,7 +83,7 @@ More: [Repairing Super Partner itself](#how-nodes-hand-off-and-check-work) · [d
 ### Retrospective
 
 Every finished task is summed up without a model call, so a problem that keeps coming back across
-tasks gets one name and a count (the **重复问题** page). With learning turned on (off by default:
+tasks gets one name and a count (the **常见故障** page). With learning turned on (off by default:
 **复盘与改进 → 自动改进设置** on the result page, or `SUPER_PARTNER_LEARNING_ENABLED=true`), the
 strongest available model also looks back on each task that ended by itself. It writes its
 conclusions and at most three improvements, each tied to real steps; they are checked separately

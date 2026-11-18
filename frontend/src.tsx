@@ -15,6 +15,7 @@ import { ProjectField, rememberProject } from "./project-picker";
 import { EngineerPage } from "./engineer";
 import { EngineerBubble } from "./engineer-bubble";
 import { canCancelMission, canDeleteMission, CancelMissionDialog, DeleteMissionButton, DeleteMissionDialog, formatUsd, estimateNote, MissionHistory, needsAttention, statusLabel, detailText } from "./mission-history";
+import { Icon, type IconName } from "./icons";
 import "./style.css";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -49,14 +50,16 @@ function savedProjectDir(){try{return localStorage.getItem(PROJECT_KEY)||""}catc
 
 type Theme = "light"|"dark"|"system";
 const THEME_KEY="super-partner.theme";
-const THEMES: {id:Theme;label:string}[] = [{id:"light",label:"浅色"},{id:"dark",label:"深色"},{id:"system",label:"跟随系统"}];
+const THEMES: {id:Theme;label:string;icon:IconName}[] = [{id:"light",label:"浅色",icon:"sun"},{id:"dark",label:"深色",icon:"moon"},{id:"system",label:"跟随系统",icon:"monitor"}];
 function savedTheme():Theme{try{const t=localStorage.getItem(THEME_KEY);return t==="dark"||t==="system"?t:"light"}catch{return "light"}}
 function applyTheme(theme:Theme){document.documentElement.style.colorScheme=theme==="system"?"light dark":theme}
 
 function ThemeSwitch() {
   const [theme,setTheme]=useState<Theme>(savedTheme);
   useEffect(()=>{applyTheme(theme);try{localStorage.setItem(THEME_KEY,theme)}catch{}},[theme]);
-  return <div className="theme-switch" role="group" aria-label="界面主题">{THEMES.map(t=><button key={t.id} type="button" aria-pressed={theme===t.id} onClick={()=>setTheme(t.id)}>{t.label}</button>)}</div>
+  // One button in the sidebar: it shows the current theme and moves to the next.
+  const at=THEMES.findIndex(t=>t.id===theme),current=THEMES[at],next=THEMES[(at+1)%THEMES.length];
+  return <button type="button" className="theme-switch" onClick={()=>setTheme(next.id)} title={`界面主题：${current.label}（点击切换为${next.label}）`} aria-label={`界面主题：${current.label}，点击切换为${next.label}`}><Icon name={current.icon}/><span>{current.label}</span></button>
 }
 
 function hashTaskId(){const match=/^#task=(.+)$/.exec(location.hash);return match?decodeURIComponent(match[1]):null}
@@ -477,13 +480,22 @@ function App() {
   const usedProjects=[...new Set(runs.map(run=>run.project_dir).filter((dir):dir is string=>!!dir))];
   function openModelProfile(model:Model){setSelectedModelId(model.id);setView("models");window.scrollTo({top:0})}
   function configureModel(model:Model){setSelectedProvider(providerList.find(provider=>provider.id===model.provider)||null)}
-  return <main className={view==="models"?"profiles-view":undefined}>
+  return <div className={`app-shell${historyCollapsed?" history-collapsed":""}`}>
+    <aside className="app-sidebar" aria-label="侧栏">
+      <div className="brand"><span className="logo">SP</span><h1>Super Partner</h1></div>
+      <button type="button" className="primary new-task" title="新任务" aria-expanded={view==="missions"&&composerOpen} onClick={()=>{setView("missions");setComposerOpen(open=>view!=="missions"||!open);window.scrollTo({top:0})}}><Icon name="plus"/><span>新任务</span></button>
+      <MissionHistory runs={runs} selectedId={view==="missions"?selected?.id:undefined} deletingId={deletingRunId} error={deleteTarget?"":deleteError} onSelect={run=>{setSelected(run);setView("missions")}} onDelete={requestDeleteRun} collapsed={historyCollapsed} onToggle={()=>setHistoryCollapsed(value=>!value)}/>
+      <nav className="app-nav" aria-label="页面导航">
+        <button type="button" aria-pressed={view==="missions"} title="任务工作台" onClick={()=>setView("missions")}><Icon name="list"/><span>任务工作台</span></button>
+        <button type="button" aria-pressed={view==="models"} title="模型画像" onClick={()=>setView("models")}><Icon name="cpu"/><span>模型画像</span><span className="nav-count">{models.length}</span></button>
+        <button type="button" aria-pressed={view==="problems"} title="常见故障" onClick={()=>setView("problems")}><Icon name="alert"/><span>常见故障</span></button>
+        <ThemeSwitch/>
+      </nav>
+    </aside>
+    <main className={`app-content${view==="models"?" profiles-view":""}`}>
     {quota.length>0&&<QuotaBanner quota={quota} models={models} onReset={id=>loadQuota({method:"DELETE"},`/${encodeURIComponent(id)}`)}/>}
-    <header><div><span className="logo">SP</span><h1>Super Partner</h1></div><div className="header-actions"><button type="button" className="primary new-task" aria-expanded={view==="missions"&&composerOpen} onClick={()=>{setView("missions");setComposerOpen(open=>view!=="missions"||!open);window.scrollTo({top:0})}}>＋ 新任务</button><nav className="app-nav" aria-label="页面导航"><button aria-pressed={view==="missions"} onClick={()=>setView("missions")}>任务工作台</button><button aria-pressed={view==="models"} onClick={()=>setView("models")}>模型画像<span>{models.length}</span></button><button aria-pressed={view==="problems"} onClick={()=>setView("problems")}>重复问题</button></nav><ThemeSwitch/></div></header>
     {offline&&<p className="offline" role="status">无法连接本地 API（{API}），正在重试…</p>}
     {view==="problems"?<ProblemsPage apiBase={API} runs={runs} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="engineer"?<EngineerPage apiBase={API} runs={runs} focusId={engineerFocus} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="models"?<ModelProfiles apiBase={API} models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} onToggle={toggleModel} onConfigure={configureModel}/>:<>
-    <div className={`workbench ${historyCollapsed?"history-collapsed":""}`}>
-    <MissionHistory runs={runs} selectedId={selected?.id} deletingId={deletingRunId} error={deleteTarget?"":deleteError} onSelect={run=>{setSelected(run)}} onDelete={requestDeleteRun} collapsed={historyCollapsed} onToggle={()=>setHistoryCollapsed(value=>!value)}/>
     <div className="workbench-main">
     {composerOpen&&<section className="composer" aria-label="新任务"><div className="composer-head"><div><h3>新任务</h3><p>说清你想要的结果。负责人会先把它划分成几个大项，你确认预算后才开始执行。</p></div>{runs.length>0&&<button type="button" className="modal-close" onClick={()=>setComposerOpen(false)} aria-label="收起新任务">×</button>}</div><form onSubmit={submit} className={dragging?"dragging":undefined}
       onDragOver={e=>{if(e.dataTransfer.types.includes("Files")){e.preventDefault();setDragging(true)}}}
@@ -496,7 +508,6 @@ function App() {
     </form>{formError&&<p className="form-error" role="alert">{formError}</p>}</section>}
       <MissionDetail run={selected} models={models} onOpenModel={openModelProfile} deletingId={deletingRunId} cancellingId={cancellingRunId} onConfirm={confirmRun} onChoose={chooseForPlan} onResume={resumeRun} onPause={run=>postAction(run,"pause","暂停")} onDiagnose={run=>postAction(run,"diagnose","诊断")} onReply={replyToDiagnosis} onAsk={askLead} onOpenEngineer={id=>{setEngineerFocus(id);setView("engineer");window.scrollTo({top:0})}} onChange={changeRequirement} onNetwork={setNetwork} parent={selected?.parent_run_id?runs.find(item=>item.id===selected.parent_run_id):undefined} onOpenRun={run=>{autoSelected.current=true;setSelected(run)}} onCancel={requestCancelRun} onDelete={requestDeleteRun}/>
     </div>
-    </div>
     </>}
     {!!toasts.length&&<div className="toasts" role="status">{toasts.map(toast=><div key={toast.id} className={`toast ${toast.tone}`}>
       <span>{toast.text}</span>
@@ -508,6 +519,7 @@ function App() {
     {selectedProvider&&<div className="modal-backdrop" onMouseDown={()=>setSelectedProvider(null)}><section className="provider-modal" role="dialog" aria-modal="true" aria-label={`配置 ${selectedProvider.name}`} onMouseDown={e=>e.stopPropagation()}><div className="modal-title"><div><p className="eyebrow">API 连接</p><h3>配置 {selectedProvider.name}</h3></div><button className="modal-close" onClick={()=>setSelectedProvider(null)} aria-label="关闭">×</button></div><p className="modal-note">Key 只会发送到本机 API，并保存在操作系统的密钥环中。</p><ProviderCard provider={selectedProvider} onChanged={async()=>{await load();const refreshed=(await (await fetch(`${API}/api/providers`)).json()) as Provider[];setSelectedProvider(refreshed.find(p=>p.id===selectedProvider.id)||null)}}/></section></div>}
     <EngineerBubble apiBase={API} runs={runs} tick={runs.map(run=>`${run.id}:${run.updated_at??""}`).join("|")}
       onOpenPage={id=>{setEngineerFocus(id);setView("engineer")}}/>
-  </main>
+    </main>
+  </div>
 }
 createRoot(document.getElementById("root")!).render(<App/>);

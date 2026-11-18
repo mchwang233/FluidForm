@@ -340,8 +340,8 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     await act(async () => { target.focus(); target.click(); });
   };
   const escape = () => act(async () => dialog().dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-  // The new-task form is folded behind the header button once tasks exist; most tests use it.
-  if (openComposer && !document.querySelector(".composer")) await click(document.querySelector("header .new-task"));
+  // The new-task form is folded behind the sidebar button once tasks exist; most tests use it.
+  if (openComposer && !document.querySelector(".composer")) await click(document.querySelector(".app-sidebar .new-task"));
   return { state, window, document, act, dialog, button, click, escape };
 }
 
@@ -1164,7 +1164,7 @@ test("the sidebar groups tasks by what they need and folds into a rail it rememb
   assert.equal(window.document.title, "● (2) Super Partner");
 
   await click(document.querySelector('.mission-history [title="收起任务栏"]'));
-  assert.ok(document.querySelector(".workbench").classList.contains("history-collapsed"));
+  assert.ok(document.querySelector(".app-shell").classList.contains("history-collapsed"));
   const dots = [...document.querySelectorAll(".history-rail .rail-run")];
   assert.equal(dots.length, 4);
   assert.match(dots[2].title, /broken-task · 失败/);
@@ -1176,10 +1176,10 @@ test("the sidebar groups tasks by what they need and folds into a rail it rememb
   assert.equal(window.localStorage.getItem("super-partner.history"), "open");
 });
 
-test("the new-task form stays folded behind the header button once tasks exist", async t => {
+test("the new-task form stays folded behind the sidebar button once tasks exist", async t => {
   const { document, click } = await setup(t, undefined, [], { openComposer: false });
   assert.equal(document.querySelector(".composer"), null);
-  const open = document.querySelector("header .new-task");
+  const open = document.querySelector(".app-sidebar .new-task");
   await click(open);
   assert.ok(document.querySelector(".composer textarea"));
   await click(document.querySelector('.composer [aria-label="收起新任务"]'));
@@ -1841,7 +1841,7 @@ test("recurring problems are listed by what they are about and lead back to thei
   const { state, document, button, click } = await setup(t);
   state.topics = [{ topic: "新思 EDA 环境未加载", runs: ["missing-run"], repaired_in: ["missing-run"], members: ["environment:vcs", "platform:agent"],
     label: "沙箱里没有加载 .edarc", recurred_after_repair: true, last_seen: "2026-10-22T10:00:00Z" }];
-  await click(button("重复问题"));
+  await click(button("常见故障"));
   const page = document.querySelector(".problems-page");
   assert.match(page.textContent, /新思 EDA 环境未加载/);
   assert.match(page.textContent, /environment:vcs、platform:agent/);

@@ -16,8 +16,8 @@ export function ProblemsPage({ apiBase, runs, onOpenRun }: { apiBase: string; ru
       .catch(err => setError(err instanceof Error ? err.message : "加载失败"));
   }, [apiBase]);
   const title = (id: string) => runs.find(run => run.id === id)?.plan.summary || "已删除的任务";
-  return <section className="problems-page" aria-label="重复问题">
-    <h2>重复问题</h2>
+  return <section className="problems-page" aria-label="常见故障">
+    <h2>常见故障</h2>
     <p className="muted">每个任务结束后，平台用最便宜的模型按问题的实际原因起名，并尽量沿用已有的名字；同一原因在不同记录里的问题归为一类。</p>
     {error && <p className="error" role="alert">{error}</p>}
     {topics === null && !error && <p className="muted">加载中…</p>}
