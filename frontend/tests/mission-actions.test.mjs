@@ -687,8 +687,8 @@ test("the model list opens from the task form and closes on Escape or an outside
 test("opening the model page is not remembered across reloads", async t => {
   const { window, document, click } = await setup(t);
   const nav = label => [...document.querySelectorAll(".app-nav button")].find(node => node.textContent.startsWith(label));
-  await click(nav("模型画像"));
-  assert.equal(nav("模型画像").getAttribute("aria-pressed"), "true");
+  await click(nav("模型"));
+  assert.equal(nav("模型").getAttribute("aria-pressed"), "true");
   assert.notEqual(window.location.hash, "#models");
   assert.match(window.location.hash, /^#task=/);
 });
@@ -732,7 +732,7 @@ test("the plan shows stages, dependencies, parallel work and each task's model",
   assert.match(chips[2].title, /一般任务：子任务优先用 API 模型/);
   await click(dialog.querySelector(".capability-profile-link"));
   assert.equal(document.querySelector(".model-capability-modal"), null);
-  assert.equal([...document.querySelectorAll(".app-nav button")].find(b => b.textContent.startsWith("模型画像")).getAttribute("aria-pressed"), "true");
+  assert.equal([...document.querySelectorAll(".app-nav button")].find(b => b.textContent.startsWith("模型")).getAttribute("aria-pressed"), "true");
 });
 
 test("a plan made in parts shows its major parts as stages; each opens in place, or all at once", async t => {
@@ -1010,11 +1010,13 @@ test("the estimate card says when the real cost has gone far past it", async t =
   const near = mission("near-estimate", "succeeded");
   near.actual_cost_usd = 1.9;
   near.plan.estimate = { low_usd: 1.45, high_usd: 1.77 };
-  const { document, click } = await setup(t, [over, near]);
-  const card = () => [...document.querySelectorAll(".task-metrics div")].find(d => d.textContent.startsWith("预计花费"));
-  assert.match(card().querySelector(".over-estimate").textContent, /预计上限的 64 倍/);
+  const { document, click } = await setup(t, [over, near], [], { openComposer: false });
+  const note = () => document.querySelector(".task-metrics .over-estimate");
+  // $113.36 against at most $1.77 is 64 times the estimate: 63 times more.
+  assert.match(note().textContent, /比预计多 63 倍/);
   await click([...document.querySelectorAll(".run")].find(r => r.textContent.includes("near-estimate")));
-  assert.equal(card().querySelector(".over-estimate"), null);
+  assert.equal(note(), null);
+  assert.match(document.querySelector(".task-metrics").textContent, /预计 \$1\.45 – \$1\.77/);
 });
 
 test("before a task finishes, the estimate card adds what past tasks suggest it will cost", async t => {
@@ -1022,11 +1024,11 @@ test("before a task finishes, the estimate card adds what past tasks suggest it 
   waiting.plan.estimate = { low_usd: 1.45, high_usd: 1.77, calibrated_usd: 52.3 };
   const close = mission("close", "awaiting_confirmation");
   close.plan.estimate = { low_usd: 1.45, high_usd: 1.77, calibrated_usd: 2.0 };
-  const { document, click } = await setup(t, [waiting, close]);
-  const card = () => [...document.querySelectorAll(".task-metrics div")].find(d => d.textContent.startsWith("预计花费"));
-  assert.match(card().querySelector(".over-estimate").textContent, /按以往任务，可能约 \$52\.30/);
+  const { document, click } = await setup(t, [waiting, close], [], { openComposer: false });
+  const note = () => document.querySelector(".task-metrics .over-estimate");
+  assert.match(note().textContent, /按以往任务，可能约 \$52\.30/);
   await click([...document.querySelectorAll(".run")].find(r => r.textContent.includes("close")));
-  assert.equal(card().querySelector(".over-estimate"), null);
+  assert.equal(note(), null);
 });
 
 test("a finished task keeps its page compact: no all-done stepper, choices folded, long title clamped", async t => {
@@ -1037,6 +1039,9 @@ test("a finished task keeps its page compact: no all-done stepper, choices folde
   assert.equal(document.querySelector(".task-steps"), null);
   const title = document.querySelector(".task-title h3");
   assert.equal(title.getAttribute("title"), run.plan.summary);
+  // Once it can no longer be changed, how it was planned is in 详情.
+  assert.equal(document.querySelector("details.plan-choices"), null);
+  await click([...document.querySelectorAll(".task-tabs button")].find(b => b.textContent === "详情"));
   const folded = document.querySelector("details.plan-choices");
   assert.equal(folded.open, false);
   assert.match(folded.querySelector("summary").textContent, /规划时的取舍.*1 项/);
@@ -1236,9 +1241,9 @@ test("the task page shows its phase, progress and spend, and notices tell when a
   const steps = [...document.querySelectorAll(".task-steps li")];
   assert.deepEqual(steps.map(step => step.className), ["done", "done", "current", "todo"]);
   const metrics = document.querySelector(".task-metrics").textContent;
-  assert.match(metrics, /进度1 \/ 2/);
-  assert.match(metrics, /用时2 分/);
-  assert.match(metrics, /\$0\.5 \/ \$2\.00/);
+  assert.match(metrics, /完成 1 \/ 2 步/);
+  assert.match(metrics, /用时 2 分/);
+  assert.match(metrics, /花费 \$0\.5 \/ \$2/);
   assert.ok([...document.querySelectorAll(".task-actions button")].some(b => b.textContent === "取消任务"));
 
   await click([...document.querySelectorAll(".run")].find(b => b.title === "other-task"));
@@ -1696,8 +1701,8 @@ test("the platform engineer page opens from a task's conversation, shows finishe
   state.records[0] = { ...state.records[0], updated_at: "2026-10-19T08:00:01Z" };
   await act(async () => state.poll());
   await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
-  // The engineer has no page of its own in the navigation: it works in tasks' conversations.
-  assert.equal([...document.querySelectorAll(".app-nav button")].some(node => node.textContent.startsWith("平台工程师")), false);
+  // The engineer has its page in the sidebar's foot, and works in tasks' conversations too.
+  assert.equal([...document.querySelectorAll(".app-nav button")].some(node => node.textContent.startsWith("平台工程师")), true);
   await click([...document.querySelectorAll(".lead-panel button")].find(node => node.textContent === "在平台工程师页面查看"));
   const page = document.querySelector(".engineer-page");
   assert.match(page.querySelector(".engineer-job").textContent, /方案待批准.*结果页可以导出 CSV/s);
@@ -2007,8 +2012,10 @@ test("the composer starts a chat with the chosen model instead of planning a tas
 
 test("chats sit in their own sidebar group, can be deleted, and turn into a task in place", async t => {
   const { state, window, document, act, button, click } = await setup(t, [chatRecord(), mission("finished-task", "succeeded")], [], { openComposer: false });
-  const group = document.querySelector(".run-group.chats");
-  assert.match(group.textContent, /对话.*接口太慢怎么办.*对话 · 1 问/s);
+  // Chats are listed with finished work under 最近, marked by their icon.
+  const group = document.querySelector(".run-group.done");
+  assert.match(group.textContent, /最近.*接口太慢怎么办.*对话 · 1 问/s);
+  assert.ok(group.querySelector(".run-icon"));
   await click(group.querySelector(".run"));
   const page = document.querySelector(".chat-page");
   assert.match(page.querySelector(".task-meta").textContent, /对话.*cli:claude/);
@@ -2100,14 +2107,14 @@ test("the composer greets you as your partner, by the time of day and what it is
   const composer = document.querySelector(".composer");
   assert.ok(composer.querySelector(".partner-avatar"));
   assert.match(composer.querySelector("h3").textContent, /(早上好|中午好|下午好|晚上好|夜深了)，今天想做点什么？/);
-  assert.match(composer.querySelector(".composer-hint").textContent, /问题我直接回答/);
+  assert.match(composer.querySelector(".composer-hint").textContent, /问题直接回答/);
   await click(button("任务", composer.querySelector(".mode-switch")));
   assert.equal(composer.querySelector("h3").textContent, "要我做什么？");
 });
 
 test("the composer folds budget, models and permissions behind one summary", async t => {
   const { document, act, click } = await setup(t, [mission("finished-task", "succeeded")]);
-  const chip = document.querySelector(".composer .options-chip");
+  const chip = document.querySelector(".composer .options-chip:not(.project-chip)");
   const panel = document.querySelector(".composer .composer-options");
   assert.match(chip.textContent, /预算 \$2.*自动选模型/);
   assert.equal(panel.hidden, true);
@@ -2131,7 +2138,7 @@ test("a task is shown by the lead's short title, its occasional actions behind �
   const header = document.querySelector(".task-header");
   assert.equal(header.querySelector("h3").textContent, "中文输入法交付");
   assert.equal(header.querySelector("h3").getAttribute("title"), "为该服务器交付可安装、可运行的中文输入法");
-  assert.match(header.querySelector(".task-meta").textContent, /由 Codex 规划.*server-ime/);
+  assert.match(header.querySelector(".task-meta").textContent, /已完成.*server-ime/);
   assert.doesNotMatch(header.querySelector(".task-meta").textContent, /home\/me/);
   // Deleting is still there, folded behind ⋯.
   const menu = header.querySelector(".more-menu");
@@ -2151,4 +2158,17 @@ test("new is a page of its own: picking a task leaves it, and it offers to pick 
   await click([...document.querySelectorAll(".run")].find(node => node.textContent.includes("finished-task")));
   assert.equal(document.querySelector(".composer"), null);
   assert.equal(document.querySelector(".app-content.composing"), null);
+});
+
+test("the sidebar's foot is 模型 · 平台工程师 · 设置, the theme and common failures inside 设置", async t => {
+  const { window, document, button, click } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  const nav = document.querySelector(".app-nav");
+  assert.deepEqual([...nav.querySelectorAll(":scope > button")].map(node => node.textContent), ["模型", "平台工程师"]);
+  const settings = nav.querySelector(".settings-menu");
+  await click(settings.querySelector("summary"));
+  await click(button("深色", settings));
+  assert.equal(window.localStorage.getItem("super-partner.theme"), "dark");
+  assert.equal(button("深色", settings).getAttribute("aria-pressed"), "true");
+  await click(button("常见故障", settings));
+  assert.ok(document.querySelector('[aria-label="常见故障"]'));
 });

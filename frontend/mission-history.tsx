@@ -18,9 +18,8 @@ type MissionRecord = {
 export const MISSION_GROUPS = [
   { id: "active", label: "进行中", statuses: ["queued", "running"] },
   { id: "attention", label: "需要处理", statuses: ["awaiting_confirmation", "paused", "failed", "incomplete"] },
-  // Chats are kept as drafts: nothing of theirs runs.
-  { id: "chats", label: "对话", statuses: ["draft"] },
-  { id: "done", label: "最近", statuses: ["succeeded", "cancelled"] },
+  // Finished tasks and chats (kept as drafts: nothing of theirs runs), newest first.
+  { id: "done", label: "最近", statuses: ["succeeded", "cancelled", "draft"] },
 ] as const;
 
 // Finished well: the sidebar says only when; the numbers are on its page.
@@ -114,7 +113,8 @@ export function overEstimate(actual: number, high: number): string | null {
   if (high <= 0) return "实际花费超出预计";
   const ratio = actual / high;
   if (ratio < 2) return null;
-  return `实际已是预计上限的 ${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)} 倍`;
+  const more = ratio - 1;
+  return `比预计多 ${more >= 10 ? Math.round(more) : more.toFixed(1)} 倍`;
 }
 
 const FINISHED = new Set(["succeeded", "failed", "cancelled", "incomplete"]);
@@ -249,8 +249,8 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
   </section>;
   return <section className="panel mission-history" aria-label="任务历史">
     <div className="title"><h3>任务</h3><span className="history-count">{runs.length}</span>{onToggle && <button type="button" className="history-toggle" onClick={onToggle} aria-expanded={true} title="收起任务栏">«</button>}</div>
-    {searchable && <input className="history-search" type="search" value={query} placeholder="搜索标题、需求或项目" aria-label="搜索任务"
-      onChange={event => setQuery(event.target.value)} />}
+    {searchable && <label className="history-search-field"><Icon name="search" size={15} /><input className="history-search" type="search" value={query} placeholder="搜索" aria-label="搜索任务"
+      onChange={event => setQuery(event.target.value)} /></label>}
     {error && <p className="mission-delete-error" role="alert">{error}</p>}
     {runs.length === 0 ? <p className="empty">还没有记录。点上方的“新建”开始。</p> : shown.length === 0 ? <p className="empty">没有匹配的任务。</p> : <div className="run-list">{groups.map(group => <div className={`run-group ${group.id}`} key={group.id}>
       <p className="run-group-title">{group.label}<span>{group.runs.length}</span></p>
@@ -258,10 +258,11 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
         const { done, total } = progressOf(run);
         return <div className={`run-entry ${selectedId === run.id ? "active" : ""}`} key={run.id}>
           <button className={`run ${selectedId === run.id ? "active" : ""}`} aria-pressed={selectedId === run.id} onClick={() => onSelect(run)} title={run.prompt || run.plan.summary}>
-            <span className={`dot ${run.kind === "chat" ? "chat" : run.status}`} />
+            {run.kind === "chat" ? <span className="run-icon" aria-hidden="true"><Icon name="chat" size={14} /></span> : <span className={`dot ${run.status}`} />}
             <span className="run-text"><b>{taskName(run.plan)}</b>
               <small><span className={`run-status ${run.status}`}>{missionLabel(run)}</span>{run.kind === "chat" && <> · {(run.lead_messages ?? []).filter(item => item.role === "user").length} 问</>}{total > 0 && run.status !== "succeeded" && <> · {done}/{total}</>}{run.kind === "chat" || !FINISHED_QUIETLY.has(run.status) ? <> · {formatUsd(run.actual_cost_usd)}</> : null}{run.created_at && <> · {relativeTime(run.created_at)}</>}</small>
               {run.project_dir && <small className="run-project" title={run.project_dir}><Icon name="folder" size={12} /> {folder(run.project_dir)}</small>}
+              {total > 0 && (run.status === "running" || run.status === "queued") && <span className="run-count">{done}/{total}</span>}
               {total > 0 && run.status !== "succeeded" && <span className="run-progress" aria-hidden="true"><i style={{ width: `${(done / total) * 100}%` }} /></span>}
             </span>
           </button>

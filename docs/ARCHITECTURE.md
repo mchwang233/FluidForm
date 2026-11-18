@@ -303,7 +303,7 @@ it needs neither a real network namespace nor a TUN device.
 
 ## Frontend (`frontend/`)
 
-`src.tsx` (app shell, task creation, actions), `chat.tsx` (a chat's page and turning it into a task; the composer's 任务/对话 switch is in `src.tsx`), `lead.tsx` (the task's conversation, or a chat's, in its own "对话" tab that opens when it waits for you: the lead's decisions, questions and messages), `lead-engineer.tsx` (the platform engineer in that conversation: its jobs' lines and cards, @平台工程师, bringing it in), `engineer-bubble.tsx` (the platform engineer's own chat, from a bubble in the page's corner; no navigation entry), `result-page.tsx` (results, requirement change),
+`src.tsx` (app shell, task creation, actions), `chat.tsx` (a chat's page and turning it into a task; the composer's 任务/对话 switch is in `src.tsx`), `lead.tsx` (the task's conversation, or a chat's, in its own "对话" tab that opens when it waits for you: the lead's decisions, questions and messages), `lead-engineer.tsx` (the platform engineer in that conversation: its jobs' lines and cards, @平台工程师, bringing it in), `engineer-bubble.tsx` (the platform engineer's own chat; its corner bubble is hidden now that 平台工程师 is in the sidebar's foot, beside 模型 and 设置), `result-page.tsx` (results, requirement change),
 `plan-parts.tsx` (the progress view: major parts as stages that open in place, `PlanView`), `plan-graph.tsx` (steps and attempts), `engineer.tsx` (the platform engineer's page), `diagnosis.tsx` (diagnosis chat), `mission-history.tsx`
 (task list), `model-profiles.tsx` (models), `style.css` (tokens and styles).
 

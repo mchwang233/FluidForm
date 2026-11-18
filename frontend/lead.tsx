@@ -271,10 +271,10 @@ function AskBox({ disabled, onAsk, engineer, chat = false }: { disabled: boolean
       <div className="dx-input">
         <textarea ref={box} aria-label={chat ? "消息" : "给负责人的消息"} rows={1} maxLength={6000} value={text}
           onChange={event => setText(event.target.value)} onKeyDown={keys}
-          placeholder={chat ? "继续问…" : engineer ? "问负责人进展，或用「@平台工程师」直接对平台工程师说" : "问它进展、为什么这样决定，或告诉它你的要求；「@平台工程师」可以把平台工程师拉进来"} />
+          placeholder={chat ? "继续问…" : "问负责人进展，或告诉它你的要求…"} title={chat ? undefined : engineer ? "问负责人进展，或用「@平台工程师」直接对平台工程师说" : "问它进展、为什么这样决定，或告诉它你的要求；「@平台工程师」可以把平台工程师拉进来"} />
         <div className="dx-input-bar">
           <small className="dx-hint">{disabled ? (chat ? "正在回复上一条消息…" : "负责人正在回复上一条消息…") : chat ? "它记得这段对话 · Ctrl+Enter 发送" : "它记得这个任务从规划起的全部经过 · Ctrl+Enter 发送"}</small>
-          <button type="submit" className="primary" disabled={!text.trim()}>{busy ? "发送中…" : "发送"}</button>
+          <button type="submit" className="primary send-button" disabled={!text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
         </div>
       </div>
     </fieldset>

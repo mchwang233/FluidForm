@@ -55,12 +55,20 @@ const THEMES: {id:Theme;label:string;icon:IconName}[] = [{id:"light",label:"浅�
 function savedTheme():Theme{try{const t=localStorage.getItem(THEME_KEY);return t==="dark"||t==="system"?t:"light"}catch{return "light"}}
 function applyTheme(theme:Theme){document.documentElement.style.colorScheme=theme==="system"?"light dark":theme}
 
-function ThemeSwitch() {
+/** 设置 at the foot of the sidebar: the theme, and the common failures page. */
+function SettingsMenu({active,onProblems}:{active:boolean;onProblems:()=>void}) {
   const [theme,setTheme]=useState<Theme>(savedTheme);
   useEffect(()=>{applyTheme(theme);try{localStorage.setItem(THEME_KEY,theme)}catch{}},[theme]);
-  // One button in the sidebar: it shows the current theme and moves to the next.
-  const at=THEMES.findIndex(t=>t.id===theme),current=THEMES[at],next=THEMES[(at+1)%THEMES.length];
-  return <button type="button" className="theme-switch" onClick={()=>setTheme(next.id)} title={`界面主题：${current.label}（点击切换为${next.label}）`} aria-label={`界面主题：${current.label}，点击切换为${next.label}`}><Icon name={current.icon}/><span>{current.label}</span></button>
+  const menu=useRef<HTMLDetailsElement>(null);
+  useEffect(()=>{const close=(event:MouseEvent)=>{if(menu.current&&!menu.current.contains(event.target as globalThis.Node))menu.current.open=false};document.addEventListener("mousedown",close);return()=>document.removeEventListener("mousedown",close)},[]);
+  return <details ref={menu} className="settings-menu">
+    <summary className={active?"active":undefined}><Icon name="settings"/><span>设置</span></summary>
+    <div className="settings-items" role="group" aria-label="设置">
+      <p>界面主题</p>
+      <div className="settings-themes">{THEMES.map(item=><button key={item.id} type="button" aria-pressed={theme===item.id} onClick={()=>setTheme(item.id)}><Icon name={item.icon} size={14}/>{item.label}</button>)}</div>
+      <button type="button" className="settings-link" onClick={()=>{onProblems();if(menu.current)menu.current.open=false}}><Icon name="alert" size={14}/>常见故障</button>
+    </div>
+  </details>;
 }
 
 function hashTaskId(){const match=/^#task=(.+)$/.exec(location.hash);return match?decodeURIComponent(match[1]):null}
@@ -260,6 +268,9 @@ function QuotaBanner({quota,models,onReset}:{quota:Quota[];models:Model[];onRese
 
 type SetNetwork=(run:Run,allow:boolean)=>Promise<string|null>;
 
+/** Whole dollars without cents: $150, $2; otherwise as formatUsd. */
+function money(usd:number):string{return Number.isInteger(usd)?`$${usd}`:formatUsd(usd)}
+
 /** Actions used now and then, folded behind "⋯"; choosing one folds them again. */
 function MoreMenu({children}:{children:React.ReactNode}){
   const menu=useRef<HTMLDetailsElement>(null);
@@ -288,13 +299,11 @@ function MissionDetail({run,models,onPromote,onToChat,deletingId,cancellingId,on
   useEffect(()=>{if(!picked.current)setTab(current=>waiting?"chat":current==="chat"?current:defaultTab(run?.status??""))},[run?.status,!!waiting]);
   useEffect(()=>{if(run?.status!=="running")return;const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer)},[run?.status]);
   if(!run)return <section className="panel detail"><div className="empty big">在左侧选一条记录，或点左上角的“新建”。</div></section>;
-  if(run.kind==="chat")return <ChatDetail run={run} auto={!!run.auto_routed} attachments={<TaskAttachments apiBase={API} attachments={run.attachments}/>} model={models.find(item=>item.id===run.supervisor?.model_id)?.display_name??run.supervisor?.model_id??"—"}
+  if(run.kind==="chat")return <ChatDetail run={run} auto={!!run.auto_routed} attachments={<TaskAttachments apiBase={API} attachments={run.attachments}/>} model={shortModelName(models.find(item=>item.id===run.supervisor?.model_id)?.display_name??run.supervisor?.model_id??"—")}
     deleteButton={<DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>} onPromote={options=>onPromote(run,options)}
     conversation={<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={(text=>onAsk(run,text)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}/>;
   const needsConfirm=(run.status==="awaiting_confirmation"||run.status==="paused")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
   const canResume=(run.status==="failed"||run.status==="cancelled"||run.status==="incomplete")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
-  const plannerModel=models.find(item=>item.id===run.plan.planner_model_id);
-  const planner=run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${plannerModel?shortModelName(plannerModel.display_name):run.plan.planner_model_id} 规划`:"规则规划";
   const nodes=run.plan.nodes,done=nodes.filter(node=>node.status==="succeeded").length;
   const stopped=nodes.filter(node=>node.status==="failed"||node.status==="cancelled"||node.status==="running");
   const spentRatio=run.budget_usd>0?Math.min(1,run.actual_cost_usd/run.budget_usd):0;
@@ -311,7 +320,7 @@ function MissionDetail({run,models,onPromote,onToChat,deletingId,cancellingId,on
   return <section className="panel detail task-page">
     <div className="task-header">
       <div className="task-title">
-        <p className="eyebrow task-meta"><span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{taskName(parent.plan)}」</button>:"之前的任务"} · </span>}{planner}{run.project_dir&&<span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13}/> {run.project_dir.replace(/\/+$/,"").split("/").pop()}</span>}</p>
+        <p className="eyebrow task-meta"><span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{taskName(parent.plan)}」</button>:"之前的任务"} · </span>}{run.created_at&&<span className="task-date"> · {new Date(run.created_at).toLocaleDateString("zh-CN",{month:"long",day:"numeric"}).replace(/(\d+)/g," $1 ").replace(/\s+/g," ").trim()}</span>}{run.project_dir&&<span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13}/> {run.project_dir.replace(/\/+$/,"").split("/").pop()}</span>}</p>
         <h3 title={run.plan.summary}>{taskName(run.plan)}</h3>
       </div>
       <div className="task-actions">
@@ -325,13 +334,13 @@ function MissionDetail({run,models,onPromote,onToChat,deletingId,cancellingId,on
       </div>
     </div>
     {run.status!=="succeeded"&&<Stepper status={run.status}/>}
-    <div className="task-metrics">
-      <div><small>进度</small><b>{done} / {nodes.length}</b><span className="spend-bar" aria-hidden="true"><i style={{width:`${nodes.length?done/nodes.length*100:0}%`}}/></span></div>
-      <div><small>用时</small><b>{elapsed??"—"}</b></div>
-      <div><small>花费 / 预算</small><b>{formatUsd(run.actual_cost_usd)} <span>/ {formatUsd(run.budget_usd)}</span></b><span className="spend-bar" aria-hidden="true"><i style={{width:`${spentRatio*100}%`}}/></span></div>
-      <div><small>预计花费</small><b>{formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</b>{overNote&&<em className="over-estimate">{overNote}</em>}</div>
-    </div>
-    {!!run.plan.choices?.length&&run.status!=="draft"&&<PlanChoices choices={run.plan.choices} editable={run.status==="awaiting_confirmation"} onReplan={picks=>onChoose(run,picks)}/>}
+    <p className="task-metrics">
+      <span>{nodes.length&&done===nodes.length?`${nodes.length} 个步骤全部完成`:`完成 ${done} / ${nodes.length} 步`}</span>
+      {elapsed&&<span>用时 {elapsed}</span>}
+      <span>花费 <b>{formatUsd(run.actual_cost_usd)}</b> / {money(run.budget_usd)}</span>
+      {overNote?<span className="over-estimate">{overNote}</span>:<span>预计 {formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</span>}
+    </p>
+    {!!run.plan.choices?.length&&run.status==="awaiting_confirmation"&&<PlanChoices choices={run.plan.choices} editable onReplan={picks=>onChoose(run,picks)}/>}
     {run.auto_routed&&run.status==="awaiting_confirmation"&&!run.parent_run_id&&<p className="auto-note">已自动识别为任务。只是想问问？<button type="button" className="link-button" disabled={busy} onClick={()=>act(onToChat)}>改成对话，直接回答</button></p>}
     {needsConfirm&&<div className="action-bar">
       <p>{run.status==="paused"?(stillRunning?`任务已暂停：正在运行的 ${stillRunning} 个步骤会跑完，之后不再启动新步骤。`:run.error??"任务已暂停。确认项目状态和预算后可以继续执行。"):"确认计划和预算后，任务将自动执行，无需再次确认。"}</p>
@@ -356,7 +365,7 @@ function MissionDetail({run,models,onPromote,onToChat,deletingId,cancellingId,on
     {tab==="progress"&&<PlanView apiBase={API} runId={run.id} runStatus={run.status} nodes={nodes} parts={run.plan.parts} inProject={!!run.project_dir} models={models} onOpenProfile={onOpenModel} reworkRounds={run.rework_rounds}/>}
     {tab==="team"&&<TeamPage apiBase={API} runId={run.id} runStatus={run.status} employees={run.plan.employees} nodes={nodes} parts={run.plan.parts} brief={run.plan.team_brief} models={models} onOpenModel={onOpenModel}/>}
     {tab==="result"&&<ResultPage apiBase={API} run={run} embedded onChange={(prompt,budget,options)=>onChange(run,prompt,budget,options)}/>}
-    {tab==="details"&&<TaskDetails run={run} onNetwork={onNetwork}/>}
+    {tab==="details"&&<>{!!run.plan.choices?.length&&run.status!=="awaiting_confirmation"&&<PlanChoices choices={run.plan.choices} editable={false} onReplan={picks=>onChoose(run,picks)}/>}<TaskDetails run={run} onNetwork={onNetwork}/></>}
   </section>
 }
 
@@ -372,7 +381,7 @@ function App() {
   const [selected,setSelected]=useState<Run|null>(null),[selectedProvider,setSelectedProvider]=useState<Provider|null>(null),[prompt,setPrompt]=useState(""),[budget,setBudget]=useState(2),[useCli,setUseCli]=useState(true),[allowNetwork,setAllowNetwork]=useState(false),[busy,setBusy]=useState(false),[projectDir,setProjectDir]=useState(savedProjectDir);
   // The composer starts a task (planned, then run), a chat (only a conversation with one model), or
   // leaves it to the platform to tell which ("auto", the default: POST /api/start).
-  const [optionsOpen,setOptionsOpen]=useState(false),[mode,setMode]=useState<"auto"|"task"|"chat">("auto"),[chatModel,setChatModel]=useState(""),[chatModels,setChatModels]=useState<{id:string;display_name:string}[]>([]);
+  const [optionsOpen,setOptionsOpen]=useState(false),[projectOpen,setProjectOpen]=useState(false),[mode,setMode]=useState<"auto"|"task"|"chat">("auto"),[chatModel,setChatModel]=useState(""),[chatModels,setChatModels]=useState<{id:string;display_name:string}[]>([]);
   useEffect(()=>{if(mode!=="chat")return;let live=true;fetch(`${API}/api/chats/models?use_cli=${useCli}`).then(r=>r.ok?r.json():[]).then(list=>{if(live)setChatModels(Array.isArray(list)?list:[])}).catch(()=>{});return()=>{live=false}},[mode,useCli]);
   const [formError,setFormError]=useState(""),[offline,setOffline]=useState(false);
   const attachments=useAttachments(API),[dragging,setDragging]=useState(false);
@@ -435,10 +444,10 @@ function App() {
   const unfinished=runs.find(run=>run.kind!=="chat"&&["running","queued","paused","awaiting_confirmation","failed"].includes(run.status));
   const suggestions:{label:string;act:()=>void}[]=[
     ...(unfinished?[{label:`继续「${taskName(unfinished.plan)}」`,act:()=>{autoSelected.current=true;setSelected(unfinished);setComposerOpen(false)}}]:[]),
-    ...["读一读这个项目，说说它是怎么组织的","修一个失败的测试"].map(text=>({label:text,act:()=>setPrompt(text)})),
+    ...["读一读这个项目","修一个失败的测试"].map(text=>({label:text,act:()=>setPrompt(text)})),
   ];
   // What the folded options say at a glance: the budget, who works on it, and anything switched off or on.
-  const optionsSummary=[`预算 ${formatUsd(budget)}`,mode==="chat"&&chatModel?chatModels.find(model=>model.id===chatModel)?.display_name??chatModel:"自动选模型",...(useCli?[]:["不用会员 CLI"]),...(allowNetwork&&mode!=="chat"?["可联网"]:[])].join(" · ");
+  const optionsSummary=[`预算 ${Number.isInteger(budget)?`$${budget}`:formatUsd(budget)}`,mode==="chat"&&chatModel?chatModels.find(model=>model.id===chatModel)?.display_name??chatModel:"自动选模型",...(useCli?[]:["不用会员 CLI"]),...(allowNetwork&&mode!=="chat"?["可联网"]:[])].join(" · ");
   async function submit(e:FormEvent){e.preventDefault();setBusy(true);setFormError("");try{const chat=mode==="chat";const r=await fetch(`${API}/api/${chat?"chats":mode==="auto"?"start":"tasks"}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(chat?{message:prompt,budget_usd:budget,use_cli:useCli,project_dir:projectDir.trim()||null,model_id:chatModel||null,attachments:attachments.ids}:{prompt,budget_usd:budget,use_cli:useCli,allow_network:allowNetwork,project_dir:projectDir.trim()||null,attachments:attachments.ids})});if(!r.ok){const body=await r.json().catch(()=>({}));throw new Error(detailText(body.detail)||(chat?`开始对话失败（${r.status}）`:`生成计划失败（${r.status}）`))}try{localStorage.setItem(PROJECT_KEY,projectDir.trim())}catch{}rememberProject(projectDir.trim());const task=await r.json();autoSelected.current=true;setSelected(task);setPrompt("");attachments.clear();setComposerOpen(false);await load(false)}catch(e){setFormError(errorText(e))}finally{setBusy(false)}}
   async function confirmRun(run:Run,runBudget:number){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/confirm`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({budget_usd:runBudget})});if(!r.ok){const body=await r.json().catch(()=>({}));return detailText(body.detail)||`确认失败（${r.status}）`}await load(false);return null}catch(e){return errorText(e)}}
   async function chooseForPlan(run:Run,picks:string[]){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/choices`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({picks})});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`重新规划失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
@@ -523,10 +532,9 @@ function App() {
       <button type="button" className="primary new-task" title="新建：提个问题，或交给团队去做" aria-expanded={view==="missions"&&composerOpen} onClick={()=>{setView("missions");setComposerOpen(open=>view!=="missions"||!open);window.scrollTo({top:0})}}><Icon name="plus"/><span>新建</span></button>
       <MissionHistory runs={runs} selectedId={view==="missions"?selected?.id:undefined} deletingId={deletingRunId} error={deleteTarget?"":deleteError} onSelect={run=>{setSelected(run);setView("missions");setComposerOpen(false)}} onDelete={requestDeleteRun} collapsed={historyCollapsed} onToggle={()=>setHistoryCollapsed(value=>!value)}/>
       <nav className="app-nav" aria-label="页面导航">
-        <button type="button" aria-pressed={view==="missions"} title="任务工作台" onClick={()=>setView("missions")}><Icon name="list"/><span>任务工作台</span></button>
-        <button type="button" aria-pressed={view==="models"} title="模型画像" onClick={()=>setView("models")}><Icon name="cpu"/><span>模型画像</span><span className="nav-count">{models.length}</span></button>
-        <button type="button" aria-pressed={view==="problems"} title="常见故障" onClick={()=>setView("problems")}><Icon name="alert"/><span>常见故障</span></button>
-        <ThemeSwitch/>
+        <button type="button" aria-pressed={view==="models"} title="模型" onClick={()=>setView("models")}><Icon name="cpu"/><span>模型</span></button>
+        <button type="button" aria-pressed={view==="engineer"} title="平台工程师" onClick={()=>{setEngineerFocus(null);setView("engineer")}}><Icon name="wrench"/><span>平台工程师</span></button>
+        <SettingsMenu active={view==="problems"} onProblems={()=>setView("problems")}/>
       </nav>
     </aside>
     <main className={`app-content${view==="models"?" profiles-view":""}${view==="missions"&&composerOpen?" composing":""}`}>
@@ -543,9 +551,10 @@ function App() {
       onDrop={e=>{if(e.dataTransfer.files.length){e.preventDefault();attachments.add([...e.dataTransfer.files])}setDragging(false)}}>
       <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} onPaste={e=>{const pasted=[...e.clipboardData.files];if(pasted.length){e.preventDefault();attachments.add(pasted)}}} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={mode==="auto"?"说说你的想法，或者把问题直接丢给我…":mode==="chat"?"想问什么？比如：这个项目的登录流程是怎么走的":"想要什么结果？比如：修复登录页失败的测试"} required minLength={mode==="chat"?1:3} aria-label={mode==="chat"?"想问的问题":"任务描述"}/>
       <AttachmentTray attachments={attachments}/>
-      <ProjectField apiBase={API} value={projectDir} onChange={setProjectDir} usedProjects={usedProjects}/>
+      <div className="composer-project" hidden={!projectOpen}><ProjectField apiBase={API} value={projectDir} onChange={setProjectDir} usedProjects={usedProjects}/></div>
       <div className="composer-row">
         <AttachButton onFiles={attachments.add}/>
+        <button type="button" className="ghost options-chip project-chip" aria-expanded={projectOpen} onClick={()=>setProjectOpen(open=>!open)} title={projectDir.trim()||"选择项目目录（可选）"}><Icon name="folder" size={14}/>{projectDir.trim()?projectDir.trim().replace(/\/+$/,"").split("/").pop():"项目"}</button>
         <button type="button" className="ghost options-chip" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(open=>!open)} title="预算、模型和权限"><Icon name="sliders" size={14}/>{optionsSummary}</button>
         <span className="composer-spacer"/>
         <div className="mode-switch" role="group" aria-label="新建什么">{([["auto","自动"],["task","任务"],["chat","对话"]] as const).map(([id,label])=><button key={id} type="button" aria-pressed={mode===id} onClick={()=>setMode(id)}>{label}</button>)}</div>
@@ -553,7 +562,7 @@ function App() {
       </div>
       <div className="composer-options" hidden={!optionsOpen}>{mode==="chat"&&<label className="chat-model">模型 <select value={chatModel} onChange={e=>setChatModel(e.target.value)} aria-label="对话用的模型"><option value="">自动（{chatModels[0]?.display_name??"最合适的"}）</option>{chatModels.map(model=><option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label>}<label className="budget-field" title={mode==="chat"?"对话花费达到上限后不再回复":"执行花费达到上限时任务会自动暂停"}>预算上限 <span>$</span><BudgetInput value={budget} onChange={setBudget} required/></label><label className="switch" title="关闭后本任务只使用按量计费的 API 模型"><input type="checkbox" checked={useCli} onChange={e=>setUseCli(e.target.checked)}/><span/>允许使用会员 CLI</label>{mode!=="chat"&&<><label className="switch" title={NETWORK_HINT}><input type="checkbox" checked={allowNetwork} onChange={e=>setAllowNetwork(e.target.checked)}/><span/>允许联网</label><ModelFleet models={models} onOpenAll={()=>setView("models")} onOpen={openModelProfile} onToggle={toggleModel} onConfigure={configureModel}/></>}</div>
     </form>
-    <p className="composer-hint">{mode==="auto"?"问题我直接回答；要动手的事，我先拆成计划和预算，你点头了再开工。":mode==="chat"?"直接聊，不规划也不执行；选了项目时，会员 CLI 能读项目文件（只读）。":"我先拆成几个大项、算好预算，你确认后才开始执行。"}</p>
+    <p className="composer-hint">{mode==="auto"?"问题直接回答；要动手的事先给你看计划和预算，你点头再开工。":mode==="chat"?"直接聊，不规划也不执行；选了项目时，会员 CLI 能读项目文件（只读）。":"我先拆成几个大项、算好预算，你确认后才开始执行。"}</p>
     {suggestions.length>0&&<div className="composer-suggestions">{suggestions.map(item=><button key={item.label} type="button" className="ghost" onClick={item.act}>{item.label}</button>)}</div>}
     {formError&&<p className="form-error" role="alert">{formError}</p>}</section>}
       <MissionDetail run={selected} models={models} onPromote={promoteChat} onToChat={taskToChat} onOpenModel={openModelProfile} deletingId={deletingRunId} cancellingId={cancellingRunId} onConfirm={confirmRun} onChoose={chooseForPlan} onResume={resumeRun} onPause={run=>postAction(run,"pause","暂停")} onDiagnose={run=>postAction(run,"diagnose","诊断")} onReply={replyToDiagnosis} onAsk={askLead} onOpenEngineer={id=>{setEngineerFocus(id);setView("engineer");window.scrollTo({top:0})}} onChange={changeRequirement} onNetwork={setNetwork} parent={selected?.parent_run_id?runs.find(item=>item.id===selected.parent_run_id):undefined} onOpenRun={run=>{autoSelected.current=true;setSelected(run)}} onCancel={requestCancelRun} onDelete={requestDeleteRun}/>
