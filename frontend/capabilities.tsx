@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Icon } from "./icons";
+import { Markdown as MarkdownView } from "./markdown";
 
 /** Capabilities: what finished tasks left the platform able to do (docs/design/capabilities.md).
  * The shelf on the platform engineer page lists them; a task's result page offers its lead's
  * proposals to solidify. */
 export type CapabilityCard = {
-  name: string; kind: string; summary: string; usage: string; files: string[]; check: string;
+  name: string; kind: string; summary: string; usage: string; guide?: string; files: string[]; check: string;
   secrets: string[]; domains: string[];
 };
 export type Capability = CapabilityCard & {
@@ -61,12 +62,14 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
       {item.summary && <p>{item.summary}</p>}
       <dl>
         {item.usage && <><dt>用法</dt><dd><code>{item.usage}</code></dd></>}
+        {!!item.files.length && <><dt>代码</dt><dd>{item.files.map(file => <code key={file} className="capability-file">{file}</code>)}</dd></>}
         {!!item.secrets.length && <><dt>需要</dt><dd>{item.secrets.join("、")}</dd></>}
         {!!item.domains.length && <><dt>访问</dt><dd>{item.domains.join("、")}</dd></>}
         {item.source_run_id && <><dt>来自</dt><dd>{source(item.source_run_id)
           ? <button type="button" className="link-button" onClick={() => onOpenRun(item.source_run_id!)}>「{source(item.source_run_id)!.plan.title || source(item.source_run_id)!.plan.summary}」</button>
           : "已删除的任务"}</dd></>}
       </dl>
+      {item.guide && <details className="capability-guide"><summary>说明书（SKILL.md）</summary><MarkdownView text={item.guide} /></details>}
       {item.kind === "automation" && <p className="capability-note">自动化需要后台运行器才能一直运行，下一步提供；现在先登记在这里。</p>}
       {item.status === "failed" && <details className="capability-check"><summary>检查输出</summary><pre>{item.check_output}</pre></details>}
     </li>)}</ul>

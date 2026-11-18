@@ -2195,7 +2195,7 @@ test("the sidebar's foot is 模型 · 平台 · 设置, the theme and common fai
 });
 
 
-const FEISHU = { name: "飞书发消息", kind: "tool", summary: "向飞书群发一条消息。", usage: "python send.py --chat <id> --text <内容>",
+const FEISHU = { name: "飞书发消息", kind: "tool", summary: "向飞书群发一条消息。", usage: "python send.py --chat <id> --text <内容>", guide: "- 群 ID 在飞书群设置里",
   files: ["feishu"], check: "python3 feishu/send.py --help", secrets: ["FEISHU_APP_ID"], domains: ["open.feishu.cn"] };
 
 test("a finished task's result page offers what its lead found reusable, to solidify or dismiss", async t => {
@@ -2220,11 +2220,11 @@ test("the platform engineer page lists the capabilities on this machine, to swit
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   // Beside the conversation: what the platform can do; 管理能力 opens the shelf.
-  assert.match(document.querySelector(".platform-side").textContent, /平台现在能做的.*飞书发消息.*可用.*飞书自动回复.*检查未通过/s);
+  assert.match(document.querySelector(".platform-side").textContent, /平台现在能做的能力 · 带代码，能直接用.*飞书发消息.*可用.*飞书自动回复.*检查未通过.*技能 · 只有用法说明/s);
   await click(button("管理能力 ›"));
   const shelf = document.querySelector(".capability-shelf");
   const [send, reply] = shelf.querySelectorAll(".capability");
-  assert.match(send.textContent, /飞书发消息.*工具.*可用.*python send\.py.*FEISHU_APP_ID.*open\.feishu\.cn.*接飞书/s);
+  assert.match(send.textContent, /飞书发消息.*工具.*可用.*python send\.py.*代码.*feishu.*FEISHU_APP_ID.*open\.feishu\.cn.*接飞书.*说明书（SKILL\.md）.*群 ID 在飞书群设置里/s);
   assert.match(reply.textContent, /飞书自动回复.*自动化.*检查未通过.*后台运行器/s);
   assert.equal(button("启用", reply), undefined);
   const first = () => document.querySelector(".capability-shelf .capability");

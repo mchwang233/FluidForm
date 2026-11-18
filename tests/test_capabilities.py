@@ -12,6 +12,7 @@ from test_leading import MODELS, Team
 
 ORIGIN = {"origin": "http://localhost:5173"}
 CARD = {"name": "飞书发消息", "kind": "tool", "summary": "向飞书群发一条消息。", "usage": "python send.py --chat <id> --text <内容>",
+        "guide": "- 群 ID 在飞书群设置里\n- 一条消息最多 4000 字",
         "files": ["feishu"], "check": "python3 feishu/send.py --help", "secrets": ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
         "domains": ["open.feishu.cn"]}
 
@@ -38,6 +39,7 @@ def test_the_leads_cards_are_read_carefully():
     # Nothing to keep without files; an unknown kind is a tool; at most three.
     assert [(card.name, card.kind) for card in cards] == [("飞书发消息", "tool"), ("x", "tool"), ("y", "tool")]
     assert cards[0].secrets == ["FEISHU_APP_ID", "FEISHU_APP_SECRET"] and cards[0].status == "proposed"
+    assert "群 ID" in cards[0].guide and '"guide"' in capabilities.PROMPT
     assert capabilities.read_cards("没有") == capabilities.read_cards('{"capabilities": []}') == []
 
 
@@ -88,11 +90,15 @@ async def test_a_proposal_solidified_is_copied_checked_listed_and_told_to_later_
     assert "usage: send.py" in capability["check_output"]
     folder = capabilities.root() / capability["id"]
     assert (folder / "feishu" / "send.py").is_file() and not (folder / "secret.txt").exists()
+    # A capability is its code and its manual, in the skills' format, side by side.
+    manual = (folder / "SKILL.md").read_text()
+    assert manual.startswith("---\nname: ") and "python send.py --chat" in manual and "群 ID 在飞书群设置里" in manual
+    assert "`feishu`" in manual and "FEISHU_APP_ID" in manual and "open.feishu.cn" in manual
     # Later steps are told it, with where it is and what it needs.
     later = ExecutionRun(id="later", prompt="p", status=RunStatus.RUNNING, budget_usd=1,
                          plan=TaskPlan(summary="s", nodes=[TaskNode(id="n", title="通知", instructions="发通知", capability="coding")]))
     prompt, _ = quality.node_prompt(later.plan.nodes[0], later, 4000)
-    assert "飞书发消息" in prompt and str(folder) in prompt and "FEISHU_APP_SECRET" in prompt
+    assert "飞书发消息" in prompt and str(folder) in prompt and "FEISHU_APP_SECRET" in prompt and "SKILL.md" in prompt
     # Switched off, later work is no longer told; removed, it is gone.
     assert (await client.patch(f"/api/capabilities/{capability['id']}", json={"enabled": False}, headers=ORIGIN)).json()["status"] == "disabled"
     assert "飞书发消息" not in quality.node_prompt(later.plan.nodes[0], later, 4000)[0]

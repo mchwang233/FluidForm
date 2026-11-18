@@ -23,6 +23,9 @@ MAX_PROPOSALS = 3
 # What one capability may copy from its task's folder.
 MAX_CAPABILITY_BYTES = 20 * 1024 * 1024
 CHECK_SECONDS = 60
+# Characters of a capability's manual.
+MAX_GUIDE = 6000
+MANUAL = "SKILL.md"
 # Characters of a check's output kept with the capability.
 MAX_CHECK_OUTPUT = 4000
 
@@ -35,7 +38,9 @@ PROMPT = (
     "Reply with JSON only, no fences: {\"capabilities\": []} or\n"
     "{\"capabilities\": [{\"name\": \"short name in the user's language\", \"kind\": \"tool | automation\", "
     "\"summary\": \"what it does, one sentence\", \"usage\": \"how to run it from its folder: the command "
-    "and its arguments\", \"files\": [\"paths relative to the task's folder that make it up\"], "
+    "and its arguments\", \"guide\": \"its manual for whoever uses it next, a few short Markdown lines: inputs, "
+    "outputs, limits, common mistakes\", \"files\": [\"paths relative to the task's folder that make it up: its "
+    "code and what the code needs\"], "
     "\"check\": \"a command, run in its folder, that shows it works without side effects or network\", "
     "\"secrets\": [\"environment variables it needs\"], \"domains\": [\"hosts it must reach\"]}]}\n"
     f"At most {MAX_PROPOSALS}."
@@ -64,6 +69,7 @@ def read_cards(text: str) -> list[CapabilityProposal]:
         cards.append(CapabilityProposal(
             name=str(item["name"]).strip()[:60], kind=kind if kind in KINDS else "tool",
             summary=str(item.get("summary") or "").strip()[:500], usage=str(item.get("usage") or "").strip()[:2000],
+            guide=str(item.get("guide") or "").strip()[:MAX_GUIDE],
             files=files[:50], check=str(item.get("check") or "").strip()[:500],
             secrets=[str(name).strip()[:80] for name in item.get("secrets") or [] if str(name).strip()][:10],
             domains=[str(host).strip()[:200] for host in item.get("domains") or [] if str(host).strip()][:10]))
@@ -160,10 +166,26 @@ async def solidify(run: ExecutionRun, card: CapabilityCard) -> Capability:
             shutil.copytree(source, target, dirs_exist_ok=True, symlinks=True)
         else:
             shutil.copy2(source, target)
+    (folder / MANUAL).write_text(manual(capability))
     capability = await check(capability)
     capability.status = "failed" if capability.check_ok is False else "active"
     save(capability)
     return capability
+
+
+def manual(capability: Capability) -> str:
+    """Its SKILL.md: the code beside it, and how to use it, in the skills' own format (skills.py)."""
+    def section(title: str, lines: list[str]) -> list[str]:
+        return [f"## {title}", *lines, ""] if lines else []
+    return "\n".join([
+        "---", f"name: {capability.id}", f"description: {capability.summary or capability.name}", "---", "",
+        f"# {capability.name}", "", capability.summary, "",
+        *section("用法", [f"Run from this folder: `{capability.usage}`"] if capability.usage else []),
+        *section("说明", [capability.guide] if capability.guide else []),
+        *section("代码", [f"- `{name}`" for name in capability.files]),
+        *section("检查", [f"`{capability.check}`"] if capability.check else []),
+        *section("需要", [f"- 环境变量 `{name}`" for name in capability.secrets] + [f"- 访问 `{host}`" for host in capability.domains]),
+    ]).rstrip() + "\n"
 
 
 def section(capabilities: Optional[list[Capability]] = None) -> str:
@@ -176,5 +198,6 @@ def section(capabilities: Optional[list[Capability]] = None) -> str:
               "(run it from its folder; it is read-only, copy it to change it):")]
     for item in tools:
         needs = f" Needs environment variables: {', '.join(item.secrets)}." if item.secrets else ""
-        lines.append(f"- {item.name} ({root() / item.id}): {item.summary} Usage: {item.usage}{needs}")
+        lines.append(f"- {item.name} ({root() / item.id}): {item.summary} Usage: {item.usage}{needs} "
+                     f"Read its {MANUAL} there first.")
     return "\n".join(lines)

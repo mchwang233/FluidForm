@@ -1396,3 +1396,9 @@ button{color:var(--on-accent)}
 .platform-composer{border:0;border-radius:0;box-shadow:none}
 .platform-composer:focus-within{border:0}
 .platform-side h3:not(:first-child){margin-top:28px}
+.platform-side-sub{margin:14px 0 8px;font-size:12px;color:var(--faint)}
+.platform-side h3+.platform-side-sub{margin-top:0}
+.capability-file{margin-right:6px}
+.capability-guide{margin-top:8px;font-size:13px}
+.capability-guide>summary{color:var(--faint);cursor:pointer}
+.capability-guide .markdown-body{padding:6px 0 0;border:0;background:none;font-size:13px}

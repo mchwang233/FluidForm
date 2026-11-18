@@ -686,6 +686,9 @@ class CapabilityCard(BaseModel):
     kind: str = "tool"  # tool | automation
     summary: str = ""
     usage: str = ""
+    # Its manual, as a skill is: inputs, outputs, limits, common mistakes. Kept beside the code as
+    # SKILL.md when solidified, so a capability is working code and how to use it.
+    guide: str = ""
     # Paths, relative to the task's folder, that make it up.
     files: list[str] = Field(default_factory=list)
     # A command, run in its folder, that shows it works without side effects.

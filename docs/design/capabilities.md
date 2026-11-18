@@ -12,6 +12,9 @@ can keep running.
 | tool | send a Feishu message, read a Feishu doc | later steps, told how to run it |
 | automation | auto-reply to Feishu messages, a morning digest | a background runner (step 2) |
 
+A capability is **working code and its manual**: the files the task built, and a `SKILL.md` beside
+them in the skills' own format (用法, 说明, 代码, 检查, 需要). A skill alone (`skills/`) is only a manual.
+
 ## Flow
 
 1. **Proposed when a task succeeds** (`settings.capability_proposals`, off by default): the task's

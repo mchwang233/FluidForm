@@ -74,6 +74,7 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
     </section>
     <aside className="platform-side" aria-label="平台现在能做的">
       <h3>平台现在能做的</h3>
+      <p className="platform-side-sub">能力 · 带代码，能直接用</p>
       <ul className="platform-abilities">
         {capabilities.map(item => <li key={item.id}>
           <button type="button" onClick={onCapabilities} title="管理能力">
@@ -82,6 +83,11 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
             <span className={`platform-ability-status ${item.status}`}>{item.status === "active" ? (item.kind === "automation" ? "待开启" : "可用") : item.status === "disabled" ? "已停用" : "检查未通过"}</span>
           </button>
         </li>)}
+        {!capabilities.length && <li className="muted">还没有。任务做出可复用的代码后，你在结果页固化，它就带着说明书出现在这里。</li>}
+      </ul>
+      {!!capabilities.length && <button type="button" className="platform-link" onClick={onCapabilities}>管理能力 ›</button>}
+      <p className="platform-side-sub">技能 · 只有用法说明</p>
+      <ul className="platform-abilities">
         {skills.slice(0, SHOWN_SKILLS).map(item => <li key={`skill-${item.name}`}>
           <div>
             <span className="platform-ability-icon"><Icon name={"file" as IconName} size={15} /></span>
@@ -90,9 +96,8 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
           </div>
         </li>)}
         {skills.length > SHOWN_SKILLS && <li className="muted" title={skills.slice(SHOWN_SKILLS).map(item => item.name).join("、")}>还会 {skills.length - SHOWN_SKILLS} 项：{skills.slice(SHOWN_SKILLS).map(item => item.name).join("、")}</li>}
-        {!capabilities.length && !skills.length && <li className="muted">还没有。任务完成后，它做出的可复用工具会出现在这里。</li>}
+        {!skills.length && <li className="muted">还没有。</li>}
       </ul>
-      {!!capabilities.length && <button type="button" className="platform-link" onClick={onCapabilities}>管理能力 ›</button>}
       <h3>最近改进</h3>
       <ul className="platform-changes">
         {applied.map(job => <li key={job.id}><button type="button" onClick={() => onRecords(job.id)}>
