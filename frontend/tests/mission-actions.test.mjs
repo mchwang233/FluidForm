@@ -1686,6 +1686,29 @@ test("the lead panel shows its decisions and questions, takes replies, and lets 
   assert.equal(document.querySelector('[aria-label="给负责人的消息"]').closest("fieldset").disabled, false);
 });
 
+test("runs of the lead's routine decisions fold behind one line, keeping the newest and your messages in view", async t => {
+  const run = mission("folded-task", "running");
+  run.plan.nodes = [{ id: "a", title: "实现", dependencies: [], status: "running", estimated_cost_usd: 0, attempts: [] }];
+  run.supervisor = { model_id: "cli:codex", calls: 6 };
+  const decision = (n, minute) => ({ id: `d${n}`, node_id: "a", event: "attempt_failed", action: "accept", reason: `第${n}次判断`,
+    created_at: `2026-10-16T03:${minute}:00Z` });
+  run.decisions = [decision(1, 10), decision(2, 11), decision(3, 12), decision(4, 13), decision(5, 30), decision(6, 31)];
+  run.lead_messages = [{ id: "u1", role: "user", text: "进展如何？", status: "done", created_at: "2026-10-16T03:20:00Z" }];
+  const { document, click } = await setup(t, [run], [], { openComposer: false });
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
+  const panel = document.querySelector(".lead-panel");
+  const [fold, ...others] = panel.querySelectorAll(".lead-fold");
+  // Four in a row: three fold, the fourth stays; two in a row are not folded.
+  assert.equal(others.length, 0);
+  assert.match(fold.querySelector("summary").textContent, /负责人自己处理了 3 件事/);
+  assert.deepEqual([...fold.querySelectorAll(".lead-verdict")].map(item => item.textContent), ["第1次判断", "第2次判断", "第3次判断"]);
+  assert.equal(fold.open, false);
+  const shown = [...panel.querySelectorAll(".dx-thread > .dx-msg")].map(item => item.textContent);
+  assert.match(shown.join("|"), /第4次判断.*进展如何？.*第5次判断.*第6次判断/);
+  await click(fold.querySelector("summary"));
+  assert.equal(panel.querySelector(".lead-fold").open, true);
+});
+
 test("the lead panel shows the lead deciding, and the repair it asked for under its decision", async t => {
   const run = mission("thinking-task", "running");
   run.plan.nodes = [{ id: "d", title: "发布", dependencies: [], status: "running", estimated_cost_usd: 0, attempts: [] }];

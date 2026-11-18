@@ -119,6 +119,17 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
     : thinking ? { label: "判断中", tone: "busy" } : repairing ? { label: "修复中", tone: "busy" }
     : answering ? { label: "思考中", tone: "busy" }
     : { label: decided ? `已决策 ${decided} 次` : "跟进中", tone: "ok" };
+  const show = (entry: Entry) => entry.kind === "decision"
+    ? <DecisionMessage key={entry.item.id} item={entry.item} label={actionLabel(entry.item, title, model)} step={entry.item.node_id ? title(entry.item.node_id) : undefined}
+        repairs={repairs.filter(repair => rootDecision(repair, repairs) === entry.item.id)}
+        run={run} model={model} onReply={onReply} onOpenEngineer={onOpenEngineer} />
+    : entry.kind === "question"
+      ? <QuestionMessage key={entry.item.id} item={entry.item} step={entry.item.node_id ? title(entry.item.node_id) : undefined}
+          waiting={entry.item.id === waiting?.id} onReply={onReply} />
+      : entry.kind === "engineer"
+        ? <EngineerEntry key={`${entry.job.id}-${entry.at}-${entry.first}`} job={entry.job} message={entry.message} first={entry.first}
+            last={entry.last} act={act} onOpenEngineer={onOpenEngineer} />
+        : <ChatMessage key={entry.item.id} item={entry.item} who={chat} />;
   return <section className={`diagnosis-card dx-panel lead-panel${waiting ? " waiting" : ""}`} aria-label="负责人">
     <div className="diagnosis-head">
       {chat ? <span className="lead-who"><span className="dx-avatar" aria-hidden="true"><Icon name="chat" size={14} /></span><b>{chat}</b>{run.project_dir && <span className="lead-model">{run.supervisor?.model_id?.startsWith("cli:") ? "可读项目，不改动文件" : "API 模型看不到项目文件"}</span>}</span>
@@ -129,17 +140,12 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
     </div>
     <div className="dx-thread">
       {joining && <JoinEngineer runId={run.id} act={act} onDone={() => setJoining(false)} />}
-      {entries.map(entry => entry.kind === "decision"
-        ? <DecisionMessage key={entry.item.id} item={entry.item} label={actionLabel(entry.item, title, model)} step={entry.item.node_id ? title(entry.item.node_id) : undefined}
-            repairs={repairs.filter(repair => rootDecision(repair, repairs) === entry.item.id)}
-            run={run} model={model} onReply={onReply} onOpenEngineer={onOpenEngineer} />
-        : entry.kind === "question"
-          ? <QuestionMessage key={entry.item.id} item={entry.item} step={entry.item.node_id ? title(entry.item.node_id) : undefined}
-              waiting={entry.item.id === waiting?.id} onReply={onReply} />
-          : entry.kind === "engineer"
-            ? <EngineerEntry key={`${entry.job.id}-${entry.at}-${entry.first}`} job={entry.job} message={entry.message} first={entry.first}
-                last={entry.last} act={act} onOpenEngineer={onOpenEngineer} />
-            : <ChatMessage key={entry.item.id} item={entry.item} who={chat} />)}
+      {folded(entries, repairs).map(group => Array.isArray(group)
+        ? <details key={`fold-${group[0].item.id}`} className="lead-fold">
+            <summary>负责人自己处理了 {group.length} 件事<small>{when(group[0].at)} – {when(group[group.length - 1].at)}</small></summary>
+            {group.map(show)}
+          </details>
+        : show(group))}
       {thinking && <ThinkingMessage thinking={thinking} step={thinking.node_id ? title(thinking.node_id) : undefined} />}
       {!waiting && <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} chat={!!chat} />}
       <div ref={end} className="dx-end" aria-hidden="true" />
@@ -147,12 +153,30 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   </section>;
 }
 
+type DecisionEntry = Extract<Entry, { kind: "decision" }>;
+/** Runs of the lead's routine decisions (no repair, no platform engineer) are folded behind one
+ * line, keeping the newest of each run in view, so what was said to you stands out. */
+const FOLD_FROM = 3;
+function folded(entries: Entry[], repairs: Repair[]): (Entry | DecisionEntry[])[] {
+  const routine = (entry: Entry): entry is DecisionEntry => entry.kind === "decision" && !entry.item.engineer_job_id
+    && !repairs.some(repair => rootDecision(repair, repairs) === entry.item.id);
+  const out: (Entry | DecisionEntry[])[] = [];
+  let run: DecisionEntry[] = [];
+  const flush = () => {
+    if (run.length >= FOLD_FROM) out.push(run.slice(0, -1), run[run.length - 1]); else out.push(...run);
+    run = [];
+  };
+  for (const entry of entries) { if (routine(entry)) run.push(entry); else { flush(); out.push(entry); } }
+  flush();
+  return out;
+}
+
 function LeadMeta({ note, at, tag, who }: { note: string; at: string; tag?: React.ReactNode; who?: string | null }) {
   return <div className="dx-meta">
     <span className="dx-avatar" aria-hidden="true">{who ? <Icon name="chat" size={15} /> : "负"}</span>
     <b>{who ?? "负责人"}</b>
     {tag}
-    <small>{note} · {when(at)}</small>
+    <small title={note}>{note} · {when(at)}</small>
   </div>;
 }
 
@@ -191,9 +215,9 @@ function DecisionMessage({ item, label, step, repairs, run, model, onReply, onOp
   item: Decision; label: string; step?: string; repairs: Repair[]; run: RunLike;
   model: (id?: string | null) => string; onReply: SendReply; onOpenEngineer?: (jobId: string) => void;
 }) {
-  return <article className="dx-msg dx-ai lead-decision">
+  return <article className="dx-msg dx-ai lead-decision lead-said">
     <LeadMeta note={[EVENTS[item.event] ?? item.event, step].filter(Boolean).join(" · ")} at={item.created_at}
-      tag={<span className={`dx-chip ${TONES[item.action] ?? "ok"}`}>{label}</span>} />
+      tag={<span className={`dx-chip ${TONES[item.action] ?? "ok"}`} title={label}>{label}</span>} />
     {item.reason && <p className="lead-verdict">{item.reason}</p>}
     {item.instructions && <details className="lead-instructions"><summary>具体要求</summary><p>{item.instructions}</p></details>}
     {item.engineer_job_id && <div className="lead-repair lead-engineer">
@@ -229,7 +253,7 @@ function RepairProgress({ repair, model, waiting, onReply }: { repair: Repair; m
 
 function QuestionMessage({ item, step, waiting, onReply }: { item: Diagnosis; step?: string; waiting: boolean; onReply: SendReply }) {
   return <>
-    <article className="dx-msg dx-ai">
+    <article className="dx-msg dx-ai lead-said">
       <LeadMeta note={["提问", step].filter(Boolean).join(" · ")} at={item.created_at} />
       {item.report && <p className="lead-verdict">{item.report}</p>}
       {!waiting && item.question && <p className="lead-question">{item.question}</p>}
@@ -242,7 +266,7 @@ function QuestionMessage({ item, step, waiting, onReply }: { item: Diagnosis; st
 
 function ChatMessage({ item, who }: { item: LeadMessage; who?: string | null }) {
   if (item.role === "user") return <UserMessage message={{ text: item.text, created_at: item.created_at }} />;
-  return <article className="dx-msg dx-ai">
+  return <article className="dx-msg dx-ai lead-said">
     <LeadMeta note="回复" at={item.created_at} who={who} />
     {item.status === "pending"
       ? <p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{who ? "正在思考…" : "负责人正在看任务的情况…"}</p>
