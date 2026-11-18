@@ -1454,3 +1454,24 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .platform-home-link.active{background:light-dark(#ececef,#1f1f23);color:var(--text);font-weight:500}
 .platform-home-link:hover{background:light-dark(#f4f4f6,#17171a)}
 @media (max-width:1100px){.platform-page{grid-template-columns:minmax(0,1fr)}}
+/* 平台: its engineer's conversation, centred like 新建; 能力 and 技能 beside it. */
+.platform-page{grid-template-columns:minmax(0,1fr) 300px}
+.platform-main{max-width:760px}
+.platform-home{flex:1;display:flex;flex-direction:column;justify-content:center;padding:6vh 0 4vh}
+.platform-greeting{display:flex;flex-direction:column;align-items:center;gap:14px;margin:0 0 22px;text-align:center}
+.platform-greeting-mark{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--accent-bg);color:var(--text)}
+.platform-greeting h2{margin:0;font:600 26px var(--font);letter-spacing:-.015em}
+.platform-home .platform-composer{position:static;padding:0;background:none}
+.platform-home .platform-input{border-radius:20px;padding:16px 18px 10px}
+.platform-home .platform-input textarea{min-height:64px;font-size:15.5px}
+.platform-hint{margin:12px 0 24px;text-align:center;font-size:12.5px;color:var(--faint)}
+.platform-recent{margin-top:18px}
+.platform-recent-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 4px}
+.platform-recent-head h3{margin:0;font:600 13px var(--font);color:var(--muted)}
+.platform-recent-head .platform-link,.platform-side-head .platform-link{margin:0}
+.platform-side .platform-side-head{margin:0 0 10px}
+.platform-side .platform-side-head h3 small{margin-left:4px;font-weight:400;color:var(--faint)}
+.platform-side ul+.platform-side-head{margin-top:28px}
+.platform-card-text.full{display:block;-webkit-line-clamp:unset}
+.engineer-head p{margin:6px 0 18px;font-size:13px;color:var(--muted)}
+.engineer-page .platform-cards{margin-top:4px}

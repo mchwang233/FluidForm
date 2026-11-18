@@ -81,11 +81,13 @@ function threadState(thread: Thread): { label: string; tone: string } {
 }
 
 // Conversations the 平台 page lists; older ones are in 全部记录.
-const SHOWN_THREADS = 8;
+const SHOWN_THREADS = 6;
+// Capabilities and skills the side panel lists; 更多 shows them all.
+const SIDE_ITEMS = 5;
 
-export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities }: {
+export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities, onSkills }: {
   apiBase: string; runs: RunRef[]; onOpenRun: (id: string) => void;
-  onRecords: (jobId?: string) => void; onCapabilities: () => void;
+  onRecords: (jobId?: string) => void; onCapabilities: () => void; onSkills: () => void;
 }) {
   const { jobs, act, available } = useEngineerJobs(apiBase, null, "", true);
   const [capabilities, setCapabilities] = useState<Capability[]>([]), [skills, setSkills] = useState<Skill[]>([]);
@@ -99,59 +101,68 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   const open = all.find(thread => thread.id === openId);
   return <div className="platform-page">
     <section className="platform-main">
-      {open ? <ThreadView thread={open} title={threadTitle(open)} act={act} available={available} runs={runs}
-        onOpenRun={onOpenRun} onRecords={onRecords} /> : <>
-        <header className="platform-head">
-          <h2>平台现在能做的</h2>
-          <p>能力是任务做出来、你固化下来的代码和说明书，之后的任务会直接用；技能是它知道怎么用的工具。要加什么、修什么，在下面跟平台工程师说。</p>
-        </header>
+      {open ? <>
+        <button type="button" className="platform-back" onClick={() => setOpenId(null)}>← 平台</button>
+        <ThreadView thread={open} title={threadTitle(open)} act={act} available={available} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
+      </> : <div className="platform-home">
+        <div className="platform-greeting"><span className="platform-greeting-mark" aria-hidden="true"><Icon name="wrench" size={26} /></span>
+          <h2>要平台加什么能力、修什么问题？</h2></div>
         {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
-        {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setOpenId(threadOf(job))} />)}
-        <div className="platform-section-head"><h3>能力 <small>带代码，能直接用 · {capabilities.length}</small></h3>
-          {!!capabilities.length && <button type="button" className="platform-link" onClick={onCapabilities}>管理 ›</button>}</div>
-        <div className="platform-cards">
-          {capabilities.map(item => <button type="button" key={item.id} className="platform-card" onClick={onCapabilities}>
-            <span className="platform-card-head"><span className="platform-ability-icon"><Icon name={item.kind === "automation" ? "activity" : "wrench"} size={15} /></span>
-              <b>{item.name}</b><span className={`platform-ability-status ${item.status}`}>{item.status === "active" ? (item.kind === "automation" ? "待开启" : "可用") : item.status === "disabled" ? "已停用" : "检查未通过"}</span></span>
-            <span className="platform-card-text">{item.summary}</span>
-            <small>{item.kind === "automation" ? "自动化" : "工具"} · {item.files.length} 个代码文件{item.guide ? " · 有说明书" : ""}</small>
-          </button>)}
-          {!capabilities.length && <div className="platform-card empty">
-            <span className="platform-card-text">还没有能力。任务做出可复用的代码后，在任务的结果页点「固化」，它就带着说明书出现在这里，之后的任务会直接用它。</span>
-          </div>}
-        </div>
-        <div className="platform-section-head"><h3>技能 <small>知道怎么用的工具 · {skills.length}</small></h3></div>
-        <div className="platform-cards">
-          {skills.map(item => <div key={item.name} className="platform-card">
-            <span className="platform-card-head"><span className="platform-ability-icon"><Icon name="file" size={15} /></span>
-              <b>{item.name}</b><span className="platform-ability-status muted">{item.machine ? "本机" : "平台自带"}</span></span>
-            <span className="platform-card-text" title={item.description}>{item.description}</span>
-            {!!item.tools.length && <small>{item.tools.join("、")}</small>}
-          </div>)}
-          {!skills.length && <div className="platform-card empty"><span className="platform-card-text">还没有技能。</span></div>}
-        </div>
-        <div className="platform-spacer" />
         <PlatformComposer act={act} disabled={!available} />
-      </>}
+        <p className="platform-hint">平台工程师先在副本里改，测试通过、你点头才生效。</p>
+        {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setOpenId(threadOf(job))} />)}
+        {!!all.length && <div className="platform-recent">
+          <div className="platform-recent-head"><h3>最近的对话</h3><button type="button" className="platform-link" onClick={() => onRecords()}>全部 {jobs.length} 条记录 ›</button></div>
+          {all.slice(0, SHOWN_THREADS).map(thread => {
+            const state = threadState(thread);
+            return <button type="button" key={thread.id} className="platform-thread-row" onClick={() => setOpenId(thread.id)}>
+              <span className="platform-thread-main"><b>{threadTitle(thread)}</b>
+                <small>{threadSource(thread)} · {thread.jobs.length} 项 · {headlineOf(thread.jobs.at(-1)!)}</small></span>
+              <span className={`platform-thread-state ${state.tone}`}>{state.label}</span>
+              <small className="platform-thread-date">{short(thread.updated)}</small>
+            </button>;
+          })}
+        </div>}
+      </div>}
     </section>
-    <aside className="platform-side" aria-label="对话">
-      <div className="platform-side-head"><h3>对话</h3>
-        <button type="button" className="platform-new" aria-pressed={!open} onClick={() => setOpenId(null)}><Icon name="plus" size={13} />新对话</button></div>
-      <button type="button" className={`platform-home-link${open ? "" : " active"}`} onClick={() => setOpenId(null)}><Icon name="cpu" size={14} />平台能力</button>
-      <div className="platform-threads" aria-label="对话列表">
-        {all.slice(0, SHOWN_THREADS).map(thread => {
-          const state = threadState(thread);
-          return <button type="button" key={thread.id} className="platform-thread-row" aria-pressed={thread.id === openId} onClick={() => setOpenId(thread.id)}>
-            <span className="platform-thread-main"><b>{threadTitle(thread)}</b>
-              <small>{threadSource(thread)} · {thread.jobs.length} 项 · {headlineOf(thread.jobs.at(-1)!)}</small></span>
-            <span className="platform-thread-side"><span className={`platform-thread-state ${state.tone}`}>{state.label}</span>
-              <small className="platform-thread-date">{short(thread.updated)}</small></span>
-          </button>;
-        })}
-        {!all.length && <p className="muted">还没有。</p>}
-      </div>
-      <button type="button" className="platform-link" onClick={() => onRecords()}>全部 {jobs.length} 条记录 ›</button>
+    <aside className="platform-side" aria-label="平台现在能做的">
+      <div className="platform-side-head"><h3>能力 <small>{capabilities.length}</small></h3><button type="button" className="platform-link" onClick={onCapabilities}>更多 ›</button></div>
+      <ul className="platform-abilities">
+        {capabilities.slice(0, SIDE_ITEMS).map(item => <li key={item.id}>
+          <button type="button" onClick={onCapabilities}>
+            <span className="platform-ability-icon"><Icon name={item.kind === "automation" ? "activity" : "wrench"} size={15} /></span>
+            <span className="platform-ability-text"><b>{item.name}</b><small>{item.summary}</small></span>
+            <span className={`platform-ability-status ${item.status}`}>{item.status === "active" ? (item.kind === "automation" ? "待开启" : "可用") : item.status === "disabled" ? "已停用" : "检查未通过"}</span>
+          </button>
+        </li>)}
+        {!capabilities.length && <li className="muted">还没有。任务做出可复用的代码后，在结果页「固化」，它就带着说明书出现在这里。</li>}
+      </ul>
+      <div className="platform-side-head"><h3>技能 <small>{skills.length}</small></h3><button type="button" className="platform-link" onClick={onSkills}>更多 ›</button></div>
+      <ul className="platform-abilities">
+        {skills.slice(0, SIDE_ITEMS).map(item => <li key={item.name}>
+          <button type="button" onClick={onSkills}>
+            <span className="platform-ability-icon"><Icon name="file" size={15} /></span>
+            <span className="platform-ability-text"><b>{item.name}</b><small title={item.description}>{item.description}</small></span>
+          </button>
+        </li>)}
+        {!skills.length && <li className="muted">还没有。</li>}
+      </ul>
     </aside>
+  </div>;
+}
+
+/** 技能: every skill the steps know, as cards (平台 → 技能 → 更多). */
+export function SkillsPage({ apiBase }: { apiBase: string }) {
+  const [skills, setSkills] = useState<Skill[] | null>(null);
+  useEffect(() => { fetch(`${apiBase}/api/skills`).then(r => r.ok ? r.json() : []).then(list => setSkills(Array.isArray(list) ? list : [])).catch(() => setSkills([])); }, [apiBase]);
+  return <div className="platform-cards" aria-label="技能">
+    {(skills ?? []).map(item => <div key={item.name} className="platform-card">
+      <span className="platform-card-head"><span className="platform-ability-icon"><Icon name="file" size={15} /></span>
+        <b>{item.name}</b><span className="platform-ability-status muted">{item.machine ? "本机" : "平台自带"}</span></span>
+      <span className="platform-card-text full">{item.description}</span>
+      {!!item.tools.length && <small>涉及：{item.tools.join("、")}</small>}
+    </div>)}
+    {skills && !skills.length && <div className="platform-card empty"><span className="platform-card-text">还没有技能。</span></div>}
   </div>;
 }
 

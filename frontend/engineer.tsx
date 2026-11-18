@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { CapabilityShelf } from "./capabilities";
-import { PlatformHome, headlineOf } from "./platform";
+import { PlatformHome, SkillsPage, headlineOf } from "./platform";
 import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
@@ -93,7 +93,7 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
   // Opening the page shows what the platform can do; work that needs you or is under way shows the records.
   // The page opens on the conversation with the engineer (PlatformHome); all records and the
   // capabilities' management are a click away, and a job opened from a task shows its record.
-  type View = "home" | "capabilities" | "records";
+  type View = "home" | "capabilities" | "skills" | "records";
   const [tab, setTab] = useState<View>(focusId ? "records" : "home");
   useEffect(() => { if (focusId) setTab("records"); }, [focusId]);
   const pick = (next: View) => setTab(next);
@@ -103,12 +103,13 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
     <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
   </button>;
   if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun}
-    onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} />;
+    onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} onSkills={() => pick("skills")} />;
   return <div className="engineer-page">
     <button type="button" className="platform-back" onClick={() => pick("home")}>← 平台</button>
-    <header className="engineer-head"><h2>{tab === "records" ? "全部记录" : "能力"}</h2></header>
+    <header className="engineer-head"><h2>{tab === "records" ? "全部记录" : tab === "skills" ? "技能" : "能力"}</h2>
+      {tab !== "records" && <p>{tab === "skills" ? "它知道怎么用的工具：每份是一本用法说明，步骤用到相应工具时会拿到。" : "任务做出来、你固化下来的代码和说明书，之后的任务会直接用。"}</p>}</header>
     {error && <p className="error" role="alert">{error}</p>}
-    {tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
+    {tab === "skills" ? <SkillsPage apiBase={apiBase} /> : tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
       <nav className="engineer-list" aria-label="平台工程师的工作">
         {!jobs.length && <p className="empty">还没有记录。</p>}
         {!!(waiting.length + active.length) && <><h4>进行中</h4>{[...waiting, ...active].map(row)}</>}

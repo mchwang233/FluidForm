@@ -143,6 +143,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
   state.poll = () => [...polls.values()][0]();
   window.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
+    if (path === "/api/skills") return json(state.skills ?? []);
     if (path.startsWith("/api/capabilities")) {
       const items = state.capabilities ??= [];
       const id = decodeURIComponent(path.split("/")[3] ?? "");
@@ -2219,11 +2220,9 @@ test("the platform engineer page lists the capabilities on this machine, to swit
     { ...FEISHU, id: "feishu-reply", name: "飞书自动回复", kind: "automation", status: "failed", check_ok: false, check_output: "Exit code 1", created_at: "2026-11-18T07:00:00Z" }];
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
-  // The 平台 page opens on what the platform can do: capabilities as cards, then skills; 管理 opens the shelf.
-  const overview = document.querySelector(".platform-main").textContent;
-  assert.match(overview, /平台现在能做的.*能力 带代码，能直接用 · 2.*飞书发消息.*可用.*1 个代码文件 · 有说明书.*飞书自动回复.*检查未通过.*技能/s);
-  assert.doesNotMatch(document.querySelector(".platform-side").textContent, /飞书发消息/);
-  await click(button("管理 ›"));
+  // Beside the engineer's conversation: 能力 and 技能, each with 更多 for the whole list.
+  assert.match(document.querySelector(".platform-side").textContent, /能力 2更多 ›.*飞书发消息.*可用.*飞书自动回复.*检查未通过.*技能/s);
+  await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head")));
   const shelf = document.querySelector(".capability-shelf");
   const [send, reply] = shelf.querySelectorAll(".capability");
   assert.match(send.textContent, /飞书发消息.*工具.*可用.*python send\.py.*代码.*feishu.*FEISHU_APP_ID.*open\.feishu\.cn.*接飞书.*说明书（SKILL\.md）.*群 ID 在飞书群设置里/s);
@@ -2260,9 +2259,9 @@ test("the 平台 page lists its conversations beside the one open, each one to g
   await settle();
   const page = () => document.querySelector(".platform-page");
   assert.match(page().querySelector(".platform-pending").textContent, /等你点头.*新增「飞书发消息」/s);
-  // The conversations are listed in the side panel, where 最近改进 was.
-  const rows = () => [...page().querySelectorAll(".platform-side .platform-thread-row")];
-  assert.equal(page().querySelector(".platform-changes"), null);
+  // The page is the engineer's conversation, centred like 新建; recent conversations under the box.
+  assert.match(page().querySelector(".platform-greeting").textContent, /要平台加什么能力、修什么问题？/);
+  const rows = () => [...page().querySelectorAll(".platform-recent .platform-thread-row")];
   assert.deepEqual(rows().map(row => row.querySelector("b").textContent), ["飞书发消息", "中文输入法交付"]);
   assert.match(rows()[0].textContent, /你发起 · 1 项.*等你点头/s);
   assert.match(rows()[1].textContent, /来自任务 · 2 项 · 长回归超时.*已生效/s);
@@ -2282,15 +2281,30 @@ test("the 平台 page lists its conversations beside the one open, each one to g
   await act(async () => page().querySelector(".platform-composer").requestSubmit());
   assert.deepEqual(state.engineerActions.at(-1), { path: "/api/engineer/jobs", body: { request: "超时再放宽一点", kind: "repair", thread_id: "task:ime-task" } });
 
-  // The other one is a click away in the list; inside the waiting one, the box answers it.
+  // Back to the page, then into the waiting one: the box answers it.
+  await click(button("← 平台"));
   await click(rows()[0]);
-  assert.equal(rows()[0].getAttribute("aria-pressed"), "true");
   assert.match(page().querySelector(".platform-reply-to").textContent, /回复「飞书发消息」/);
   await click(button("批准，开始做", page().querySelector(".platform-thread")));
   assert.equal(state.engineerActions.at(-1).path, "/api/engineer/jobs/mine/approve");
-  // 新对话 empties the main column for a new one.
-  await click(page().querySelector(".platform-new"));
+  await click(button("← 平台"));
   assert.equal(page().querySelector(".platform-composer textarea").getAttribute("placeholder"), "跟平台工程师说要加什么、修什么…（开始一段新对话）");
   await click(button(`全部 ${state.engineer.jobs.length} 条记录 ›`));
   assert.ok(document.querySelector(".engineer-list") && button("← 平台"));
+});
+
+
+test("the 平台 page's 技能 更多 shows every skill with its whole description", async t => {
+  const { state, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  state.skills = [{ name: "synopsys-vcs", description: "Compile and simulate SystemVerilog with Synopsys VCS.", tools: ["vcs", "urg"], machine: false },
+    { name: "cmake", description: "Building with CMake.", tools: ["cmake"], machine: true }];
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const heads = [...document.querySelectorAll(".platform-side .platform-side-head")];
+  assert.match(heads[1].textContent, /技能 2/);
+  await click(button("更多 ›", heads[1]));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const cards = document.querySelector('[aria-label="技能"]').textContent;
+  assert.match(cards, /synopsys-vcs.*平台自带.*Compile and simulate SystemVerilog with Synopsys VCS\..*涉及：vcs、urg.*cmake.*本机/s);
+  assert.ok(button("← 平台"));
 });
