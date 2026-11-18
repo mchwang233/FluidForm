@@ -367,3 +367,28 @@ async def test_a_lead_that_cannot_see_images_is_told_of_them_instead(task_api, m
     await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "看图", "attachments": [shot.id, log.id]}, headers=ORIGIN)
     await api.executor.lead_tasks[chat["id"]]
     assert sent.attached[-1] == ["a.log"] and "images you cannot see: screen.png" in sent[-1][2]
+
+
+async def test_the_models_page_gets_each_models_calls_spend_and_work(task_api):
+    """GET /api/models/usage totals the recorded model calls of the last days, per model."""
+    from datetime import datetime, timedelta, timezone
+    api, client = task_api
+    api.db.save_run(ExecutionRun(id="ime", prompt="p", status=RunStatus.SUCCEEDED, budget_usd=1,
+                                 plan=TaskPlan(summary="写输入法", title="中文输入法", nodes=[])))
+    now = datetime.now(timezone.utc)
+
+    def call(n, model, cost, run="ime", days_ago=0, **extra):
+        api.db.save_model_call({"id": f"c{n}", "model_id": model, "run_id": run, "cost_usd": cost,
+                                "started_at": (now - timedelta(days=days_ago)).isoformat(), **extra})
+    call(1, "x:best", 0.25)
+    call(2, "x:best", 0.5)
+    call(3, "cli:codex", 0.0, delegated=True)  # handed its work on: counted as the other model's
+    call(4, "x:best", 9.0, days_ago=40)  # too long ago
+    call(5, "x:other", 0.1, run=None)
+    body = (await client.get("/api/models/usage")).json()
+    assert body["days"] == 30 and set(body["models"]) == {"x:best", "x:other"}
+    best = body["models"]["x:best"]
+    assert (best["calls"], best["cost_usd"], best["run_count"]) == (2, 0.75, 1)
+    assert best["runs"] == [{"id": "ime", "title": "中文输入法", "kind": "task", "calls": 2}]
+    assert body["models"]["x:other"]["runs"] == []
+    assert (await client.get("/api/models/usage?days=60")).json()["models"]["x:best"]["calls"] == 3

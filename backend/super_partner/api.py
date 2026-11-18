@@ -7,7 +7,7 @@ import re
 import shutil
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -333,6 +333,41 @@ async def engineer_reject(job_id: str):
 def list_cli_channels(refresh: bool = False):
     statuses = providers.cli.refresh() if refresh else providers.cli.statuses
     return [status.public() for status in statuses.values()]
+
+
+# The 模型 page's totals: calls and spend per model over this many days.
+USAGE_DAYS = 30
+USAGE_RUNS = 3
+
+
+@app.get("/api/models/usage")
+def models_usage(days: int = USAGE_DAYS):
+    """Per model, over the last ``days``: how many calls it took, what they cost, and the tasks
+    and chats it worked on most (their names), from the recorded model calls (calls.py). A call
+    that only handed work to another model is counted once, as that model's."""
+    days = max(1, min(days, 366))
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    totals: dict[str, dict] = {}
+    for call in db.model_calls_since(since):
+        if call.get("delegated") or not call.get("model_id"):
+            continue
+        entry = totals.setdefault(call["model_id"], {"calls": 0, "cost_usd": 0.0, "runs": {}})
+        entry["calls"] += 1
+        entry["cost_usd"] += float(call.get("cost_usd") or 0)
+        if call.get("run_id"):
+            entry["runs"][call["run_id"]] = entry["runs"].get(call["run_id"], 0) + 1
+    names = {}
+    for entry in totals.values():
+        busiest = sorted(entry["runs"].items(), key=lambda item: -item[1])[:USAGE_RUNS]
+        used_in = []
+        for run_id, calls in busiest:
+            if run_id not in names:
+                run = db.get_run(run_id)
+                names[run_id] = (run.plan.title or run.plan.summary, run.kind) if run else None
+            if names[run_id]:
+                used_in.append({"id": run_id, "title": names[run_id][0], "kind": names[run_id][1], "calls": calls})
+        entry.update(cost_usd=round(entry["cost_usd"], 6), runs=used_in, run_count=len(entry["runs"]))
+    return {"days": days, "since": since, "models": totals}
 
 
 @app.get("/api/models")

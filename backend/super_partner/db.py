@@ -343,6 +343,13 @@ class Database:
             ).fetchall()
         return [json.loads(row["body"]) for row in rows]
 
+    def model_calls_since(self, since: str) -> list[dict]:
+        """Every model call started at or after ``since`` (ISO time), for totals per model."""
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT body FROM model_calls WHERE started_at >= ? ORDER BY started_at DESC", (since,)).fetchall()
+        return [json.loads(row["body"]) for row in rows]
+
     def interrupt_model_calls(self):
         """Called once at service startup, before admitting new work."""
         with self.lock, self.connection:

@@ -374,6 +374,13 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.githubUrl = "https://github.com/me/tetris";
       return json({ url: state.githubUrl });
     }
+    if (path === "/api/models" && options.method === "PATCH") {
+      const body = JSON.parse(options.body);
+      (state.modelToggles ??= []).push(body);
+      return json({ ...state.models.find(model => model.id === body.model_id), enabled: body.enabled });
+    }
+    if (path === "/api/models/usage") return json({ days: 30, models: state.modelUsage ?? {} });
+    if (path === "/api/models/sync") return json(state.catalogSync ?? { last_checked_at: null, providers: [] });
     if (path === "/api/models") return json(state.models);
     if (path === "/api/providers") return json(state.providers);
     if (path === "/api/engineer") return json(state.engineer ?? { available: true, jobs: [] });
@@ -755,6 +762,53 @@ test("the plan shows stages, dependencies, parallel work and each task's model",
   await click(dialog.querySelector(".capability-profile-link"));
   assert.equal(document.querySelector(".model-capability-modal"), null);
   assert.equal([...document.querySelectorAll(".app-nav button")].find(b => b.textContent.startsWith("模型")).getAttribute("aria-pressed"), "true");
+});
+
+test("the 模型 page lists models by what they are doing for you, and the chosen one beside them", async t => {
+  const model = (id, fields) => ({ id, display_name: id, provider: id.split(":")[0], channel: "api", configured: true, enabled: true,
+    input_per_million: 0.15, output_per_million: 0.6, context_window: 1_048_576, pricing_verified: false, routing_ready: true,
+    scores: { coding: 82, planning: 70, research: 74, chinese: 88, tool_use: 79, structured_output: 75, reliability: 60 },
+    catalog_source: "models.dev", catalog_status: "listed", pricing_source: "models.dev", supports_vision: true, benchmarks: [], ...fields });
+  const models = [
+    model("cli:codex", { display_name: "Codex CLI (membership)", provider: "openai", channel: "cli", input_per_million: 10, usage_note: "周额度已用 10%" }),
+    model("deepseek:flash", { display_name: "DeepSeek-V4.1-Flash" }),
+    model("glm:glm-5.3", { display_name: "GLM-5.3", enabled: false, supports_vision: false }),
+    model("anthropic:opus", { display_name: "Claude Opus 5.5", configured: false, enabled: false }),
+    model("anthropic:haiku", { display_name: "Claude Haiku 5.5", configured: false, enabled: false }),
+    model("old:retired", { display_name: "Retired", catalog_status: "retired" }),
+  ];
+  const { state, document, click, act } = await setup(t, [], models, { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.modelUsage = { "deepseek:flash": { calls: 46, cost_usd: 0.4327, run_count: 2,
+    runs: [{ id: "r1", title: "中文输入法交付", kind: "task", calls: 40 }] }, "cli:codex": { calls: 189, cost_usd: 128.5, run_count: 1, runs: [] } };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent.trim() === "模型"));
+  await settle();
+  const page = document.querySelector(".models-page");
+  const group = label => page.querySelector(`.models-group[aria-label="${label}"]`);
+  // In use, busiest first, with its calls (and spend, for an API model); ready but off; waiting for a key, by provider.
+  assert.deepEqual([...group("在用").querySelectorAll(".models-row b")].map(node => node.textContent), ["Codex CLI", "DeepSeek-V4.1-Flash"]);
+  assert.match(group("在用").textContent, /会员额度.*189 次.*46 次 · \$0\.433/s);
+  assert.match(group("已配好，没启用").textContent, /GLM-5\.3.*没用过/);
+  assert.match(group("缺密钥").textContent, /缺密钥或没安装 · 2 个模型.*Anthropic.*Claude Opus 5\.5、Claude Haiku 5\.5.*配置密钥/s);
+  assert.doesNotMatch(page.textContent, /Retired/);
+  // The busiest is shown beside the list; another is a click away.
+  assert.match(page.querySelector(".models-detail h3").textContent, /Codex CLI/);
+  assert.match(page.querySelector(".models-detail").textContent, /周额度已用 10%/);
+  await click(group("在用").querySelectorAll(".models-row")[1]);
+  const detail = page.querySelector(".models-detail");
+  assert.match(detail.textContent, /DeepSeek-V4\.1-Flash.*已启用.*\$0\.15.*\$0\.60.*1M.*\$0\.433.*46 次调用/s);
+  assert.match(detail.textContent, /最近用在.*中文输入法交付.*任务 · 40 次.*还有 1 个/s);
+  assert.equal(detail.querySelectorAll(".models-bars [role=meter]").length, 7);
+  // Switching one on or off, from the list.
+  await click(group("已配好，没启用").querySelector(".models-switch"));
+  assert.deepEqual(state.modelToggles.at(-1), { model_id: "glm:glm-5.3", enabled: true });
+  // A model waiting for a key cannot be switched on; its row offers the key.
+  await click(group("缺密钥").querySelector(".models-row"));
+  assert.equal(page.querySelector(".models-detail .models-switch").disabled, true);
+  assert.match(page.querySelector(".models-detail").textContent, /缺密钥.*配置 Anthropic 的密钥/s);
+  // Filtering.
+  await click([...page.querySelectorAll(".models-filter button")].find(node => node.textContent === "会员 CLI"));
+  assert.equal(page.querySelectorAll(".models-row").length, 1);
 });
 
 test("a plan made in parts shows its major parts as stages; each opens in place, or all at once", async t => {
