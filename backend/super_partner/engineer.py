@@ -23,6 +23,7 @@ from .config import settings
 from .models import (
     ENGINEER_DONE,
     ENGINEER_WAITING,
+    Attachment,
     EngineerJob,
     EngineerMessage,
     NodeStatus,
@@ -196,7 +197,8 @@ class Engineering:
     def engineer_request(self, request: str, kind: str = "component", origin: str = "user", *,
                          run_id: Optional[str] = None, node_id: Optional[str] = None,
                          decision_id: Optional[str] = None, budget_usd: Optional[float] = None,
-                         improvement_id: Optional[str] = None, thread_id: Optional[str] = None) -> EngineerJob:
+                         improvement_id: Optional[str] = None, thread_id: Optional[str] = None,
+                         attachments: list[Attachment] = ()) -> EngineerJob:
         """A new job: a component is planned first, a repair is made at once. It waits its turn.
         With ``thread_id`` it goes on with that conversation, told what came of it before."""
         if not self.engineer_available():
@@ -220,21 +222,25 @@ class Engineering:
             decision_id=decision_id,
             improvement_id=improvement_id,
             budget_usd=settings.engineer_budget_usd if budget_usd is None else budget_usd,
-            messages=[EngineerMessage(role="lead" if origin == "lead" else "user", text=request)],
+            attachments=list(attachments),
+            messages=[EngineerMessage(role="lead" if origin == "lead" else "user", text=request, attachments=list(attachments))],
         )
         self._engineer_save(job)
         self._engineer_kick()
         return job
 
-    def engineer_reply(self, job_id: str, text: str, choice: Optional[str] = None) -> EngineerJob:
+    def engineer_reply(self, job_id: str, text: str, choice: Optional[str] = None,
+                       attachments: list[Attachment] = ()) -> EngineerJob:
         """The user answers a question, or asks for a plan or a change to be redone differently."""
         job = self._engineer_job(job_id)
-        said = "\n".join(filter(None, [choice, (text or "").strip()]))
+        said = "\n".join(filter(None, [choice, (text or "").strip()])) or ("（见附件）" if attachments else "")
         if not said:
             raise EngineerError("请写下你的回复。")
         if job.status not in ENGINEER_WAITING:
             raise EngineerError("平台工程师现在不在等你回复。")
-        job.messages.append(EngineerMessage(role="user", text=said))
+        job.messages.append(EngineerMessage(role="user", text=said, attachments=list(attachments)))
+        known = {item.id for item in job.attachments}
+        job.attachments += [item for item in attachments if item.id not in known]
         if job.status == "plan_ready":
             job.phase = "plan"
         elif job.status == "ready":
@@ -416,7 +422,7 @@ class Engineering:
             try:
                 result = await self._engineer_charged(job, model.id, lambda budget, model=model: self.providers.complete(
                     model.id, prompt, workspace, spend_ok=budget,
-                    cli_timeout=settings.repair_call_minutes * 60,
+                    cli_timeout=settings.repair_call_minutes * 60, attachments=job.attachments,
                     allow_api_fallback=False, act=model.channel != "cli", repair=False))
                 return result.text
             except asyncio.CancelledError:
@@ -542,12 +548,12 @@ class Engineering:
         await self._continue_after_answer(run.id)
 
     def engineer_join(self, run_id: str, call: dict, origin: str, node_id: Optional[str] = None,
-                      decision_id: Optional[str] = None) -> tuple[Optional[EngineerJob], str]:
+                      decision_id: Optional[str] = None, attachments: list[Attachment] = ()) -> tuple[Optional[EngineerJob], str]:
         """Bring the platform engineer into a task's conversation with the lead: a job tied to the
         task, which does not hold it. Returns the job, or None and why it could not be taken."""
         try:
             job = self.engineer_request(call["request"], call.get("kind") or "repair", origin, run_id=run_id,
-                                        node_id=node_id, decision_id=decision_id)
+                                        node_id=node_id, decision_id=decision_id, attachments=attachments)
         except EngineerError as exc:
             return None, str(exc)
         self.emit(run_id, "run.engineer_joined", job_id=job.id, job_kind=job.kind, origin=origin, title=job.title)

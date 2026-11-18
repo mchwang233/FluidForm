@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
+import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments } from "./attachments";
 import { Icon } from "./icons";
 import { fileSize } from "./attachments";
 import { isMarkdownFile, MarkdownView } from "./markdown";
@@ -23,7 +24,7 @@ async function request(url: string, init?: RequestInit) {
   return body;
 }
 
-export type ChangeOptions = { allow_network: boolean; use_cli: boolean };
+export type ChangeOptions = { allow_network: boolean; use_cli: boolean; attachments?: string[] };
 export type ChangeRequest = (prompt: string, budget: number, options: ChangeOptions) => Promise<string | null>;
 const CHANGEABLE = new Set(["succeeded", "failed", "cancelled", "incomplete"]);
 
@@ -33,14 +34,14 @@ function ChangePanel({ run, onSubmit, onClose }: { run: ResultRun; onSubmit: Cha
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   // The change starts with the earlier task's settings.
   const [network, setNetwork] = useState(!!run.allow_network), [cli, setCli] = useState(run.use_cli ?? true);
-  const box = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null), files = useAttachments(API_BASE);
   useEffect(() => { box.current?.focus(); }, []);
-  const amount = Number(budget), ready = text.trim().length >= 3 && amount > 0 && !busy;
+  const amount = Number(budget), ready = text.trim().length >= 3 && amount > 0 && !busy && !files.uploading;
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!ready) return;
     setBusy(true); setError("");
-    try { const problem = await onSubmit(text.trim(), amount, { allow_network: network, use_cli: cli }); if (problem) setError(problem); }
+    try { const problem = await onSubmit(text.trim(), amount, { allow_network: network, use_cli: cli, ...(files.ids.length ? { attachments: files.ids } : {}) }); if (problem) setError(problem); }
     catch (failure) { setError(errorText(failure)); }
     finally { setBusy(false); }
   }
@@ -49,10 +50,12 @@ function ChangePanel({ run, onSubmit, onClose }: { run: ResultRun; onSubmit: Cha
       <b>需求变更</b>
       <small>在当前结果上继续：沿用同一个{run.project_dir ? "项目" : "工作目录"}和已有文件，先生成计划，你确认后再执行。</small>
     </div>
-    <textarea ref={box} aria-label="新的需求" rows={4} maxLength={20000} value={text} onChange={event => setText(event.target.value)}
+    <textarea ref={box} aria-label="新的需求" rows={4} maxLength={20000} value={text} onChange={event => setText(event.target.value)} {...takesFiles(files)}
       onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
       placeholder="要新增或修改什么？例如：给待办加上到期提醒；把登录改成邮箱验证码；修复手机上按钮重叠。" />
+    <AttachmentTray attachments={files} />
     <div className="change-actions">
+      <ClipButton onFiles={files.add} />
       <label className="budget-field">预算上限 <span>$</span><input type="number" min="0.01" step="any" inputMode="decimal" aria-label="需求变更的预算上限（美元）" value={budget} onChange={event => setBudget(event.target.value)} /></label>
       <label className="switch" title="关闭后只使用按量计费的 API 模型"><input type="checkbox" checked={cli} onChange={event => setCli(event.target.checked)} /><span />允许使用会员 CLI</label>
       <label className="switch" title="执行命令时可以访问互联网（下载依赖、调用外部接口、部署），本机上的服务仍然访问不到"><input type="checkbox" checked={network} onChange={event => setNetwork(event.target.checked)} /><span />允许联网</label>

@@ -1,6 +1,7 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
+import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type Attachment } from "./attachments";
 import { Composer, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
 import type { EngineerJob, EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, JoinEngineer, MENTION, tellEngineer, useEngineerJobs, type Act } from "./lead-engineer";
@@ -9,7 +10,7 @@ export type Decision = {
   id: string; node_id?: string | null; event: string; action: string; reason?: string;
   instructions?: string | null; model_id?: string | null; targets?: string[]; engineer_job_id?: string | null; created_at: string;
 };
-export type LeadMessage = { id: string; role: "user" | "lead"; text: string; status: string; created_at: string; engineer_job_id?: string | null };
+export type LeadMessage = { id: string; role: "user" | "lead"; text: string; status: string; created_at: string; engineer_job_id?: string | null; attachments?: Attachment[] };
 export type LeadThinking = { event: string; node_id?: string | null; started_at: string };
 type Repair = Diagnosis & { decision_id?: string | null };
 type RunLike = {
@@ -19,7 +20,7 @@ type RunLike = {
   plan: { nodes: { id: string; title: string }[] };
 };
 type ModelLike = { id: string; display_name: string };
-export type AskLead = (text: string) => Promise<string | null>;
+export type AskLead = (text: string, attachments?: string[]) => Promise<string | null>;
 
 const EVENTS: Record<string, string> = {
   attempt_failed: "尝试失败", verify_failed: "验证没通过", user_answer: "你的回答", all_done: "全部步骤完成后检查",
@@ -104,7 +105,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
     if (opened || (count > shown.current.count && following.current)) end.current?.scrollIntoView?.({ block: "end" });
     shown.current = { run: run.id, count };
   }, [run.id, count]);
-  const send = (text: string) => MENTION.test(text) ? tellEngineer(text, run.id, jobs, act) : onAsk(text);
+  const send = (text: string, files: string[] = []) => MENTION.test(text) ? tellEngineer(text, run.id, jobs, act, files) : onAsk(text, files);
   const answering = (run.lead_messages ?? []).some(item => item.status === "pending");
   const repairIds = leadRepairIds(run.diagnoses);
   const repairs = (run.diagnoses ?? []).filter(item => repairIds.has(item.id));
@@ -265,7 +266,7 @@ function QuestionMessage({ item, step, waiting, onReply }: { item: Diagnosis; st
 }
 
 function ChatMessage({ item, who }: { item: LeadMessage; who?: string | null }) {
-  if (item.role === "user") return <UserMessage message={{ text: item.text, created_at: item.created_at }} />;
+  if (item.role === "user") return <UserMessage message={{ text: item.text, created_at: item.created_at, attachments: item.attachments }} />;
   return <article className="dx-msg dx-ai lead-said">
     <LeadMeta note="回复" at={item.created_at} who={who} />
     {item.status === "pending"
@@ -277,13 +278,14 @@ function ChatMessage({ item, who }: { item: LeadMessage; who?: string | null }) 
 
 function AskBox({ disabled, onAsk, engineer, chat = false }: { disabled: boolean; onAsk: AskLead; engineer: boolean; chat?: boolean }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const form = useRef<HTMLFormElement>(null), box = useRef<HTMLTextAreaElement>(null);
+  const form = useRef<HTMLFormElement>(null), box = useRef<HTMLTextAreaElement>(null), files = useAttachments(API_BASE);
   useEffect(() => { const el = box.current; if (el) { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 200)}px`; } }, [text]);
+  const ready = (!!text.trim() || files.ids.length > 0) && !files.uploading;
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (disabled || busy || !text.trim()) return;
+    if (disabled || busy || !ready) return;
     setBusy(true); setError("");
-    try { const problem = await onAsk(text.trim()); if (problem) setError(problem); else setText(""); }
+    try { const problem = await onAsk(text.trim(), files.ids); if (problem) setError(problem); else { setText(""); files.clear(); } }
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { setBusy(false); }
   }
@@ -292,13 +294,15 @@ function AskBox({ disabled, onAsk, engineer, chat = false }: { disabled: boolean
   }
   return <form ref={form} className="dx-composer compact" onSubmit={submit} aria-label={chat ? "发消息" : "给负责人留言"}>
     <fieldset disabled={disabled || busy}>
-      <div className="dx-input">
+      <div className="dx-input" {...takesFiles(files)}>
+        <AttachmentTray attachments={files} />
         <textarea ref={box} aria-label={chat ? "消息" : "给负责人的消息"} rows={1} maxLength={6000} value={text}
           onChange={event => setText(event.target.value)} onKeyDown={keys}
           placeholder={chat ? "继续问…" : "问负责人进展，或告诉它你的要求…"} title={chat ? undefined : engineer ? "问负责人进展，或用「@平台工程师」直接对平台工程师说" : "问它进展、为什么这样决定，或告诉它你的要求；「@平台工程师」可以把平台工程师拉进来"} />
         <div className="dx-input-bar">
+          <ClipButton onFiles={files.add} />
           <small className="dx-hint">{disabled ? (chat ? "正在回复上一条消息…" : "负责人正在回复上一条消息…") : chat ? "它记得这段对话 · Ctrl+Enter 发送" : "它记得这个任务从规划起的全部经过 · Ctrl+Enter 发送"}</small>
-          <button type="submit" className="primary send-button" disabled={!text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+          <button type="submit" className="primary send-button" disabled={!ready} aria-label="发送">{busy || files.uploading ? <span>{files.uploading ? "上传中…" : "发送中…"}</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
         </div>
       </div>
     </fieldset>

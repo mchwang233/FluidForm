@@ -93,3 +93,38 @@ export function TaskAttachments({ apiBase, attachments }: { apiBase: string; att
     })}
   </ul>;
 }
+
+/** Where the API is (as in src.tsx), for the boxes that do not get it passed down. */
+export const API_BASE: string = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+export type Files = ReturnType<typeof useAttachments>;
+
+/** Every box that takes text takes files too: pasted (a screenshot, files copied in the file
+ * manager) or dropped onto it. Spread onto the textarea, or the box around it. */
+export function takesFiles(files: Files) {
+  return {
+    onPaste: (event: React.ClipboardEvent) => {
+      const pasted = [...(event.clipboardData?.files ?? [])];
+      if (pasted.length) { event.preventDefault(); files.add(pasted); }
+    },
+    onDragOver: (event: React.DragEvent) => { if ([...(event.dataTransfer?.types ?? [])].includes("Files")) event.preventDefault(); },
+    onDrop: (event: React.DragEvent) => {
+      const dropped = [...(event.dataTransfer?.files ?? [])];
+      if (dropped.length) { event.preventDefault(); files.add(dropped); }
+    },
+  };
+}
+
+/** A paperclip for the smaller boxes: choose files instead of pasting them. */
+export function ClipButton({ onFiles }: { onFiles: (files: File[]) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return <>
+    <button type="button" className="ghost clip-button" onClick={() => input.current?.click()} title="添加文件（也可以直接粘贴或拖进来）" aria-label="添加文件"><Icon name="paperclip" size={16} /></button>
+    <input ref={input} type="file" multiple hidden aria-label="选择文件" onChange={event => { onFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
+  </>;
+}
+
+/** The files sent with a message, under it. */
+export function SentFiles({ attachments }: { attachments?: Attachment[] }) {
+  if (!attachments?.length) return null;
+  return <div className="sent-files"><TaskAttachments apiBase={API_BASE} attachments={attachments} /></div>;
+}

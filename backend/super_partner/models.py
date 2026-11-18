@@ -490,6 +490,8 @@ class Attachment(BaseModel):
 class DiagnosisMessage(BaseModel):
     text: str
     choice: Optional[str] = None
+    # Files sent with the reply; they also join the task's own attachments.
+    attachments: list[Attachment] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -561,6 +563,8 @@ class LeadMessage(BaseModel):
     status: str = "done"  # pending (the lead is answering) | done | failed
     # The platform engineer's job the lead brought into the conversation with this answer.
     engineer_job_id: Optional[str] = None
+    # Files the user sent with this message; they also join the task's own attachments.
+    attachments: list[Attachment] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -586,6 +590,7 @@ class EngineerMessage(BaseModel):
     """One line in a platform engineer job's conversation."""
     role: str  # user | engineer | system
     text: str
+    attachments: list[Attachment] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -605,6 +610,8 @@ class EngineerJob(BaseModel):
     # started is its own, and what the user says on in it joins it. ``context`` is what came before.
     thread_id: Optional[str] = None
     context: str = ""
+    # Files the user sent it (with the request or a reply); its model is given them.
+    attachments: list[Attachment] = Field(default_factory=list)
     request: str
     # queued | planning | plan_ready | editing | validating | ready | needs_input | applying, or
     # one of ENGINEER_DONE; ``phase`` is the work a queued job waits to do (plan | edit).
@@ -736,6 +743,9 @@ class ExecutionRun(BaseModel):
     allow_network: bool = False
     project_dir: Optional[str] = None
     attachments: list[Attachment] = Field(default_factory=list)
+    # Which of them the lead has been given (ask_lead); None in records from before files could be
+    # sent mid-task: then a lead that has already spoken had them all.
+    lead_seen_attachments: Optional[list[str]] = None
     # Times a verification node sent work back; capped by max_rework_rounds.
     rework_rounds: int = 0
     # Repository the output was last published to.

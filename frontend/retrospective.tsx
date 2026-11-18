@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments } from "./attachments";
 import { MarkdownView } from "./markdown";
 import { ENGINEER_STATUS, type EngineerJob } from "./engineer";
 
@@ -56,7 +57,6 @@ function Effects({ effects }: { effects: Effect[] }) {
 export function RetrospectivePanel({ apiBase, runId }: { apiBase: string; runId: string }) {
   const [data, setData] = useState<LearningData | null>(null), [options, setOptions] = useState<Preferences | null>(null);
   const [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false);
-  const [reply, setReply] = useState<Record<string, string>>({});
   const base = `${apiBase}/api/tasks/${encodeURIComponent(runId)}/learning`;
   const load = useCallback(async () => { setData(await request(base)); }, [base]);
   useEffect(() => {
@@ -138,8 +138,7 @@ export function RetrospectivePanel({ apiBase, runId }: { apiBase: string; runId:
             {item.engineer_job.status === "plan_ready" ? "批准改进方案" : "应用已验证改动"}</button>}
           {item.engineer_job.status === "needs_input" && <>
             <p>{item.engineer_job.question}</p>
-            <textarea aria-label="回复平台工程师" value={reply[item.id] ?? ""} onChange={e => setReply({ ...reply, [item.id]: e.target.value })} />
-            <button disabled={busy || !reply[item.id]?.trim()} onClick={() => act(`${apiBase}/api/engineer/jobs/${item.engineer_job!.id}/reply`, { text: reply[item.id] })}>回复平台工程师</button>
+            <EngineerReplyBox busy={busy} onSend={body => act(`${apiBase}/api/engineer/jobs/${item.engineer_job!.id}/reply`, body)} />
           </>}
         </div>}
         <Effects effects={item.effects} />
@@ -149,4 +148,18 @@ export function RetrospectivePanel({ apiBase, runId }: { apiBase: string; runId:
       {data.review?.status === "done" && !data.improvements.length && <p className="empty">本次没有证据充分、需要新增的改进项。</p>}
     </>}
   </section>;
+}
+
+/** Answering the platform engineer's question about an improvement: words, files, or both. */
+function EngineerReplyBox({ busy, onSend }: { busy: boolean; onSend: (body: { text: string; attachments?: string[] }) => unknown }) {
+  const [text, setText] = useState(""), files = useAttachments(API_BASE);
+  const ready = (!!text.trim() || files.ids.length > 0) && !files.uploading;
+  return <>
+    <AttachmentTray attachments={files} />
+    <textarea aria-label="回复平台工程师" value={text} onChange={e => setText(e.target.value)} {...takesFiles(files)} />
+    <ClipButton onFiles={files.add} />
+    <button disabled={busy || !ready} onClick={async () => {
+      await onSend({ text, ...(files.ids.length ? { attachments: files.ids } : {}) }); setText(""); files.clear();
+    }}>回复平台工程师</button>
+  </>;
 }

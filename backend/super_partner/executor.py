@@ -1216,11 +1216,26 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
             async def charged(model_id, call):
                 return await self._charged(run, None, model_id, call)
 
+            # Files the lead has not been given yet go with this message: the user may send
+            # some while the task runs (a message, a reply to its question).
+            seen = run.lead_seen_attachments
+            if seen is None:
+                seen = [item.id for item in run.attachments] if run.supervisor and run.supervisor.calls else []
+            given = {item.id: item for item in [*attachments, *(item for item in run.attachments if item.id not in seen)]}
+            sent = list(given.values())
+            lead = self.model_lookup.get(previous or "")
+            if lead and lead.channel != "cli" and lead.supports_vision is False:
+                # An API lead that cannot see images is told of them, not sent them.
+                blind = [item for item in sent if item.kind == "image"]
+                sent = [item for item in sent if item.kind != "image"]
+                if blind:
+                    prompt += "\n\n(The user also sent images you cannot see: " + ", ".join(item.name for item in blind) + ".)"
             text, session = await supervisor.ask(self.providers, list(self.model_lookup.values()),
-                                                 self._configured(run), run, prompt, charged, attachments)
+                                                 self._configured(run), run, prompt, charged, sent)
             async with self.locks.setdefault(run_id, asyncio.Lock()):
                 latest = self.db.get_run(run_id)
                 latest.supervisor = session
+                latest.lead_seen_attachments = list(dict.fromkeys([*seen, *given]))
                 latest.engineer_seen.update({job.id: job.status for job in news})
                 self._save(latest)
             if session.model_id != previous:

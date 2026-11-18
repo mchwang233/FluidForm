@@ -296,3 +296,74 @@ async def test_a_conversation_message_carries_attachments_to_either_kind_of_mode
     table = next(arg for arg in codex if "filesystem=" in arg)
     assert all(f'"{folder}" = "read"' in table for folder in folders)
     assert set(claude[claude.index("--add-dir") + 1:][:2]) == folders
+
+
+async def test_files_sent_later_in_a_conversation_reach_the_lead_once_and_join_the_task(task_api, monkeypatch):
+    api, client = task_api
+    from super_partner import attachments as files
+    sent = chatting(api, monkeypatch)
+    chat = (await client.post("/api/chats", json={"message": "看看这个"}, headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    log = files.save("trace.log", b"Traceback: KeyError 'id'\n")
+    # A file alone is a message.
+    response = await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "", "attachments": [log.id]}, headers=ORIGIN)
+    assert response.status_code == 202, response.text
+    await api.executor.lead_tasks[chat["id"]]
+    await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "怎么修？"}, headers=ORIGIN)
+    await api.executor.lead_tasks[chat["id"]]
+    assert sent.attached == [[], ["trace.log"], []]
+    run = api.db.get_run(chat["id"])
+    assert [item.name for item in run.attachments] == ["trace.log"]
+    assert [(m.text, [a.name for a in m.attachments]) for m in run.lead_messages if m.role == "user"] == [
+        ("看看这个", []), ("（见附件）", ["trace.log"]), ("怎么修？", [])]
+    # Sent with a task, it is the task's: not discarded on its own.
+    assert (await client.delete(f"/api/attachments/{log.id}", headers=ORIGIN)).status_code == 409
+    assert (await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": ""}, headers=ORIGIN)).status_code == 422
+    assert (await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "x", "attachments": ["0" * 32]},
+                              headers=ORIGIN)).status_code == 422
+
+
+async def test_a_lead_that_spoke_before_files_could_be_sent_along_is_not_sent_them_again(task_api, monkeypatch):
+    api, client = task_api
+    from super_partner import attachments as files
+    sent = chatting(api, monkeypatch)
+    chat = (await client.post("/api/chats", json={"message": "看看", "attachments": [files.save("a.log", b"x\n").id]},
+                              headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    run = api.db.get_run(chat["id"])
+    run.lead_seen_attachments = None  # as saved before
+    api.db.save_run(run)
+    await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "然后呢？"}, headers=ORIGIN)
+    await api.executor.lead_tasks[chat["id"]]
+    assert sent.attached == [["a.log"], []]
+
+
+async def test_an_answer_to_the_leads_question_can_carry_files(task_api, monkeypatch):
+    api, client = task_api
+    from super_partner import attachments as files
+    from super_partner.models import Diagnosis
+    run = ExecutionRun(id="asked", prompt="p", status=RunStatus.PAUSED, budget_usd=1, waiting_diagnosis_id="q",
+                       plan=TaskPlan(summary="s", nodes=[TaskNode(id="a", title="a", instructions="i", capability="coding")]),
+                       diagnoses=[Diagnosis(id="q", trigger="lead", node_id="a", question="哪个界面？")])
+    api.db.save_run(run)
+    answered = []
+    monkeypatch.setattr(api.executor, "start_lead_answer", lambda run_id, question_id: answered.append(question_id))
+    shot = files.save("screen.png", PNG)
+    response = await client.post("/api/tasks/asked/diagnoses/q/reply", json={"attachments": [shot.id]}, headers=ORIGIN)
+    assert response.status_code == 200, response.text
+    saved = api.db.get_run("asked")
+    assert answered == ["q"] and [item.name for item in saved.attachments] == ["screen.png"]
+    assert [a.name for a in saved.diagnoses[0].messages[-1].attachments] == ["screen.png"]
+
+
+async def test_a_lead_that_cannot_see_images_is_told_of_them_instead(task_api, monkeypatch):
+    api, client = task_api
+    from super_partner import attachments as files
+    sent = chatting(api, monkeypatch)
+    monkeypatch.setitem(api.executor.model_lookup, BEST.id, BEST.model_copy(update={"supports_vision": False}))
+    chat = (await client.post("/api/chats", json={"message": "你好", "model_id": BEST.id}, headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    shot, log = files.save("screen.png", PNG), files.save("a.log", b"x\n")
+    await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "看图", "attachments": [shot.id, log.id]}, headers=ORIGIN)
+    await api.executor.lead_tasks[chat["id"]]
+    assert sent.attached[-1] == ["a.log"] and "images you cannot see: screen.png" in sent[-1][2]

@@ -1,6 +1,7 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
+import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachments } from "./attachments";
 import { when } from "./diagnosis";
 import { ENGINEER_STATUS, type EngineerJob, type EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, kindOf, useEngineerJobs } from "./lead-engineer";
@@ -270,7 +271,7 @@ function Result({ job, onRecords }: { job: EngineerJob; onRecords: (jobId?: stri
 function Message({ job, message, runs, onOpenRun }: { job: EngineerJob; message: EngineerMessage; runs: RunRef[]; onOpenRun: (id: string) => void }) {
   if (message.role === "system") return <p className="platform-system">{message.text} · {when(message.created_at)}</p>;
   const text = message.text.replace(/^@平台工程师\s*/, "");
-  if (message.role === "user") return <div className="platform-me"><Folded text={text} plain /><small>{when(message.created_at)}</small></div>;
+  if (message.role === "user") return <div className="platform-me">{!(text === "（见附件）" && message.attachments?.length) && <Folded text={text} plain />}<SentFiles attachments={message.attachments} /><small>{when(message.created_at)}</small></div>;
   const lead = message.role === "lead";
   const run = job.run_id ? runs.find(item => item.id === job.run_id) : undefined;
   return <article className="platform-msg">
@@ -297,29 +298,35 @@ function PlatformComposer({ act, replyTo, threadId, disabled }: {
   act: (path: string, body?: unknown) => Promise<string | null>; replyTo?: EngineerJob; threadId?: string; disabled: boolean;
 }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const box = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null), files = useAttachments(API_BASE);
+  // A reply may be files alone; a new request says what it is for.
+  const ready = (!!text.trim() || (!!replyTo && files.ids.length > 0)) && !files.uploading;
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const said = text.trim();
-    if (!said || busy) return;
+    const said = text.trim(), attached = files.ids.length ? { attachments: files.ids } : {};
+    if (!ready || busy) return;
     setBusy(true); setError("");
     const problem = replyTo
-      ? await act(`/api/engineer/jobs/${encodeURIComponent(replyTo.id)}/reply`, { text: said })
-      : await act("/api/engineer/jobs", { request: said, kind: kindOf(said), ...(threadId ? { thread_id: threadId } : {}) });
+      ? await act(`/api/engineer/jobs/${encodeURIComponent(replyTo.id)}/reply`, { text: said, ...attached })
+      : await act("/api/engineer/jobs", { request: said, kind: kindOf(said), ...(threadId ? { thread_id: threadId } : {}), ...attached });
     setBusy(false);
-    if (problem) setError(problem); else setText("");
+    if (problem) setError(problem); else { setText(""); files.clear(); }
   }
   function keys(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
   }
   return <form className="platform-composer" onSubmit={submit} aria-label="给平台工程师留言">
     {replyTo && <p className="platform-reply-to">回复「{headlineOf(replyTo)}」</p>}
-    <div className="platform-input">
+    <div className="platform-input" {...takesFiles(files)}>
+      <AttachmentTray attachments={files} />
       <textarea ref={box} aria-label="给平台工程师的消息" rows={2} maxLength={20000} value={text} disabled={disabled || busy}
         onChange={event => setText(event.target.value)} onKeyDown={keys}
         placeholder={replyTo ? "写下要改的地方，或回答它的问题…" : threadId ? "接着说…" : "跟平台工程师说要加什么、修什么…（开始一段新对话）"} />
-      <button type="submit" className="primary send-button" disabled={disabled || busy || !text.trim()} title="Ctrl + Enter" aria-label="发送">
-        {busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+      <div className="platform-input-bar">
+        <ClipButton onFiles={files.add} />
+        <button type="submit" className="primary send-button" disabled={disabled || busy || !ready} title="Ctrl + Enter" aria-label="发送">
+          {busy || files.uploading ? <span>{files.uploading ? "上传中…" : "发送中…"}</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+      </div>
     </div>
     {error && <p className="error" role="alert">{error}</p>}
   </form>;

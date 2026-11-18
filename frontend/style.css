@@ -1527,3 +1527,18 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .lead-panel .lead-repair button.ghost:hover,.lead-panel .lead-repair button.link:hover{color:var(--text)}
 .lead-panel .lead-repair .engineer-actions{margin-top:6px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .lead-panel .lead-repair .engineer-actions button.primary{padding:5px 14px;border-radius:999px;font-size:12.5px}
+/* Files in every box: a paperclip in its bar, what was added above the text, what was sent under the message. */
+.clip-button{flex:none;width:30px;height:30px;padding:0;display:inline-grid;place-items:center;border:0;border-radius:999px;background:transparent;color:var(--muted)}
+.clip-button:hover{background:var(--panel-2);color:var(--text)}
+.dx-input>.attachment-tray,.platform-input>.attachment-tray{padding:0 0 10px}
+.dx-input>.attachment-tray{padding:10px 12px 0}
+.lead-panel .dx-input>.attachment-tray{padding:0 0 10px}
+.dx-input-bar .clip-button{margin-right:auto}
+.dx-input-bar .clip-button+.dx-hint{margin-right:auto;margin-left:4px}
+.platform-input-bar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.platform-input .platform-input-bar .send-button{align-self:auto}
+.change-actions>.clip-button{margin-right:2px}
+.sent-files .attachment-tray{padding:6px 0 0;justify-content:flex-end}
+.sent-files .attachment-chip{background:var(--panel)}
+.platform-me .sent-files .attachment-tray{justify-content:flex-end}
+.engineer-join>.attachment-tray{padding:0 0 8px}

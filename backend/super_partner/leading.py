@@ -11,9 +11,11 @@ from typing import Optional
 from uuid import uuid4
 
 from . import capabilities, contracts, quality, replan, supervisor
+from .attachments import attach
 from .budget import BudgetExceeded
 from .config import settings
 from .models import (
+    Attachment,
     Decision,
     Diagnosis,
     DiagnosisStatus,
@@ -398,7 +400,7 @@ class Leading:
             self._save(run)
         self.emit(run_id, "run.capabilities_proposed", names=[card.name for card in cards])
 
-    def start_lead_chat(self, run_id: str, text: str) -> bool:
+    def start_lead_chat(self, run_id: str, text: str, attachments: list[Attachment] = ()) -> bool:
         """The user writes to the lead: the message and a pending reply are saved at once, and the
         lead answers in the background. False if it is still answering an earlier message."""
         task = self.lead_tasks.get(run_id)
@@ -409,7 +411,8 @@ class Leading:
             if message.status == "pending":
                 # Its answer was lost (a restart while the lead was answering, say).
                 message.status, message.text = "failed", "这条回复被中断了，请重新提问。"
-        run.lead_messages += [LeadMessage(role="user", text=text), LeadMessage(role="lead", status="pending")]
+        attach(run, attachments)
+        run.lead_messages += [LeadMessage(role="user", text=text, attachments=list(attachments)), LeadMessage(role="lead", status="pending")]
         reply_id = run.lead_messages[-1].id
         self._save(run)
         self.emit(run_id, "run.lead_message", role="user", text=text)
@@ -422,9 +425,9 @@ class Leading:
             run = self.db.get_run(run_id)
             # A chat is only a conversation; a task's lead answers as the lead who follows it.
             prompt = supervisor.chat_opening(run, text) if run.kind == "chat" else supervisor.chat_message(text)
-            # A chat's attachments come with its first message, which opens the conversation.
-            first = run.kind == "chat" and not (run.supervisor and run.supervisor.calls)
-            answer, status = await self.ask_lead(run_id, prompt, run.attachments if first else ()), "done"
+            # The files sent with this message (and a chat's first ones) are among the task's
+            # attachments the lead has not seen yet; ask_lead gives them to it.
+            answer, status = await self.ask_lead(run_id, prompt), "done"
             # The lead may bring the platform engineer in at once.
             answer, call = supervisor.split_engineer(answer)
             if call:

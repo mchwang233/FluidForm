@@ -118,6 +118,20 @@ def resolve(ids: list[str]) -> list[Attachment]:
     return found
 
 
+# A task gathers files as the user sends them along the way (attach); at most this many in all.
+MAX_TASK_ATTACHMENTS = 50
+
+
+def attach(run, attachments: list[Attachment]) -> None:
+    """Files the user sent with a message join the task's own attachments, so its lead and its
+    later steps see them as they see the files it was started with."""
+    known = {item.id for item in run.attachments}
+    new = [item for item in attachments if item.id not in known]
+    if len(run.attachments) + len(new) > MAX_TASK_ATTACHMENTS:
+        raise AttachmentError(f"一个任务最多附加 {MAX_TASK_ATTACHMENTS} 个文件。")
+    run.attachments += new
+
+
 def describe(attachments: list[Attachment], with_paths: bool) -> str:
     """The prompt section naming the attachments, with local paths for CLI agents."""
     if not attachments:

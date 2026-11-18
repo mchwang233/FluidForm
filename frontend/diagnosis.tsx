@@ -1,7 +1,9 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachments, type Attachment } from "./attachments";
 import { MarkdownView } from "./markdown";
 
-export type DiagnosisMessage = { text: string; choice?: string | null; created_at?: string };
+const FILES_ONLY = "（见附件）";
+export type DiagnosisMessage = { text: string; choice?: string | null; created_at?: string; attachments?: Attachment[] };
 export type Diagnosis = {
   id: string; trigger: string; node_id?: string | null; model_id?: string | null; status: string;
   report?: string | null; advice?: string | null; verdict?: string | null; user_action?: string | null;
@@ -13,7 +15,7 @@ type RunLike = {
   plan: { nodes: { id: string; title: string }[] };
 };
 type ModelLike = { id: string; display_name: string };
-export type SendReply = (diagnosisId: string, body: { text: string; choice?: string }) => Promise<string | null>;
+export type SendReply = (diagnosisId: string, body: { text: string; choice?: string; attachments?: string[] }) => Promise<string | null>;
 
 const VERDICTS: Record<string, { label: string; tone: string; note: (model: string, item: Diagnosis) => string }> = {
   fixed: { label: "已修复环境", tone: "ok", note: model => `${model} 已修复环境，这一步会重新执行。` },
@@ -97,7 +99,9 @@ function AssistantMessage({ item, model, node, run }: { item: Diagnosis; model: 
 export function UserMessage({ message }: { message: DiagnosisMessage }) {
   return <div className="dx-msg dx-user" aria-label="你的诊断回复">
     {message.choice && <span className="dx-choice-tag">✓ {message.choice}</span>}
-    {message.text && <p>{message.text}</p>}
+    {/* Files sent alone are saved as （见附件）; the files say it. */}
+    {message.text && !(message.text === FILES_ONLY && message.attachments?.length) && <p>{message.text}</p>}
+    <SentFiles attachments={message.attachments} />
     {message.created_at && <small>{when(message.created_at)}</small>}
   </div>;
 }
@@ -107,16 +111,17 @@ export function Composer({ item, waiting, disabled, onReply, sendLabel = "发送
 }) {
   const [text, setText] = useState(""), [choice, setChoice] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false), form = useRef<HTMLFormElement>(null), box = useRef<HTMLTextAreaElement>(null);
+  const files = useAttachments(API_BASE), ready = (!!text.trim() || !!choice || files.ids.length > 0) && !files.uploading;
   const choices = item.choices ?? [], asking = !!item.question || choices.length > 0;
   // The box grows with what is typed, up to a limit.
   useEffect(() => { const el = box.current; if (el) { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 240)}px`; } }, [text]);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (disabled || submitting.current || (!text.trim() && !choice)) return;
+    if (disabled || submitting.current || !ready) return;
     submitting.current = true; setBusy(true); setError("");
     try {
-      const problem = await onReply(item.id, { text: text.trim(), ...(choice ? { choice } : {}) });
-      if (problem) setError(problem); else { setText(""); setChoice(""); }
+      const problem = await onReply(item.id, { text: text.trim(), ...(choice ? { choice } : {}), ...(files.ids.length ? { attachments: files.ids } : {}) });
+      if (problem) setError(problem); else { setText(""); setChoice(""); files.clear(); }
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -135,14 +140,16 @@ export function Composer({ item, waiting, disabled, onReply, sendLabel = "发送
         </label>)}
       </div>}
       {/* One box: the text on top, the hint and the send button in its bottom bar. */}
-      <div className="dx-input">
+      <div className="dx-input" {...takesFiles(files)}>
+        <AttachmentTray attachments={files} />
         <textarea ref={box} aria-label="补充你的想法" rows={asking ? 2 : 1} maxLength={6000} value={text}
           onChange={event => setText(event.target.value)} onKeyDown={keys}
           placeholder={placeholder ?? (choices.length ? "补充说明（可选）：限制条件、你的方案，或纠正诊断的判断" : "告诉诊断你的想法：补充信息、你已经做了什么，或纠正它的判断")} />
         <div className="dx-input-bar">
+          <ClipButton onFiles={files.add} />
           <small className="dx-hint">{disabled ? "当前诊断或平台修复完成后，可以继续回复。"
             : choice ? `已选「${choice}」，再点一次可取消 · Ctrl+Enter 发送` : "可以只选方案、只写文字，或两者都给 · Ctrl+Enter 发送"}</small>
-          <button type="submit" className="primary" disabled={!text.trim() && !choice}>{busy ? "发送中…" : sendLabel}</button>
+          <button type="submit" className="primary" disabled={!ready}>{busy ? "发送中…" : files.uploading ? "上传中…" : sendLabel}</button>
         </div>
       </div>
     </fieldset>

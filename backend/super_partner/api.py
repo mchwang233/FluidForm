@@ -101,7 +101,8 @@ class NetworkAccess(BaseModel):
 
 
 class LeadQuestion(BaseModel):
-    message: str = Field(min_length=1, max_length=20_000)
+    message: str = Field(default="", max_length=20_000)
+    attachments: list[str] = Field(default_factory=list)
 
 
 class ConfirmTask(BaseModel):
@@ -111,6 +112,7 @@ class ConfirmTask(BaseModel):
 class DiagnosisReply(BaseModel):
     text: str = Field(default="", max_length=6000)
     choice: Optional[str] = Field(default=None, max_length=300)
+    attachments: list[str] = Field(default_factory=list)
 
 
 class ProviderKey(BaseModel):
@@ -252,11 +254,21 @@ class EngineerRequest(BaseModel):
     budget_usd: Optional[float] = Field(default=None, ge=0, le=100)
     # Go on with this conversation (engineer.thread_of); a new one when empty.
     thread_id: Optional[str] = Field(default=None, max_length=200)
+    attachments: list[str] = Field(default_factory=list)
 
 
 class EngineerReply(BaseModel):
     text: str = Field(default="", max_length=20_000)
     choice: Optional[str] = Field(default=None, max_length=300)
+    attachments: list[str] = Field(default_factory=list)
+
+
+def _attached(ids: list[str]) -> list[Attachment]:
+    """The files sent with a message, or 422 when one is gone or there are too many."""
+    try:
+        return files.resolve(ids)
+    except files.AttachmentError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 def _engineer(action):
@@ -279,7 +291,8 @@ def engineer_overview(run_id: Optional[str] = None):
 async def engineer_join(run_id: str, body: EngineerRequest):
     """The user brings the platform engineer into the task's conversation with its lead."""
     get_task(run_id)
-    job, problem = executor.engineer_join(run_id, {"request": body.request, "kind": body.kind}, "user")
+    job, problem = executor.engineer_join(run_id, {"request": body.request, "kind": body.kind}, "user",
+                                          attachments=_attached(body.attachments))
     if not job:
         raise HTTPException(409, problem)
     return job
@@ -289,13 +302,15 @@ async def engineer_join(run_id: str, body: EngineerRequest):
 async def engineer_request(body: EngineerRequest):
     """Ask the platform engineer for a repair (applied once checked) or a component (planned
     first; applied once the user approves the checked change)."""
+    attached = _attached(body.attachments)
     return _engineer(lambda: executor.engineer_request(body.request, body.kind, budget_usd=body.budget_usd,
-                                                       thread_id=body.thread_id))
+                                                       thread_id=body.thread_id, attachments=attached))
 
 
 @app.post("/api/engineer/jobs/{job_id}/reply")
 async def engineer_reply(job_id: str, body: EngineerReply):
-    return _engineer(lambda: executor.engineer_reply(job_id, body.text, body.choice))
+    attached = _attached(body.attachments)
+    return _engineer(lambda: executor.engineer_reply(job_id, body.text, body.choice, attached))
 
 
 @app.post("/api/engineer/jobs/{job_id}/approve")
@@ -484,6 +499,8 @@ def delete_attachment(attachment_id: str):
     """Discard an upload removed from the composer before the task was created."""
     if any(item.id == attachment_id for run in db.list_runs() for item in run.attachments):
         raise HTTPException(409, "附件属于已创建的任务，随任务一起删除。")
+    if any(item.id == attachment_id for job in db.engineer_jobs(1000) for item in job.attachments):
+        raise HTTPException(409, "附件已发给平台工程师。")
     if not files.delete(attachment_id):
         raise HTTPException(404, "附件不存在")
 
@@ -990,7 +1007,15 @@ async def ask_lead(run_id: str, body: LeadQuestion):
     """Write to the task's lead, in the conversation it keeps for this task (supervisor.py). The
     message is saved at once; the lead's answer follows in ``lead_messages``."""
     get_task(run_id)
-    if not executor.start_lead_chat(run_id, body.message.strip()):
+    attached = _attached(body.attachments)
+    message = body.message.strip() or ("（见附件）" if attached else "")
+    if not message:
+        raise HTTPException(422, "请写下要说的话，或附上文件。")
+    try:
+        started = executor.start_lead_chat(run_id, message, attached)
+    except files.AttachmentError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not started:
         raise HTTPException(409, "负责人还在回答上一条消息，请稍候。")
     return get_task(run_id)
 
@@ -1124,6 +1149,8 @@ class PromoteChat(BaseModel):
     budget_usd: float = Field(default=2, gt=0, le=10_000)
     use_cli: Optional[bool] = None
     allow_network: bool = False
+    # More files for the task, besides the chat's own.
+    attachments: list[str] = Field(default_factory=list)
 
 
 @app.post("/api/tasks/{run_id}/promote", response_model=ExecutionRun)
@@ -1143,7 +1170,8 @@ async def promote_chat(run_id: str, body: PromoteChat):
     context = "这个任务来自用户和模型的一段对话，对话内容如下（供参考，以“新需求”为准）：\n" + supervisor.chat_transcript(run)
     # The chat's attachments go with it: the planner and the steps see them as a task's own.
     request = CreateTask(prompt=prompt, budget_usd=body.budget_usd, use_cli=use_cli, project_dir=run.project_dir,
-                         allow_network=body.allow_network, attachments=[item.id for item in run.attachments])
+                         allow_network=body.allow_network,
+                         attachments=list(dict.fromkeys([item.id for item in run.attachments] + body.attachments)))
     REPLANNING.add(run_id)
     try:
         plan, session, _, _, background, lessons = await _make_plan(request, context=context)
@@ -1179,11 +1207,17 @@ async def reply_to_diagnosis(run_id: str, diagnosis_id: str, body: DiagnosisRepl
         if (busy and not busy.done()) or executor.platform_pending:
             raise HTTPException(409, "当前诊断或平台修复仍在进行，请完成后提交补充。")
         text, choice = body.text.strip(), body.choice.strip() if body.choice else None
+        attached = _attached(body.attachments)
         if choice and choice not in previous.choices:
             raise HTTPException(422, "所选方案不属于这次诊断，请重新选择。")
-        if not text and not choice:
+        if not text and not choice and not attached:
             raise HTTPException(422, "请选择一个方案或填写你的想法。")
-        previous.messages.append(DiagnosisMessage(text=text, choice=choice))
+        try:
+            # The files join the task's: the lead is given them with its next call, the steps see them.
+            files.attach(run, attached)
+        except files.AttachmentError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        previous.messages.append(DiagnosisMessage(text=text or ("（见附件）" if attached else ""), choice=choice, attachments=attached))
         if choice == diagnosis_module.NETWORK_CHOICE and not run.allow_network:
             # A diagnosis or the lead asked whether the task may use the internet; the answer applies at once.
             run.allow_network = True

@@ -237,8 +237,8 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     }
     if (options.method === "POST" && path.endsWith("/lead")) {
       const id = decodeURIComponent(path.split("/")[3]);
-      const { message } = JSON.parse(options.body);
-      state.leadMessages.push({ id, message });
+      const { message, attachments } = JSON.parse(options.body);
+      state.leadMessages.push({ id, message, ...(attachments ? { attachments } : {}) });
       const current = state.records.find(run => run.id === id);
       const updated = { ...current, lead_messages: [...(current.lead_messages ?? []),
         { id: "m1", role: "user", text: message, status: "done", created_at: "2026-10-16T04:00:00Z" },
@@ -2259,6 +2259,51 @@ test("the platform engineer page lists the capabilities on this machine, to swit
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   assert.deepEqual(state.capabilities.map(item => item.id), ["feishu-reply"]);
   assert.equal(document.querySelectorAll(".capability-shelf .capability").length, 1);
+});
+
+test("files pasted or dropped into the task's conversation and the 平台 box go with the message", async t => {
+  const run = mission("paste-task", "running");
+  run.plan.nodes = [{ id: "a", title: "实现", dependencies: [], status: "running", estimated_cost_usd: 0, attempts: [] }];
+  run.supervisor = { model_id: "cli:codex", calls: 1 };
+  const { state, window, document, act, click } = await setup(t, [run], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => window.setTimeout(resolve, 0)); });
+  const file = name => new window.File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" });
+  const paste = async (target, files) => {
+    const event = new window.Event("paste", { bubbles: true, cancelable: true });
+    event.clipboardData = { files };
+    await act(async () => target.dispatchEvent(event));
+    await settle();
+  };
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
+  const box = document.querySelector('[aria-label="给负责人的消息"]');
+  const send = () => document.querySelector('.lead-panel .dx-composer button[type="submit"]');
+  assert.equal(send().disabled, true);
+  // A screenshot alone can be sent; it shows in the box first, and can be removed.
+  await paste(box, [file("")]);
+  const drop = new window.Event("drop", { bubbles: true, cancelable: true });
+  drop.dataTransfer = { files: [file("log.png")], types: ["Files"] };
+  await act(async () => box.dispatchEvent(drop));
+  await settle();
+  assert.equal(document.querySelectorAll(".lead-panel .dx-composer .attachment-chip").length, 2);
+  await click(document.querySelectorAll(".lead-panel .dx-composer .attachment-remove")[1]);
+  assert.equal(send().disabled, false);
+  await click(send());
+  assert.deepEqual(state.leadMessages, [{ id: "paste-task", message: "", attachments: ["att1".padEnd(32, "0")] }]);
+  assert.equal(document.querySelectorAll(".lead-panel .dx-composer .attachment-chip").length, 0);
+
+  // The 平台 box: a new request carries what was pasted.
+  state.engineer = { available: true, jobs: [] };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  const platformBox = document.querySelector(".platform-composer textarea");
+  await paste(platformBox, [file("bug.png")]);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(platformBox, "修一下截图里的报错");
+    platformBox.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => document.querySelector(".platform-composer").requestSubmit());
+  assert.deepEqual(state.engineerActions.at(-1), { path: "/api/engineer/jobs",
+    body: { request: "修一下截图里的报错", kind: "repair", attachments: ["att3".padEnd(32, "0")] } });
 });
 
 test("the 平台 page lists its conversations beside the one open, each one to go on talking in", async t => {

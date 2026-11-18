@@ -2,7 +2,7 @@ import { PlanChoices } from "./plan-choices";
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ModelProfiles, type Model } from "./model-profiles";
-import { AttachButton, AttachmentTray, TaskAttachments, useAttachments, type Attachment } from "./attachments";
+import { API_BASE, AttachButton, AttachmentTray, TaskAttachments, useAttachments, type Attachment } from "./attachments";
 import { type PlanNode } from "./plan-graph";
 import { PlanView, type PlanPart } from "./plan-parts";
 import { TeamPage, type Employee } from "./team";
@@ -20,7 +20,7 @@ import { ChatDetail, type PromoteOptions } from "./chat";
 import { CapabilityProposals, type CapabilityProposal } from "./capabilities";
 import "./style.css";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = API_BASE;
 type Run = {id:string;status:string;kind?:string;capability_proposals?:CapabilityProposal[];auto_routed?:boolean;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;title?:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate:{low_usd:number;high_usd:number;calibrated_usd?:number|null}}};
 type ReplyToDiagnosis = (run:Run, diagnosisId:string, body:{text:string;choice?:string})=>Promise<string|null>;
 type Provider = {id:string;name:string;configured:boolean;keyring_locked?:boolean};
@@ -287,7 +287,7 @@ export function greeting(mode:"auto"|"task"|"chat",hour=new Date().getHours()):s
   return `${part}，今天想做点什么？`;
 }
 
-function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string)=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
+function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string,attachments?:string[])=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
   const [budget,setBudget]=useState(run?.budget_usd??2),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   // The task's conversation: its lead, and diagnoses no lead ran or asked for.
   const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id));
@@ -302,7 +302,7 @@ function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cance
   if(!run)return <section className="panel detail"><div className="empty big">在左侧选一条记录，或点左上角的“新建”。</div></section>;
   if(run.kind==="chat")return <ChatDetail run={run} auto={!!run.auto_routed} attachments={<TaskAttachments apiBase={API} attachments={run.attachments}/>} model={shortModelName(models.find(item=>item.id===run.supervisor?.model_id)?.display_name??run.supervisor?.model_id??"—")}
     deleteButton={<DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>} onPromote={options=>onPromote(run,options)}
-    conversation={<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={(text=>onAsk(run,text)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}/>;
+    conversation={<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={((text,files)=>onAsk(run,text,files)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}/>;
   const needsConfirm=(run.status==="awaiting_confirmation"||run.status==="paused")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
   const canResume=(run.status==="failed"||run.status==="cancelled"||run.status==="incomplete")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
   const nodes=run.plan.nodes,done=nodes.filter(node=>node.status==="succeeded").length;
@@ -360,7 +360,7 @@ function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cance
     {run.error&&run.status!=="succeeded"&&<div className="error">{run.error}</div>}
     {waiting&&tab!=="chat"&&<div className="chat-alert" role="status"><span>{waiting}</span><button type="button" className="primary" onClick={()=>pick("chat")}>去回复</button></div>}
     <div ref={tabsTop} className="task-tabs-anchor" aria-hidden="true"/><nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],["team","员工"],["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
-    {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={(text=>onAsk(run,text)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}
+    {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={((text,files)=>onAsk(run,text,files)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}
     {/* Diagnoses that run when no lead decides, or that the lead sends to repair something. */}
     {tab==="chat"&&<DiagnosisPanel run={{...run,diagnoses}} models={models} onReply={(id,body)=>onReply(run,id,body)}/>}
     {tab==="progress"&&<PlanView apiBase={API} runId={run.id} runStatus={run.status} nodes={nodes} parts={run.plan.parts} inProject={!!run.project_dir} models={models} onOpenProfile={onOpenModel} reworkRounds={run.rework_rounds}/>}
@@ -458,7 +458,7 @@ function App() {
   async function promoteChat(run:Run,options:PromoteOptions){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/promote`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(options)});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`转成任务失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
   async function setNetwork(run:Run,allow:boolean){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/network`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({allow})});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`修改联网设置失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
   async function postAction(run:Run,action:"pause"|"diagnose",label:string){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/${action}`,{method:"POST"});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`${label}失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
-  async function replyToDiagnosis(run:Run,diagnosisId:string,body:{text:string;choice?:string}){
+  async function replyToDiagnosis(run:Run,diagnosisId:string,body:{text:string;choice?:string;attachments?:string[]}){
     try{
       const response=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/diagnoses/${encodeURIComponent(diagnosisId)}/reply`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
       const updated=await response.json().catch(()=>({}));
@@ -469,9 +469,9 @@ function App() {
       return null;
     }catch(error){return errorText(error)}
   }
-  async function askLead(run:Run,text:string){
+  async function askLead(run:Run,text:string,attachments:string[]=[]){
     try{
-      const response=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/lead`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text})});
+      const response=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/lead`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text,...(attachments.length?{attachments}:{})})});
       const updated=await response.json().catch(()=>({}));
       if(!response.ok)return detailText(updated.detail)||`发送失败（${response.status}）`;
       loadRevision.current++;

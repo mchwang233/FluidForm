@@ -413,3 +413,27 @@ async def test_going_on_with_a_conversation_tells_the_engineer_what_came_before(
     assert task.run_id == "r9" and thread_of(task) == "task:r9"
     with pytest.raises(EngineerError):
         executor.engineer_request("随便", "repair", thread_id="nothing-here")
+
+
+async def test_files_sent_to_the_engineer_are_given_to_its_model(setup, tmp_path, monkeypatch):
+    from super_partner import attachments as files
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    build, _, _ = setup
+    providers = Engineer()
+    executor = build(providers)
+    shot, log = files.save("bug.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 32), files.save("trace.log", b"boom\n")
+    job = executor.engineer_request("加一个导出按钮，像截图这样", attachments=[shot])
+    await idle(executor)
+    executor.engineer_reply(job.id, "", attachments=[log])
+    await idle(executor)
+    assert [item.name for item in providers.kwargs[0]["attachments"]] == ["bug.png"]
+    assert [item.name for item in providers.kwargs[-1]["attachments"]] == ["bug.png", "trace.log"]
+    saved = executor.db.get_engineer_job(job.id)
+    assert [(m.text, [a.name for a in m.attachments]) for m in saved.messages if m.role == "user"] == [
+        ("加一个导出按钮，像截图这样", ["bug.png"]), ("（见附件）", ["trace.log"])]
+
+
+def test_jobs_and_messages_saved_before_files_could_be_sent_load():
+    from super_partner.models import EngineerJob, LeadMessage
+    assert EngineerJob.model_validate({"request": "x", "messages": [{"role": "user", "text": "x"}]}).attachments == []
+    assert LeadMessage.model_validate({"role": "user", "text": "x"}).attachments == []

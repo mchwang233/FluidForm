@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type Attachment } from "./attachments";
 import { CapabilityShelf } from "./capabilities";
 import { PlatformHome, SkillsPage, headlineOf, threadOf } from "./platform";
 import { detailText } from "./mission-history";
@@ -7,7 +8,7 @@ import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
 import { kindOf } from "./lead-engineer";
 
-export type EngineerMessage = { role: "user" | "engineer" | "lead" | "system"; text: string; created_at: string };
+export type EngineerMessage = { role: "user" | "engineer" | "lead" | "system"; text: string; created_at: string; attachments?: Attachment[] };
 export type EngineerJob = {
   id: string; kind: "repair" | "component"; origin: "user" | "lead" | "diagnosis" | "retrospective"; title: string; request: string;
   headline?: string; plan_plain?: string; plain?: string; thread_id?: string | null;
@@ -130,21 +131,26 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
  * what came before (engineer.thread_of); one under way takes it up after the work in hand. */
 function GoOn({ job, act }: { job: EngineerJob; act: Act }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [sent, setSent] = useState(false);
+  const files = useAttachments(API_BASE);
   async function submit(event: FormEvent) {
     event.preventDefault();
     const said = text.trim();
-    if (!said || busy) return;
+    if (!said || busy || files.uploading) return;
     setBusy(true); setError(""); setSent(false);
-    const problem = await act("jobs", { request: said, kind: kindOf(said), thread_id: threadOf(job) });
+    const problem = await act("jobs", { request: said, kind: kindOf(said), thread_id: threadOf(job), ...(files.ids.length ? { attachments: files.ids } : {}) });
     setBusy(false);
-    if (problem) setError(problem); else { setText(""); setSent(true); }
+    if (problem) setError(problem); else { setText(""); files.clear(); setSent(true); }
   }
   return <form className="engineer-go-on" onSubmit={submit} aria-label="接着和平台工程师说">
-    <div className="platform-input">
+    <div className="platform-input" {...takesFiles(files)}>
+      <AttachmentTray attachments={files} />
       <textarea aria-label="接着说" rows={2} maxLength={20000} value={text} onChange={event => setText(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
         placeholder={DONE.has(job.status) ? "接着说：还要改什么、加什么，它会带着这段对话之前的经过去做…" : "接着说：它做完这一项后接着处理…"} />
-      <button type="submit" className="primary send-button" disabled={busy || !text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+      <div className="platform-input-bar">
+        <ClipButton onFiles={files.add} />
+        <button type="submit" className="primary send-button" disabled={busy || files.uploading || !text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+      </div>
     </div>
     {sent && <p className="muted" role="status">已经交给平台工程师，作为这段对话里的新工作。</p>}
     {error && <p className="error" role="alert">{error}</p>}

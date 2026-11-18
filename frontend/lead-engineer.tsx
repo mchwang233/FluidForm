@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useState } from "react";
+import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachments } from "./attachments";
 import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { UserMessage, when } from "./diagnosis";
@@ -65,13 +66,14 @@ export function kindOf(text: string): "repair" | "component" {
 
 /** A message for the platform engineer (``@平台工程师 ...``): an answer to the job waiting for the
  * user, or a new repair job when it has none under way. */
-export async function tellEngineer(text: string, runId: string, jobs: EngineerJob[], act: Act): Promise<string | null> {
+export async function tellEngineer(text: string, runId: string, jobs: EngineerJob[], act: Act, attachments: string[] = []): Promise<string | null> {
   const said = text.replace(MENTION, "").trim();
   if (!said) return "请在 @平台工程师 后面写下要对它说的话。";
+  const files = attachments.length ? { attachments } : {};
   const waiting = jobs.find(job => ENGINEER_WAITING.has(job.status));
-  if (waiting) return act(`/api/engineer/jobs/${encodeURIComponent(waiting.id)}/reply`, { text: said });
+  if (waiting) return act(`/api/engineer/jobs/${encodeURIComponent(waiting.id)}/reply`, { text: said, ...files });
   if (jobs.some(job => !ENGINEER_DONE.has(job.status))) return "平台工程师正在处理这个任务的工作，等它需要你回复时再说。";
-  return act(`/api/tasks/${encodeURIComponent(runId)}/engineer`, { request: said, kind: "repair" });
+  return act(`/api/tasks/${encodeURIComponent(runId)}/engineer`, { request: said, kind: "repair", ...files });
 }
 
 /** A long report shows its first paragraph; the rest opens on demand, so the chat stays readable. */
@@ -104,8 +106,9 @@ export function EngineerEntry({ job, message, first, last, act, onOpenEngineer, 
     ? said.length > 240
       ? <div className="dx-msg dx-user engineer-said"><p>{said.slice(0, 160)}…</p>
           <details><summary>完整内容</summary><p>{said}</p></details>
+          <SentFiles attachments={message.attachments} />
           <small>{when(message.created_at)}</small></div>
-      : <UserMessage message={{ text: said, created_at: message.created_at }} />
+      : <UserMessage message={{ text: said, created_at: message.created_at, attachments: message.attachments }} />
     : message.role === "lead"
       ? <article className="dx-msg dx-ai">
           <div className="dx-meta"><span className="dx-avatar" aria-hidden="true">负</span><b>负责人</b><small>请平台工程师加入 · {when(message.created_at)}</small></div>
@@ -156,26 +159,28 @@ function JobCard({ job, act, onOpenEngineer }: { job: EngineerJob; act: Act; onO
 /** The user brings the platform engineer into the task's conversation. */
 export function JoinEngineer({ runId, act, onDone }: { runId: string; act: Act; onDone: () => void }) {
   const [kind, setKind] = useState<"repair" | "component">("repair"), [text, setText] = useState("");
-  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState(""), files = useAttachments(API_BASE);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || files.uploading) return;
     setBusy(true); setError("");
-    const problem = await act(`/api/tasks/${encodeURIComponent(runId)}/engineer`, { request: text.trim(), kind });
+    const problem = await act(`/api/tasks/${encodeURIComponent(runId)}/engineer`, { request: text.trim(), kind, ...(files.ids.length ? { attachments: files.ids } : {}) });
     setBusy(false);
-    if (problem) setError(problem); else { setText(""); onDone(); }
+    if (problem) setError(problem); else { setText(""); files.clear(); onDone(); }
   }
   return <form className="engineer-join" onSubmit={submit} aria-label="拉平台工程师进来">
     <div className="engineer-join-kind" role="radiogroup" aria-label="要它做什么">
       {([["repair", "修复问题"], ["component", "添加组件"]] as const).map(([value, label]) =>
         <button type="button" key={value} role="radio" aria-checked={kind === value} className={kind === value ? "on" : ""} onClick={() => setKind(value)}>{label}</button>)}
     </div>
-    <textarea aria-label="要平台工程师做的事" rows={3} maxLength={20000} value={text} onChange={event => setText(event.target.value)}
+    <AttachmentTray attachments={files} />
+    <textarea aria-label="要平台工程师做的事" rows={3} maxLength={20000} value={text} onChange={event => setText(event.target.value)} {...takesFiles(files)}
       placeholder={kind === "repair" ? "平台自身哪里有问题，比如：步骤沙箱连不到宿主机的许可证端口 26585" : "平台缺什么能力，要它添加什么"} />
     <small className="dx-hint">{kind === "repair" ? "修复通过检查后自动生效。" : "组件先写方案给你批准，改好后再由你确认生效。"}它的方案、提问和进度都会出现在这里，负责人也能看到。</small>
     <div className="engineer-join-bar">
+      <ClipButton onFiles={files.add} />
       <button type="button" className="ghost" onClick={onDone}>取消</button>
-      <button type="submit" className="primary" disabled={busy || !text.trim()}>{busy ? "提交中…" : "拉它进来"}</button>
+      <button type="submit" className="primary" disabled={busy || files.uploading || !text.trim()}>{busy ? "提交中…" : "拉它进来"}</button>
     </div>
     {error && <p className="error" role="alert">{error}</p>}
   </form>;

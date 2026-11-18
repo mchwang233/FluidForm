@@ -1,5 +1,6 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments } from "./attachments";
 import { ENGINEER_STATUS, type EngineerJob } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, kindOf, shortTitle, useEngineerJobs } from "./lead-engineer";
 
@@ -39,7 +40,7 @@ export function EngineerChat({ apiBase, runs, tick, onOpenPage, onClose }: {
   const { jobs, act, available } = useEngineerJobs(apiBase, null, tick, true);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
   const [target, setTarget] = useState<string | null>(null);
-  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState(""), files = useAttachments(API_BASE);
   // Finished work folds to its header; the newest and anything under way stay open.
   const [toggled, setToggled] = useState<Set<string>>(new Set());
   const end = useRef<HTMLDivElement>(null);
@@ -52,14 +53,14 @@ export function EngineerChat({ apiBase, runs, tick, onOpenPage, onClose }: {
   useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [jobs.length]);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const said = text.trim();
-    if (!said || busy) return;
+    const said = text.trim(), attached = files.ids.length ? { attachments: files.ids } : {};
+    if (!(said || (replyTo && files.ids.length)) || busy || files.uploading) return;
     setBusy(true); setError("");
     const problem = replyTo
-      ? await act(`/api/engineer/jobs/${encodeURIComponent(replyTo.id)}/reply`, { text: said })
-      : await act("/api/engineer/jobs", { request: said, kind: kindOf(said) });
+      ? await act(`/api/engineer/jobs/${encodeURIComponent(replyTo.id)}/reply`, { text: said, ...attached })
+      : await act("/api/engineer/jobs", { request: said, kind: kindOf(said), ...attached });
     setBusy(false);
-    if (problem) setError(problem); else { setText(""); setTarget(null); }
+    if (problem) setError(problem); else { setText(""); files.clear(); setTarget(null); }
   }
   function keys(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
@@ -100,12 +101,14 @@ export function EngineerChat({ apiBase, runs, tick, onOpenPage, onClose }: {
             : <><span className="engineer-chat-tag new">新需求</span>{waiting.length > 0 && <button type="button" className="link" onClick={() => setTarget(null)}>改为回复等你的那一项</button>}</>}
         </div>
         <fieldset disabled={busy || !available}>
-          <div className="dx-input">
+          <div className="dx-input" {...takesFiles(files)}>
+            <AttachmentTray attachments={files} />
             <textarea aria-label="给平台工程师的消息" rows={2} maxLength={20000} value={text} onChange={event => setText(event.target.value)} onKeyDown={keys}
               placeholder={replyTo ? "回复它的方案或问题，比如要改的地方" : "说要修什么，或要加什么能力"} />
             <div className="dx-input-bar">
+              <ClipButton onFiles={files.add} />
               <small className="dx-hint">Ctrl+Enter 发送</small>
-              <button type="submit" className="primary send-button" disabled={!text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
+              <button type="submit" className="primary send-button" disabled={files.uploading || !(text.trim() || (replyTo && files.ids.length))} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
             </div>
           </div>
         </fieldset>
