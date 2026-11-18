@@ -1,4 +1,5 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { Composer, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
 import type { EngineerJob, EngineerMessage } from "./engineer";
@@ -106,7 +107,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   return <section className={`diagnosis-card dx-panel lead-panel${waiting ? " waiting" : ""}`} aria-label="负责人">
     <div className="diagnosis-head">
       <span className="lead-who"><span className="dx-avatar" aria-hidden="true">🧭</span><b>负责人</b><span className="lead-model">{model(run.supervisor?.model_id)}</span></span>
-      {jobs.length > 0 && <span className="lead-who engineer" title="平台工程师在这个对话里"><span className="dx-avatar engineer-avatar" aria-hidden="true">🛠</span><b>平台工程师</b></span>}
+      {jobs.length > 0 && <span className="lead-who engineer" title="平台工程师在这个对话里"><span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span><b>平台工程师</b></span>}
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
       {!joining && <button type="button" className="ghost lead-invite" onClick={() => setJoining(true)}>拉平台工程师进来</button>}
     </div>

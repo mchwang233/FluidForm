@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from "react";
+import { Icon } from "./icons";
 
 type MissionRecord = {
   id: string;
@@ -232,7 +233,7 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
             <span className={`dot ${run.status}`} />
             <span className="run-text"><b>{run.plan.summary}</b>
               <small><span className={`run-status ${run.status}`}>{statusLabel(run.status)}</span>{total > 0 && <> · {done}/{total}</>} · {formatUsd(run.actual_cost_usd)}{run.created_at && <> · {relativeTime(run.created_at)}</>}</small>
-              {run.project_dir && <small className="run-project" title={run.project_dir}>📁 {folder(run.project_dir)}</small>}
+              {run.project_dir && <small className="run-project" title={run.project_dir}><Icon name="folder" size={12} /> {folder(run.project_dir)}</small>}
               {total > 0 && run.status !== "succeeded" && <span className="run-progress" aria-hidden="true"><i style={{ width: `${(done / total) * 100}%` }} /></span>}
             </span>
           </button>

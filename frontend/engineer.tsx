@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
@@ -78,7 +79,7 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
   return <div className="engineer-page">
     <section className="panel engineer-intro">
       <div className="engineer-intro-head">
-        <span className="dx-avatar engineer-avatar" aria-hidden="true">🛠</span>
+        <span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
         <div>
           <h2>平台工程师</h2>
           <p className="muted">修复 Super Partner 自身的缺陷，或给它添加组件：模型和渠道、工具和技能、界面功能、调度和流程。</p>

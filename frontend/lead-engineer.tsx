@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useState } from "react";
+import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { UserMessage, when } from "./diagnosis";
 import { ENGINEER_STATUS, type EngineerJob, type EngineerMessage } from "./engineer";
@@ -85,7 +86,7 @@ function Folded({ text }: { text: string }) {
 
 function EngineerMeta({ note, at }: { note: string; at: string }) {
   return <div className="dx-meta">
-    <span className="dx-avatar engineer-avatar" aria-hidden="true">🛠</span>
+    <span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
     <b>平台工程师</b>
     <small>{note} · {when(at)}</small>
   </div>;
@@ -111,7 +112,7 @@ export function EngineerEntry({ job, message, first, last, act, onOpenEngineer }
       : message.role === "engineer"
         ? <article className="dx-msg dx-ai lead-engineer-msg"><EngineerMeta note={`${kind} · ${shortTitle(job.title)}`} at={message.created_at} />
             <Folded text={message.text} /></article>
-        : <p className="engineer-system" role="note"><span>🛠 {shortTitle(job.title)} · {message.text} · {when(message.created_at)}</span></p>;
+        : <p className="engineer-system" role="note"><span><Icon name="wrench" size={12} /> {shortTitle(job.title)} · {message.text} · {when(message.created_at)}</span></p>;
   return <>{line}{last && <JobCard job={job} act={act} onOpenEngineer={onOpenEngineer} />}</>;
 }
 

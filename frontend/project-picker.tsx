@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { detailText } from "./mission-history";
 
 type Suggestion = { path: string; name: string; source: "recent" | "found" };
@@ -83,7 +84,7 @@ export function ProjectField({ apiBase, value, onChange, usedProjects }: { apiBa
 
   return <div className="project-field">
     <div className="project-row">
-      <span className="project-icon" aria-hidden="true">📁</span>
+      <span className="project-icon" aria-hidden="true"><Icon name="folder" /></span>
       <div className="project-combo">
         <input ref={inputRef} className="project-input" value={value} spellCheck={false} aria-label="项目目录" role="combobox" aria-expanded={open} aria-autocomplete="list"
           placeholder="项目目录（可选）：点击选择最近或本机的 git 项目，或直接粘贴路径"

@@ -1,4 +1,5 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { ENGINEER_STATUS, type EngineerJob } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, kindOf, shortTitle, useEngineerJobs } from "./lead-engineer";
 
@@ -46,13 +47,13 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
   return <>
     <button type="button" className={`engineer-bubble${open ? " open" : ""}`} aria-expanded={open} aria-label="平台工程师"
       title="和平台工程师聊：修复 Super Partner 自身，或给它添加组件" onClick={() => setOpen(value => !value)}>
-      <span aria-hidden="true">{open ? "×" : "🛠"}</span>
+      <span aria-hidden="true">{open ? "×" : <Icon name="wrench" size={20} />}</span>
       {!open && waiting.length > 0 && <i className="engineer-bubble-badge" title="等你处理">{waiting.length}</i>}
     </button>
     {open && <section className="engineer-chat diagnosis-card" role="dialog" aria-label="平台工程师聊天">
       <div className="engineer-chat-head">
         {/* The same mark as the engineer's avatar in a task's conversation. */}
-        <span className="dx-avatar engineer-avatar engineer-chat-avatar" aria-hidden="true">🛠</span>
+        <span className="dx-avatar engineer-avatar engineer-chat-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
         <div><b>平台工程师</b><small>修复 Super Partner 自身，或给它添加组件</small></div>
         <button type="button" className="modal-close" onClick={() => setOpen(false)} aria-label="关闭平台工程师聊天">×</button>
       </div>

@@ -236,7 +236,7 @@ function TaskDetails({run,onNetwork}:{run:Run;onNetwork:SetNetwork}){
       <div><dt>预算上限</dt><dd>{formatUsd(run.budget_usd)}</dd></div>
       <div><dt>会员 CLI</dt><dd>{run.use_cli?"允许":"不使用"}</dd></div>
       <div><dt>联网</dt><dd><NetworkSwitch run={run} onNetwork={onNetwork}/></dd></div>
-      <div><dt>工作位置</dt><dd>{run.project_dir?`📁 ${run.project_dir}`:"独立的临时工作区"}</dd></div>
+      <div><dt>工作位置</dt><dd>{run.project_dir?<><Icon name="folder" size={12}/> {run.project_dir}</>:"独立的临时工作区"}</dd></div>
       {run.created_at&&<div><dt>创建时间</dt><dd>{new Date(run.created_at).toLocaleString("zh-CN",{hour12:false})}</dd></div>}
     </dl>
     <section><h5>事件记录</h5>{events.length?<ol className="event-log">{events.map(event=><li key={event.id} className={event.kind.replace(".","-")}><time>{new Date(event.created_at).toLocaleTimeString("zh-CN",{hour12:false})}</time>{(text=><span title={text}>{text}</span>)(EVENT_LABELS[event.kind]?.(event.data??{},title)??event.kind)}</li>)}</ol>:<p className="empty">还没有事件。</p>}</section>
@@ -290,14 +290,13 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
   return <section className="panel detail task-page">
     <div className="task-header">
       <div className="task-title">
-        <p className="eyebrow">{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{parent.plan.summary}」</button>:"之前的任务"} · </span>}{planner}{run.project_dir&&<span className="project-path" title={run.project_dir}> · 📁 {run.project_dir}</span>}</p>
+        <p className="eyebrow task-meta"><span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{parent.plan.summary}」</button>:"之前的任务"} · </span>}{planner}{run.project_dir&&<span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13}/> {run.project_dir}</span>}</p>
         <h3 title={run.plan.summary}>{run.plan.summary}</h3>
       </div>
       <div className="task-actions">
-        <span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>
         {(run.status==="succeeded"||run.status==="incomplete")&&tab!=="result"&&<button type="button" className="primary" onClick={()=>pick("result")}>查看结果</button>}
         {canPause&&<button type="button" className="ghost" disabled={busy} onClick={()=>act(onPause)} title="不再启动新步骤；正在运行的步骤会跑完">暂停</button>}
-        {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="排查原因；对已停止的失败步骤执行修复或切换模型，并在现有预算内继续">{diagnosing?"诊断中…":"诊断"}</button>}
+        {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="排查原因；对已停止的失败步骤执行修复或切换模型，并在现有预算内继续"><Icon name="activity"/>{diagnosing?"诊断中…":"诊断"}</button>}
         {canCancelRun(run)&&<button type="button" className="danger" disabled={cancellingId!==null} onClick={()=>onCancel(run)}>{cancellingId===run.id?"取消中…":"取消任务"}</button>}
         <DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>
       </div>

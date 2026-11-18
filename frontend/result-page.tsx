@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { fileSize } from "./attachments";
 import { isMarkdownFile, MarkdownView } from "./markdown";
 import { statusLabel, detailText } from "./mission-history";
@@ -116,11 +117,11 @@ export function ResultPage({ apiBase, run, onBack, onChange, embedded = false }:
       </>}
       <div className="result-actions">
         {onChange && CHANGEABLE.has(run.status) && <button type="button" className="primary change-button" aria-expanded={changing}
-          onClick={() => setChanging(open => !open)} title="在这个结果的基础上增加或修改需求">✎ 需求变更</button>}
-        <a className="button-link primary" href={`${base}/archive`} download>⬇ 另存为 ZIP</a>
-        <button type="button" className="ghost" onClick={copy} disabled={!run.final_result}>{copied ? "已复制" : "复制结果"}</button>
+          onClick={() => setChanging(open => !open)} title="在这个结果的基础上增加或修改需求"><Icon name="edit" />需求变更</button>}
+        <a className="button-link ghost" href={`${base}/archive`} download><Icon name="download" />另存为 ZIP</a>
+        <button type="button" className="ghost" onClick={copy} disabled={!run.final_result}><Icon name="copy" />{copied ? "已复制" : "复制结果"}</button>
         <button type="button" className="ghost github-button" onClick={() => setPublishing(true)} disabled={!canPublish}
-          title={run.project_dir ? "项目任务的改动在你自己的仓库里，请在项目中提交并推送" : run.status !== "succeeded" ? "任务完成后才能上传" : "把输出提交到 GitHub 仓库"}>上传到 GitHub</button>
+          title={run.project_dir ? "项目任务的改动在你自己的仓库里，请在项目中提交并推送" : run.status !== "succeeded" ? "任务完成后才能上传" : "把输出提交到 GitHub 仓库"}><Icon name="upload" />上传到 GitHub</button>
       </div>
     </div>
     {run.status === "incomplete" && <p className="result-incomplete" role="status"><b>任务没有全部完成。</b>{" "}

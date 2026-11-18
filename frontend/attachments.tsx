@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Icon } from "./icons";
 import { detailText } from "./mission-history";
 
 /** A file stored by the API (`POST /api/attachments`). */
@@ -61,7 +62,7 @@ export function useAttachments(apiBase: string) {
 export function AttachButton({ onFiles }: { onFiles: (files: File[]) => void }) {
   const input = useRef<HTMLInputElement>(null);
   return <>
-    <button type="button" className="ghost attach-button" onClick={() => input.current?.click()} title="添加图片或文件，也可以拖进输入框或直接粘贴截图">📎 添加附件</button>
+    <button type="button" className="ghost attach-button" onClick={() => input.current?.click()} title="添加图片或文件，也可以拖进输入框或直接粘贴截图"><Icon name="paperclip" />添加附件</button>
     <input ref={input} type="file" multiple hidden aria-label="选择附件" onChange={event => { onFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
   </>;
 }

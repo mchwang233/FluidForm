@@ -1502,7 +1502,7 @@ test("a finished task's result page starts a requirement change that builds on i
   parent.plan = { ...parent.plan, summary: "待办网页" };
   const context = await setup(t, [parent], [], { openComposer: false });
   const { window, document, state, act, click, button } = context;
-  const change = button("✎ 需求变更");
+  const change = button("需求变更");
   assert.ok(change);
   await click(change);
   const panel = document.querySelector('[aria-label="需求变更"]');
@@ -1527,7 +1527,7 @@ test("a finished task's result page starts a requirement change that builds on i
 
 test("a running task offers no requirement change", async t => {
   const { button } = await setup(t, [mission("busy-task", "running")], [], { openComposer: false });
-  assert.equal(button("✎ 需求变更"), undefined);
+  assert.equal(button("需求变更"), undefined);
 });
 
 test("network access is opt-in per task, at planning and before running", async t => {
@@ -1552,12 +1552,12 @@ test("an incomplete task says what could not be done and why, and offers to redo
     { id: "check", title: "检查线上页面", status: "blocked", model_id: "x:api", dependencies: ["deploy"] },
   ] };
   const { document, state, click, button } = await setup(t, [run], [], { openComposer: false });
-  assert.equal(document.querySelector(".task-actions .pill").textContent, "未能完成");
+  assert.equal(document.querySelector(".detail .pill").textContent, "未能完成");
   // The result opens first, led by the plain statement of what is missing.
   assert.match(document.querySelector(".result-incomplete").textContent, /任务没有全部完成。.*1 个步骤在当前环境中做不到/);
   assert.match(document.querySelector(".result-text").textContent, /沙箱不能联网，没有实际部署/);
   assert.match(document.querySelector(".resume-bar").textContent, /「部署上线」 在当前环境中无法完成/);
-  assert.ok(button("✎ 需求变更"));
+  assert.ok(button("需求变更"));
   await click(button("重做未完成的步骤"));
   assert.equal(state.resumes.length, 1);
   assert.equal(state.resumes[0].id, "deploy-task");
@@ -1566,7 +1566,7 @@ test("an incomplete task says what could not be done and why, and offers to redo
 test("a requirement change starts with the earlier task's network and CLI settings, and can change them", async t => {
   const parent = { ...mission("net-task", "succeeded"), allow_network: true, use_cli: true };
   const { window, document, state, act, click, button } = await setup(t, [parent], [], { openComposer: false });
-  await click(button("✎ 需求变更"));
+  await click(button("需求变更"));
   const panel = document.querySelector('[aria-label="需求变更"]');
   const [cli, network] = [...panel.querySelectorAll(".switch input")];
   assert.equal(cli.checked, true);
