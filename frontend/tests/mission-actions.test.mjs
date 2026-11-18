@@ -2219,9 +2219,11 @@ test("the platform engineer page lists the capabilities on this machine, to swit
     { ...FEISHU, id: "feishu-reply", name: "飞书自动回复", kind: "automation", status: "failed", check_ok: false, check_output: "Exit code 1", created_at: "2026-11-18T07:00:00Z" }];
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
-  // Beside the conversation: what the platform can do; 管理能力 opens the shelf.
-  assert.match(document.querySelector(".platform-side").textContent, /平台现在能做的能力 · 带代码，能直接用.*飞书发消息.*可用.*飞书自动回复.*检查未通过.*技能 · 只有用法说明/s);
-  await click(button("管理能力 ›"));
+  // The 平台 page opens on what the platform can do: capabilities as cards, then skills; 管理 opens the shelf.
+  const overview = document.querySelector(".platform-main").textContent;
+  assert.match(overview, /平台现在能做的.*能力 带代码，能直接用 · 2.*飞书发消息.*可用.*1 个代码文件 · 有说明书.*飞书自动回复.*检查未通过.*技能/s);
+  assert.doesNotMatch(document.querySelector(".platform-side").textContent, /飞书发消息/);
+  await click(button("管理 ›"));
   const shelf = document.querySelector(".capability-shelf");
   const [send, reply] = shelf.querySelectorAll(".capability");
   assert.match(send.textContent, /飞书发消息.*工具.*可用.*python send\.py.*代码.*feishu.*FEISHU_APP_ID.*open\.feishu\.cn.*接飞书.*说明书（SKILL\.md）.*群 ID 在飞书群设置里/s);

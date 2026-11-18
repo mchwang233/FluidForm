@@ -81,7 +81,7 @@ function threadState(thread: Thread): { label: string; tone: string } {
 }
 
 // Conversations the 平台 page lists; older ones are in 全部记录.
-const SHOWN_THREADS = 12;
+const SHOWN_THREADS = 8;
 
 export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities }: {
   apiBase: string; runs: RunRef[]; onOpenRun: (id: string) => void;
@@ -102,37 +102,43 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
       {open ? <ThreadView thread={open} title={threadTitle(open)} act={act} available={available} runs={runs}
         onOpenRun={onOpenRun} onRecords={onRecords} /> : <>
         <header className="platform-head">
-          <h2>平台</h2>
-          <p>跟平台工程师说要加什么能力、修什么问题。改动先在副本里做，测试通过、你点头才生效。</p>
+          <h2>平台现在能做的</h2>
+          <p>能力是任务做出来、你固化下来的代码和说明书，之后的任务会直接用；技能是它知道怎么用的工具。要加什么、修什么，在下面跟平台工程师说。</p>
         </header>
         {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
         {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setOpenId(threadOf(job))} />)}
-        <p className="platform-empty">{all.length ? "开始一段新对话，或在右边接着之前的对话聊。" : "还没有对话。在下面说要加什么能力、修什么问题。"}</p>
+        <div className="platform-section-head"><h3>能力 <small>带代码，能直接用 · {capabilities.length}</small></h3>
+          {!!capabilities.length && <button type="button" className="platform-link" onClick={onCapabilities}>管理 ›</button>}</div>
+        <div className="platform-cards">
+          {capabilities.map(item => <button type="button" key={item.id} className="platform-card" onClick={onCapabilities}>
+            <span className="platform-card-head"><span className="platform-ability-icon"><Icon name={item.kind === "automation" ? "activity" : "wrench"} size={15} /></span>
+              <b>{item.name}</b><span className={`platform-ability-status ${item.status}`}>{item.status === "active" ? (item.kind === "automation" ? "待开启" : "可用") : item.status === "disabled" ? "已停用" : "检查未通过"}</span></span>
+            <span className="platform-card-text">{item.summary}</span>
+            <small>{item.kind === "automation" ? "自动化" : "工具"} · {item.files.length} 个代码文件{item.guide ? " · 有说明书" : ""}</small>
+          </button>)}
+          {!capabilities.length && <div className="platform-card empty">
+            <span className="platform-card-text">还没有能力。任务做出可复用的代码后，在任务的结果页点「固化」，它就带着说明书出现在这里，之后的任务会直接用它。</span>
+          </div>}
+        </div>
+        <div className="platform-section-head"><h3>技能 <small>知道怎么用的工具 · {skills.length}</small></h3></div>
+        <div className="platform-cards">
+          {skills.map(item => <div key={item.name} className="platform-card">
+            <span className="platform-card-head"><span className="platform-ability-icon"><Icon name="file" size={15} /></span>
+              <b>{item.name}</b><span className="platform-ability-status muted">{item.machine ? "本机" : "平台自带"}</span></span>
+            <span className="platform-card-text" title={item.description}>{item.description}</span>
+            {!!item.tools.length && <small>{item.tools.join("、")}</small>}
+          </div>)}
+          {!skills.length && <div className="platform-card empty"><span className="platform-card-text">还没有技能。</span></div>}
+        </div>
         <div className="platform-spacer" />
         <PlatformComposer act={act} disabled={!available} />
       </>}
     </section>
-    <aside className="platform-side" aria-label="平台现在能做的">
-      <h3>平台现在能做的</h3>
-      <p className="platform-side-sub">能力 · 带代码，能直接用</p>
-      <ul className="platform-abilities">
-        {capabilities.map(item => <li key={item.id}>
-          <button type="button" onClick={onCapabilities} title="管理能力">
-            <span className="platform-ability-icon"><Icon name={item.kind === "automation" ? "activity" : "wrench"} size={15} /></span>
-            <span className="platform-ability-text"><b>{item.name}</b><small>{item.summary}</small></span>
-            <span className={`platform-ability-status ${item.status}`}>{item.status === "active" ? (item.kind === "automation" ? "待开启" : "可用") : item.status === "disabled" ? "已停用" : "检查未通过"}</span>
-          </button>
-        </li>)}
-        {!capabilities.length && <li className="muted">还没有。任务做出可复用的代码后，你在结果页固化，它就带着说明书出现在这里。</li>}
-      </ul>
-      {!!capabilities.length && <button type="button" className="platform-link" onClick={onCapabilities}>管理能力 ›</button>}
-      <p className="platform-side-sub">技能 · 只有用法说明</p>
-      <p className="platform-skills" title={skills.map(item => `${item.name}：${item.description}`).join("\n")}>
-        {skills.length ? skills.map(item => item.name).join("、") : "还没有。"}</p>
-
+    <aside className="platform-side" aria-label="对话">
       <div className="platform-side-head"><h3>对话</h3>
         <button type="button" className="platform-new" aria-pressed={!open} onClick={() => setOpenId(null)}><Icon name="plus" size={13} />新对话</button></div>
-      <div className="platform-threads" aria-label="对话">
+      <button type="button" className={`platform-home-link${open ? "" : " active"}`} onClick={() => setOpenId(null)}><Icon name="cpu" size={14} />平台能力</button>
+      <div className="platform-threads" aria-label="对话列表">
         {all.slice(0, SHOWN_THREADS).map(thread => {
           const state = threadState(thread);
           return <button type="button" key={thread.id} className="platform-thread-row" aria-pressed={thread.id === openId} onClick={() => setOpenId(thread.id)}>
