@@ -14,13 +14,13 @@ import { LeadPanel, hasLead, leadRepairIds, type AskLead, type Decision, type Le
 import { ProjectField, rememberProject } from "./project-picker";
 import { EngineerPage } from "./engineer";
 import { EngineerBubble } from "./engineer-bubble";
-import { canCancelMission, canDeleteMission, CancelMissionDialog, DeleteMissionButton, DeleteMissionDialog, formatUsd, estimateNote, MissionHistory, needsAttention, statusLabel, detailText } from "./mission-history";
+import { taskName, shortModelName, canCancelMission, canDeleteMission, CancelMissionDialog, DeleteMissionButton, DeleteMissionDialog, formatUsd, estimateNote, MissionHistory, needsAttention, statusLabel, detailText } from "./mission-history";
 import { BrandMark, Icon, PRODUCT_NAME, type IconName } from "./icons";
 import { ChatDetail, type PromoteOptions } from "./chat";
 import "./style.css";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-type Run = {id:string;status:string;kind?:string;auto_routed?:boolean;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate:{low_usd:number;high_usd:number;calibrated_usd?:number|null}}};
+type Run = {id:string;status:string;kind?:string;auto_routed?:boolean;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;title?:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate:{low_usd:number;high_usd:number;calibrated_usd?:number|null}}};
 type ReplyToDiagnosis = (run:Run, diagnosisId:string, body:{text:string;choice?:string})=>Promise<string|null>;
 type Provider = {id:string;name:string;configured:boolean;keyring_locked?:boolean};
 // The task list polls often; the model catalog is large and changes rarely.
@@ -260,6 +260,13 @@ function QuotaBanner({quota,models,onReset}:{quota:Quota[];models:Model[];onRese
 
 type SetNetwork=(run:Run,allow:boolean)=>Promise<string|null>;
 
+/** Actions used now and then, folded behind "⋯"; choosing one folds them again. */
+function MoreMenu({children}:{children:React.ReactNode}){
+  const menu=useRef<HTMLDetailsElement>(null);
+  useEffect(()=>{const close=(event:MouseEvent)=>{if(menu.current&&!menu.current.contains(event.target as globalThis.Node))menu.current.open=false};document.addEventListener("mousedown",close);return()=>document.removeEventListener("mousedown",close)},[]);
+  return <details ref={menu} className="more-menu"><summary aria-label="更多操作" title="更多操作"><Icon name="more"/></summary><div className="more-menu-items" onClick={()=>{if(menu.current)menu.current.open=false}}>{children}</div></details>;
+}
+
 /** The partner's greeting at the top of the composer: by the time of day, and what it is about to do. */
 export function greeting(mode:"auto"|"task"|"chat",hour=new Date().getHours()):string{
   if(mode==="chat")return "想聊点什么？";
@@ -286,7 +293,8 @@ function MissionDetail({run,models,onPromote,onToChat,deletingId,cancellingId,on
     conversation={<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={(text=>onAsk(run,text)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}/>;
   const needsConfirm=(run.status==="awaiting_confirmation"||run.status==="paused")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
   const canResume=(run.status==="failed"||run.status==="cancelled"||run.status==="incomplete")&&!run.waiting_diagnosis_id&&!run.maintenance_id;
-  const planner=run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${run.plan.planner_model_id} 规划`:"规则规划";
+  const plannerModel=models.find(item=>item.id===run.plan.planner_model_id);
+  const planner=run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${plannerModel?shortModelName(plannerModel.display_name):run.plan.planner_model_id} 规划`:"规则规划";
   const nodes=run.plan.nodes,done=nodes.filter(node=>node.status==="succeeded").length;
   const stopped=nodes.filter(node=>node.status==="failed"||node.status==="cancelled"||node.status==="running");
   const spentRatio=run.budget_usd>0?Math.min(1,run.actual_cost_usd/run.budget_usd):0;
@@ -303,15 +311,17 @@ function MissionDetail({run,models,onPromote,onToChat,deletingId,cancellingId,on
   return <section className="panel detail task-page">
     <div className="task-header">
       <div className="task-title">
-        <p className="eyebrow task-meta"><span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{parent.plan.summary}」</button>:"之前的任务"} · </span>}{planner}{run.project_dir&&<span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13}/> {run.project_dir}</span>}</p>
-        <h3 title={run.plan.summary}>{run.plan.summary}</h3>
+        <p className="eyebrow task-meta"><span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{taskName(parent.plan)}」</button>:"之前的任务"} · </span>}{planner}{run.project_dir&&<span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13}/> {run.project_dir.replace(/\/+$/,"").split("/").pop()}</span>}</p>
+        <h3 title={run.plan.summary}>{taskName(run.plan)}</h3>
       </div>
       <div className="task-actions">
         {(run.status==="succeeded"||run.status==="incomplete")&&tab!=="result"&&<button type="button" className="primary" onClick={()=>pick("result")}>查看结果</button>}
         {canPause&&<button type="button" className="ghost" disabled={busy} onClick={()=>act(onPause)} title="不再启动新步骤；正在运行的步骤会跑完">暂停</button>}
-        {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="排查原因；对已停止的失败步骤执行修复或切换模型，并在现有预算内继续"><Icon name="activity"/>{diagnosing?"诊断中…":"诊断"}</button>}
-        {canCancelRun(run)&&<button type="button" className="danger" disabled={cancellingId!==null} onClick={()=>onCancel(run)}>{cancellingId===run.id?"取消中…":"取消任务"}</button>}
-        <DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>
+        <MoreMenu>
+          {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="排查原因；对已停止的失败步骤执行修复或切换模型，并在现有预算内继续"><Icon name="activity"/>{diagnosing?"诊断中…":"诊断"}</button>}
+          {canCancelRun(run)&&<button type="button" className="danger" disabled={cancellingId!==null} onClick={()=>onCancel(run)}>{cancellingId===run.id?"取消中…":"取消任务"}</button>}
+          <DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>
+        </MoreMenu>
       </div>
     </div>
     {run.status!=="succeeded"&&<Stepper status={run.status}/>}

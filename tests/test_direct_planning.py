@@ -13,7 +13,7 @@ from super_partner.planner import autonomous_plan
 from super_partner.providers import ProviderResult
 from test_planning_latency import CONFIGURED, MODELS, ROSTER
 
-TASKS = {"summary": "交付模块", "folder": "small-module", "requires": ["python --version"], "nodes": [
+TASKS = {"summary": "交付模块", "title": "小模块交付。", "folder": "small-module", "requires": ["python --version"], "nodes": [
     {"key": "build", "title": "实现模块", "instructions": "完成模块和本任务自测", "capability": "coding",
      "employee_id": "builder", "acceptance_criteria": "功能通过自测", "provides": "public interface"},
     {"key": "check", "title": "验收模块", "instructions": "根据依赖产物进行验收", "capability": "coding",
@@ -51,6 +51,7 @@ async def test_team_then_tasks_contains_dependencies_without_refinement():
     assert plan.nodes[1].dependencies == plan.nodes[1].verifies == [plan.nodes[0].id]
     assert all(n.employee_id == "builder" for n in plan.nodes)
     assert plan.requires == ["python --version"] and plan.folder == "small-module"
+    assert plan.title == "小模块交付" and '"title"' in provider.messages[1]
     assert "不再细化" in plan.planning_note
     assert TaskPlan.model_validate_json(plan.model_dump_json()) == plan
 

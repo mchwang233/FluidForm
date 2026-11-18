@@ -84,11 +84,13 @@ OUTLINE_PROMPT = (
     "whole task needs work on this machine (such as \"gcc --version\" or \"make --version\"); they run in "
     "the steps' sandbox before the first task, so a missing tool is found before any work. Name only "
     "what the task cannot do without; [] if it needs nothing special.\n"
+    "- \"title\" is the task's short name as the user will see it in a list: in the request's language, "
+    "at most 12 Chinese characters or 5 English words, no ending punctuation (such as \"中文输入法交付\").\n"
     "- \"folder\" names the task's folder in two to five lowercase English words joined by hyphens "
     "(such as \"todo-cli-json\"), in English even when the request is not.\n"
     "- " + CHOICES_RULE + "\n"
     "Reply with only a JSON object, no markdown fences:\n"
-    '{"summary": "short objective", "folder": "short-english-name", ' + CHOICES_SHAPE + ', '
+    '{"summary": "short objective", "title": "short name", "folder": "short-english-name", ' + CHOICES_SHAPE + ', '
     '"requires": ["commands that show the tools it needs work"], '
     '"parts": [{"key": "p1", "title": "short title", '
     '"goal": "what this part delivers", "acceptance": "how to tell it is done", '
@@ -378,6 +380,16 @@ async def _ask(say: Say, message: str, read):
         return read(_extract_json(reply))
 
 
+# Characters of a plan's short name (TaskPlan.title); a longer one is cut here.
+MAX_TITLE_CHARS = 24
+
+
+def plan_title(payload: dict) -> str:
+    """The plan's short name as the lead gave it, on one line and bounded; "" if none."""
+    text = " ".join(str(payload.get("title") or "").split())
+    return text.rstrip("。.!！?？")[:MAX_TITLE_CHARS]
+
+
 async def plan_outline(say: Say, opening: str, team_plan=None) -> TaskPlan:
     """The major parts of a plan, from the lead through ``say``; their tasks come later
     (``refine``). Raises ValueError if the lead's replies cannot be turned into an outline."""
@@ -389,9 +401,10 @@ async def plan_outline(say: Say, opening: str, team_plan=None) -> TaskPlan:
                 if not employee or item.get("capability", "coding") not in employee.capabilities:
                     raise ValueError("each part needs a capable employee_id from the existing team")
         return (str(payload.get("summary") or "").strip(), siblings(payload.get("parts"), False, parts_only=True),
-                payload.get("requires"), str(payload.get("folder") or ""), plan_choices(payload))
+                payload.get("requires"), str(payload.get("folder") or ""), plan_choices(payload),
+                plan_title(payload))
 
-    summary, raw, requires, folder, choices = await _ask(say, opening, read)
+    summary, raw, requires, folder, choices, title = await _ask(say, opening, read)
     tree = Tree()
     parts = tree.add(raw, None)
     for part, item in zip(parts, raw):
@@ -417,7 +430,7 @@ async def plan_outline(say: Say, opening: str, team_plan=None) -> TaskPlan:
     commands = [text for item in requires if isinstance(item, (str, int))
                 and 0 < len(text := str(item).strip()) <= MAX_REQUIRE_CHARS] if isinstance(requires, list) else []
     return TaskPlan(summary=(summary or "Autonomous task plan")[:240], nodes=[], parts=parts,
-                    requires=list(dict.fromkeys(commands))[:MAX_REQUIRES], folder=folder[:80], choices=choices,
+                    requires=list(dict.fromkeys(commands))[:MAX_REQUIRES], folder=folder[:80], title=title, choices=choices,
                     employees=team_plan.employees if team_plan else [], team_brief=team_plan.team_brief if team_plan else "")
 
 

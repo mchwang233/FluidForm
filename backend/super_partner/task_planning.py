@@ -1,7 +1,7 @@
 """Plan complete work items once, using the existing task graph and execution gates."""
 from . import contracts, team
 from .models import TaskPlan
-from .outline import MAX_REQUIRE_CHARS, MAX_REQUIRES, _ask
+from .outline import MAX_REQUIRE_CHARS, MAX_REQUIRES, _ask, plan_title
 from .planner import (
     CHOICES_RULE,
     CHOICES_SHAPE,
@@ -70,7 +70,7 @@ target project. Workers can edit files and run sandboxed commands; internet requ
 and root/system installation is unavailable. requires contains only commands checking essential tools.
 """ + CHOICES_RULE + """
 Return JSON only with 1-""" + str(MAX_NODES) + """ nodes (usually far fewer), no parts or children:
-{"summary":"objective","serial_reason":"only if no two tasks can run at the same time: why","folder":"short-english-name","requires":["essential tool check"],""" + CHOICES_SHAPE + ""","nodes":[
+{"summary":"objective","title":"short name for the user's list: request's language, at most 12 Chinese characters or 5 English words","serial_reason":"only if no two tasks can run at the same time: why","folder":"short-english-name","requires":["essential tool check"],""" + CHOICES_SHAPE + ""","nodes":[
 {"key":"build","title":"short title","employee_id":"chosen employee","instructions":"matters to handle",
 "capability":"coding|planning|research|chinese|tool_use|structured_output","difficulty":"normal",
 "dependencies":[],"acceptance_criteria":"checkable result","provides":"handoff to dependent tasks",
@@ -123,6 +123,7 @@ async def plan_tasks(say, opening: str, roster: TaskPlan = None, artifact_work: 
             raise ValueError(f"requires allows at most {MAX_REQUIRES} commands")
         plan.requires = list(dict.fromkeys(cmd.strip() for cmd in requires))
         plan.folder = str(payload.get("folder") or "")[:80]
+        plan.title = plan_title(payload)
         plan.choices = plan_choices(payload)
         contracts.validate(plan)  # expanded verification still needs all original evidence/limits
         serial_reason = str(payload.get("serial_reason") or "").strip()[:300]

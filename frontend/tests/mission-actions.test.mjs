@@ -2116,3 +2116,26 @@ test("the composer folds budget, models and permissions behind one summary", asy
   await act(async () => panel.querySelector('.switch input[type="checkbox"]').click());
   assert.match(chip.textContent, /不用会员 CLI/);
 });
+
+test("a task is shown by the lead's short title, its occasional actions behind ⋯", async t => {
+  const run = { ...mission("titled-task", "succeeded"), project_dir: "/home/me/prj/server-ime/" };
+  run.plan = { ...run.plan, title: "中文输入法交付", summary: "为该服务器交付可安装、可运行的中文输入法", planning_method: "model", planner_model_id: "cli:codex" };
+  const models = [{ id: "cli:codex", provider: "openai", display_name: "Codex CLI (membership)", channel: "cli", enabled: true, configured: true, scores: null }];
+  const old = mission("old-task", "succeeded");
+  old.plan = { ...old.plan, summary: "为该服务器交付可安装、可运行的中文输入法，以 Windows 11 微软拼音为目标。" };
+  const { document, button, click } = await setup(t, [run, old], models, { openComposer: false });
+  // The sidebar: short titles; older plans by the first clause of their summary; a finished task says only when.
+  assert.deepEqual([...document.querySelectorAll(".run-text b")].map(node => node.textContent), ["中文输入法交付", "为该服务器交付可安装、可运行的中文输入法"]);
+  assert.doesNotMatch(document.querySelector(".run small").textContent, /\$/);
+  await click([...document.querySelectorAll(".run")].find(node => node.textContent.includes("中文输入法交付")));
+  const header = document.querySelector(".task-header");
+  assert.equal(header.querySelector("h3").textContent, "中文输入法交付");
+  assert.equal(header.querySelector("h3").getAttribute("title"), "为该服务器交付可安装、可运行的中文输入法");
+  assert.match(header.querySelector(".task-meta").textContent, /由 Codex 规划.*server-ime/);
+  assert.doesNotMatch(header.querySelector(".task-meta").textContent, /home\/me/);
+  // Deleting is still there, folded behind ⋯.
+  const menu = header.querySelector(".more-menu");
+  assert.ok(button("删除任务记录", menu));
+  await click(menu.querySelector("summary"));
+  assert.equal(menu.open, true);
+});

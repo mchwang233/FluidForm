@@ -454,6 +454,9 @@ class TaskPlan(BaseModel):
     requires: list[str] = Field(default_factory=list)
     # A few English words naming the task, for its folder (OUTLINE_PROMPT "folder").
     folder: str = ""
+    # Its short name as the user sees it, in the request's language ("title"); older plans have
+    # none and are shown by their summary.
+    title: str = ""
     estimate: Optional[CostEstimate] = None
     planning_method: str = "heuristic"
     planner_model_id: Optional[str] = None

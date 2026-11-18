@@ -1076,3 +1076,15 @@ button{color:var(--on-accent)}
   .composer-home .options-chip{order:5;flex-basis:100%;justify-content:center}
   .composer-home .composer-greeting h3{font-size:22px}
 }
+
+/* The "⋯" menu of occasional actions on a task's page. */
+.more-menu{position:relative}
+.more-menu>summary{list-style:none;display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:10px;color:var(--muted);cursor:pointer}
+.more-menu>summary::-webkit-details-marker{display:none}
+.more-menu>summary:hover,.more-menu[open]>summary{color:var(--text);background:var(--accent-bg)}
+.more-menu-items{position:absolute;right:0;top:40px;z-index:20;min-width:180px;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 12px 32px light-dark(#11141824,#000a)}
+.more-menu-items>button{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%;height:34px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--text);font-weight:500;box-shadow:none}
+.more-menu-items>button:hover{background:var(--accent-bg)}
+.more-menu-items>button.danger,.more-menu-items>.mission-delete-full{color:var(--danger)}
+.task-header h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.task-meta .pill{font-weight:500}

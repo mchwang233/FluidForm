@@ -513,3 +513,14 @@ async def test_cancelled_refinement_does_not_publish_a_late_split(database):
     run = database.get_run("o")
     assert run.status == RunStatus.CANCELLED and not run.plan.nodes
 
+
+
+async def test_the_lead_names_the_task_shortly_for_the_users_list():
+    reply = json.loads(outline_reply(BACKEND, FRONTEND))
+    leads = Leads([json.dumps({**reply, "title": "  待办应用：后端与前端一起交付，带测试和部署说明。 "})])
+    planned = await autonomous_plan("写一个待办应用", LEAD_MODELS, LEADS_CONFIGURED, leads, session=SupervisorSession())
+    # One line, no ending stop, at most outline.MAX_TITLE_CHARS; the lead is asked for it.
+    assert planned.title == "待办应用：后端与前端一起交付，带测试和部署说明"[:outline.MAX_TITLE_CHARS]
+    assert '"title"' in leads.messages[0][2]
+    # Plans made before titles existed have none: the console shows their summary.
+    assert (await outlined(BACKEND, FRONTEND))[0].title == ""

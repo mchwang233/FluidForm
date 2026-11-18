@@ -11,7 +11,7 @@ type MissionRecord = {
   // "chat": only a conversation (a draft that never runs); tasks may leave it out.
   kind?: string;
   lead_messages?: { role: string }[];
-  plan: { summary: string; nodes?: { status: string }[] };
+  plan: { summary: string; title?: string; nodes?: { status: string }[] };
 };
 
 /** Sidebar groups, most urgent first: what is running, what needs the user, what is done. */
@@ -22,6 +22,9 @@ export const MISSION_GROUPS = [
   { id: "chats", label: "对话", statuses: ["draft"] },
   { id: "done", label: "已结束", statuses: ["succeeded", "cancelled"] },
 ] as const;
+
+// Finished well: the sidebar says only when; the numbers are on its page.
+const FINISHED_QUIETLY = new Set(["succeeded", "cancelled"]);
 
 export function needsAttention(status: string): boolean {
   return (MISSION_GROUPS[1].statuses as readonly string[]).includes(status);
@@ -51,6 +54,20 @@ export const STATUS_LABELS: Record<string, string> = {
   paused: "已暂停", succeeded: "已完成", failed: "失败", cancelled: "已取消", incomplete: "未能完成",
   pending: "等待中", blocked: "未执行", unable: "无法完成",
 };
+
+/** A task's name as lists show it: the lead's short title, or for older plans the first clause
+ * of their summary (at most NAME_CHARS). */
+const NAME_CHARS = 28;
+export function taskName(plan: { summary: string; title?: string }): string {
+  if (plan.title) return plan.title;
+  const clause = plan.summary.split(/[，。；;,.!?！？]/).find(part => part.trim().length >= 4)?.trim() ?? plan.summary;
+  return clause.length > NAME_CHARS ? `${clause.slice(0, NAME_CHARS)}…` : clause;
+}
+
+/** A model's name without its channel: "Codex CLI (membership)" → "Codex". */
+export function shortModelName(name: string): string {
+  return name.replace(/\s*\((membership|会员)\)\s*$/i, "").replace(/\s+CLI$/, "").trim() || name;
+}
 
 /** What the sidebar says a record is: a chat, or its task's status. */
 export function missionLabel(mission: { status: string; kind?: string }): string {
@@ -214,7 +231,7 @@ const SEARCH_FROM = 6;
 
 function matches(run: MissionRecord, query: string): boolean {
   const needle = query.trim().toLowerCase();
-  return !needle || [run.plan.summary, run.prompt, run.project_dir].some(text => text?.toLowerCase().includes(needle));
+  return !needle || [run.plan.title, run.plan.summary, run.prompt, run.project_dir].some(text => text?.toLowerCase().includes(needle));
 }
 
 export function MissionHistory<T extends MissionRecord>({ runs, selectedId, deletingId, error, onSelect, onDelete, collapsed = false, onToggle }: HistoryProps<T> & { collapsed?: boolean; onToggle?: () => void }) {
@@ -227,7 +244,7 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
     <div className="history-rail">{groups.map(group => <React.Fragment key={group.id}>
       <span className="rail-divider" title={group.label} aria-hidden="true" />
       {group.runs.map(run => <button type="button" key={run.id} className={`rail-run ${selectedId === run.id ? "active" : ""}`} aria-pressed={selectedId === run.id}
-        onClick={() => onSelect(run)} title={`${run.plan.summary} · ${missionLabel(run)}`} aria-label={run.plan.summary}><span className={`dot ${run.kind === "chat" ? "chat" : run.status}`} /></button>)}
+        onClick={() => onSelect(run)} title={`${taskName(run.plan)} · ${missionLabel(run)}`} aria-label={run.plan.summary}><span className={`dot ${run.kind === "chat" ? "chat" : run.status}`} /></button>)}
     </React.Fragment>)}</div>
   </section>;
   return <section className="panel mission-history" aria-label="任务历史">
@@ -240,10 +257,10 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
       {group.runs.map(run => {
         const { done, total } = progressOf(run);
         return <div className={`run-entry ${selectedId === run.id ? "active" : ""}`} key={run.id}>
-          <button className={`run ${selectedId === run.id ? "active" : ""}`} aria-pressed={selectedId === run.id} onClick={() => onSelect(run)} title={run.plan.summary}>
+          <button className={`run ${selectedId === run.id ? "active" : ""}`} aria-pressed={selectedId === run.id} onClick={() => onSelect(run)} title={run.prompt || run.plan.summary}>
             <span className={`dot ${run.kind === "chat" ? "chat" : run.status}`} />
-            <span className="run-text"><b>{run.plan.summary}</b>
-              <small><span className={`run-status ${run.status}`}>{missionLabel(run)}</span>{run.kind === "chat" && <> · {(run.lead_messages ?? []).filter(item => item.role === "user").length} 问</>}{total > 0 && <> · {done}/{total}</>} · {formatUsd(run.actual_cost_usd)}{run.created_at && <> · {relativeTime(run.created_at)}</>}</small>
+            <span className="run-text"><b>{taskName(run.plan)}</b>
+              <small><span className={`run-status ${run.status}`}>{missionLabel(run)}</span>{run.kind === "chat" && <> · {(run.lead_messages ?? []).filter(item => item.role === "user").length} 问</>}{total > 0 && run.status !== "succeeded" && <> · {done}/{total}</>}{run.kind === "chat" || !FINISHED_QUIETLY.has(run.status) ? <> · {formatUsd(run.actual_cost_usd)}</> : null}{run.created_at && <> · {relativeTime(run.created_at)}</>}</small>
               {run.project_dir && <small className="run-project" title={run.project_dir}><Icon name="folder" size={12} /> {folder(run.project_dir)}</small>}
               {total > 0 && run.status !== "succeeded" && <span className="run-progress" aria-hidden="true"><i style={{ width: `${(done / total) * 100}%` }} /></span>}
             </span>
