@@ -1,7 +1,8 @@
 """Skills for the steps: how to use the tools a task needs, so a step does not learn them again.
 
 A skill is a folder with a SKILL.md: front matter (``name``, ``description``, ``tools``, the
-programs it is about) and Markdown. Two libraries:
+programs it is about; optionally ``summary``, one line for the user in their language) and
+Markdown. Two libraries:
 
 - ``skills/steps/`` in the platform's source: what holds on any machine (how VCS is driven);
 - ``<data_dir>/skills/``: what holds on this machine, written by the environment preparation
@@ -37,6 +38,8 @@ class Skill:
     name: str
     description: str
     tools: list[str] = field(default_factory=list)
+    # One line for the user, in their language (the description is for the models); may be empty.
+    summary: str = ""
     body: str = ""
     path: Optional[Path] = None
     machine: bool = False
@@ -59,6 +62,7 @@ def parse(text: str, path: Optional[Path] = None, machine: bool = False) -> Opti
         return None
     tools = [item.strip().strip("'\"").lower() for item in fields.get("tools", "").strip("[]").split(",")]
     return Skill(name=name, description=fields.get("description", ""), tools=[item for item in tools if item],
+                 summary=fields.get("summary", ""),
                  body=text[match.end():].strip(), path=path, machine=machine, text=text)
 
 

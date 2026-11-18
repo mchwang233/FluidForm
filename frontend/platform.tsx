@@ -11,7 +11,9 @@ import type { Capability } from "./capabilities";
  * pinned above it, and beside it what the platform can do now and what changed lately. */
 
 type RunRef = { id: string; plan: { summary: string; title?: string } };
-type Skill = { name: string; description: string; tools: string[]; machine: boolean };
+type Skill = { name: string; description: string; summary?: string; tools: string[]; machine: boolean };
+/** A skill as the user reads it: its one line in their language, or the models' description. */
+const skillLine = (item: Skill) => item.summary || item.description;
 
 const DONE = new Set(["applied", "failed", "rejected", "cancelled"]);
 // A message longer than this shows its start, the rest folded.
@@ -145,7 +147,7 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
         {skills.slice(0, SIDE_ITEMS).map(item => <li key={item.name}>
           <button type="button" onClick={onSkills}>
             <span className="platform-ability-icon"><Icon name="file" size={15} /></span>
-            <span className="platform-ability-text"><b>{item.name}</b><small title={item.description}>{item.description}</small></span>
+            <span className="platform-ability-text"><b>{item.name}</b><small title={item.description}>{skillLine(item)}</small></span>
           </button>
         </li>)}
         {!skills.length && <li className="muted">还没有。</li>}
@@ -180,7 +182,7 @@ export function SkillsPage({ apiBase }: { apiBase: string }) {
     {(skills ?? []).map(item => <div key={item.name} className="platform-card">
       <span className="platform-card-head"><span className="platform-ability-icon"><Icon name="file" size={15} /></span>
         <b>{item.name}</b><span className="platform-ability-status muted">{item.machine ? "本机" : "平台自带"}</span></span>
-      <span className="platform-card-text full">{item.description}</span>
+      <span className="platform-card-text full" title={item.summary ? item.description : undefined}>{skillLine(item)}</span>
       {!!item.tools.length && <small>涉及：{item.tools.join("、")}</small>}
     </div>)}
     {skills && !skills.length && <div className="platform-card empty"><span className="platform-card-text">还没有技能。</span></div>}

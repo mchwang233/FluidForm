@@ -1,6 +1,7 @@
 ---
 name: github-reference
 description: Find good open-source projects on GitHub, score their quality, and use them as references, as reused code or dependencies, or as material for a skill, with the source recorded. For steps that look for prior art, an existing library or a reference implementation on GitHub.
+summary: 在 GitHub 上找好的开源项目、评估质量，拿来参考、复用或做依赖，并记下出处
 tools: [github, gh]
 ---
 

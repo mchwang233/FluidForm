@@ -139,3 +139,16 @@ async def test_the_platform_page_can_list_what_the_steps_know_how_to_use(task_ap
     _, client = task_api
     listed = (await client.get("/api/skills")).json()
     assert any(item["name"] == "synopsys-vcs" and "vcs" in item["tools"] and item["machine"] is False for item in listed)
+
+
+def test_a_skill_may_carry_a_line_for_the_user_and_old_ones_still_load():
+    from super_partner import skills
+    with_line = skills.parse("---\nname: x\ndescription: Using x.\nsummary: 怎么用 x\ntools: [x]\n---\n# x\n")
+    assert (with_line.description, with_line.summary, with_line.tools) == ("Using x.", "怎么用 x", ["x"])
+    assert skills.parse("---\nname: y\ndescription: Using y.\n---\n# y\n").summary == ""
+
+
+async def test_the_skills_list_gives_each_skills_line_for_the_user(task_api):
+    _, client = task_api
+    listed = {item["name"]: item for item in (await client.get("/api/skills")).json()}
+    assert "summary" in listed["synopsys-vcs"] and listed["synopsys-vcs"]["summary"].startswith("用 Synopsys VCS")

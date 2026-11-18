@@ -219,6 +219,7 @@ def skill_prompt(run: ExecutionRun, name: str, tools: list[str], general, checks
         "",
         ("Reply with only the SKILL.md, no fences: a front matter block, then Markdown:\n"
          f"---\nname: {name}\ndescription: <one line: what it covers, on this machine>\n"
+         "summary: <the same in one short line, in the language the task was asked in>\n"
          f"tools: [{', '.join(tools)}]\n---\n# ...\n"
          "No secrets, no licence keys, no user names; paths and environment scripts are fine."),
     ])

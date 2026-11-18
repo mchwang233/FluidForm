@@ -2502,15 +2502,19 @@ test("the 平台 page lists its conversations beside the one open, each one to g
 test("the 平台 page's 技能 更多 shows every skill with its whole description", async t => {
   const { state, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
   state.skills = [{ name: "synopsys-vcs", description: "Compile and simulate SystemVerilog with Synopsys VCS.", tools: ["vcs", "urg"], machine: false },
-    { name: "cmake", description: "Building with CMake.", tools: ["cmake"], machine: true }];
+    { name: "cmake", description: "Building with CMake.", summary: "用 CMake 构建和测试", tools: ["cmake"], machine: true }];
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   const heads = [...document.querySelectorAll(".platform-side .platform-side-head")];
   assert.match(heads[1].textContent, /技能 2/);
+  assert.match(document.querySelector(".platform-side").textContent, /用 CMake 构建和测试/);
   await click(button("更多 ›", heads[1]));
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   const cards = document.querySelector('[aria-label="技能"]').textContent;
   assert.match(cards, /synopsys-vcs.*平台自带.*Compile and simulate SystemVerilog with Synopsys VCS\..*涉及：vcs、urg.*cmake.*本机/s);
+  // A skill with a line in the user's language shows that line; the models' description is its tooltip.
+  assert.match(cards, /用 CMake 构建和测试/);
+  assert.doesNotMatch(cards, /Building with CMake/);
   assert.ok(button("← 平台"));
 });
 

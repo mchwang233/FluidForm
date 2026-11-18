@@ -1359,7 +1359,8 @@ class GithubToken(BaseModel):
 @app.get("/api/skills")
 def list_skills():
     """What the steps know how to use (skills.py): this machine's skills, then the platform's."""
-    return [{"name": item.name, "description": item.description, "tools": item.tools, "machine": item.machine}
+    return [{"name": item.name, "description": item.description, "summary": item.summary, "tools": item.tools,
+             "machine": item.machine}
             for item in skills.library()]
 
 

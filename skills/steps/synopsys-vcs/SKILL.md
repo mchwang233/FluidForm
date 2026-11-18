@@ -1,6 +1,7 @@
 ---
 name: synopsys-vcs
 description: Compile and simulate SystemVerilog with Synopsys VCS, collect code, assertion and functional coverage, and report it with URG. For steps that build, run, check or measure RTL and testbenches with vcs, simv or urg.
+summary: 用 Synopsys VCS 编译仿真 SystemVerilog，收集代码、断言和功能覆盖率，并用 URG 出报告
 tools: [vcs, urg, simv]
 ---
 
