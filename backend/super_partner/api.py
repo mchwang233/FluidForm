@@ -989,6 +989,7 @@ async def ask_lead(run_id: str, body: LeadQuestion):
 
 class CreateChat(BaseModel):
     message: str = Field(min_length=1, max_length=20_000)
+    attachments: list[str] = Field(default_factory=list)
     budget_usd: float = Field(default=1, gt=0, le=10_000)
     use_cli: bool = True
     project_dir: Optional[str] = Field(default=None, max_length=4096)
@@ -1000,12 +1001,14 @@ class CreateChat(BaseModel):
 CHAT_TITLE_CHARS = 60
 
 
-def chat_models(use_cli: bool = True) -> list:
-    """Models a chat can be held with, best first: those that can lead a task's conversation."""
+def chat_models(use_cli: bool = True, needs_vision: bool = False) -> list:
+    """Models a chat can be held with, best first: those that can lead a task's conversation; with
+    images attached, those that can see them (as for a step: a CLI, or an API model not known blind)."""
     configured = providers.configured_models(list(models))
     if not use_cli:
         configured = {model_id for model_id in configured if not model_id.startswith("cli:")}
-    return supervisor.candidates(list(models.values()), configured)
+    return [model for model in supervisor.candidates(list(models.values()), configured)
+            if not needs_vision or model.channel == "cli" or model.supports_vision is not False]
 
 
 @app.get("/api/chats/models")
@@ -1019,16 +1022,22 @@ async def create_chat(body: CreateChat):
     """Only a conversation: no plan, no steps. The model may read the project folder, if one is
     given (a CLI's read-only lead conversation there); it edits nothing. The first message is
     answered in the background, as in a task's conversation with its lead."""
-    return _start_chat(body.message, body.budget_usd, body.use_cli, body.project_dir, body.model_id)
+    return _start_chat(body.message, body.budget_usd, body.use_cli, body.project_dir, body.model_id, body.attachments)
 
 
 def _start_chat(message: str, budget_usd: float, use_cli: bool, project_dir: Optional[str], model_id: Optional[str],
-                auto_routed: bool = False, spent: float = 0.0) -> ExecutionRun:
-    """Save a new chat and send its first message (create_chat, start)."""
-    available = chat_models(use_cli)
+                attachment_ids: list[str] = (), auto_routed: bool = False, spent: float = 0.0) -> ExecutionRun:
+    """Save a new chat and send its first message, with its attachments (create_chat, start)."""
+    try:
+        attached = files.resolve(list(attachment_ids))
+    except files.AttachmentError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    needs_vision = any(item.kind == "image" for item in attached)
+    available = chat_models(use_cli, needs_vision)
     pick = next((model for model in available if model.id == model_id), None) if model_id else next(iter(available), None)
     if pick is None:
-        raise HTTPException(422, "这个模型不能用来对话。" if model_id else "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
+        raise HTTPException(422, ("这个模型看不了图片，请换一个模型。" if needs_vision else "这个模型不能用来对话。") if model_id
+                            else "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
     folder = None
     if project_dir and project_dir.strip():
         try:
@@ -1038,7 +1047,8 @@ def _start_chat(message: str, budget_usd: float, use_cli: bool, project_dir: Opt
     message = message.strip()
     run = ExecutionRun(
         id=str(uuid4()), prompt=message, kind="chat", status=RunStatus.DRAFT, plan=_chat_plan(message, folder),
-        budget_usd=budget_usd, use_cli=use_cli, project_dir=folder, auto_routed=auto_routed, actual_cost_usd=round(spent, 6),
+        budget_usd=budget_usd, use_cli=use_cli, project_dir=folder, attachments=attached, auto_routed=auto_routed,
+        actual_cost_usd=round(spent, 6),
         supervisor=supervisor.new_session(pick, folder=folder),
     )
     db.save_run(run)
@@ -1060,15 +1070,18 @@ class StartRequest(CreateTask):
 
 @app.post("/api/start", response_model=ExecutionRun, status_code=201)
 async def start(body: StartRequest):
-    """Start what the user typed as a chat or a task, decided by triage.classify. Attachments
-    make it a task (a chat takes none). Deciding is billed to whichever it becomes."""
-    kind, spent = "task", 0.0
-    if not body.attachments:
-        configured = providers.configured_models(list(models))
-        kind, spent = await triage.classify(body.prompt, providers, brief_writer(list(models.values()), configured))
+    """Start what the user typed as a chat or a task, decided by triage.classify (told the names of
+    any attachments, which go with either). Deciding is billed to whichever it becomes."""
+    try:
+        attached = files.resolve(body.attachments)
+    except files.AttachmentError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    configured = providers.configured_models(list(models))
+    kind, spent = await triage.classify(body.prompt + files.describe(attached, with_paths=False), providers,
+                                        brief_writer(list(models.values()), configured))
     if kind == "chat":
         return _start_chat(body.prompt, body.budget_usd, body.use_cli, body.project_dir, body.model_id,
-                           auto_routed=True, spent=spent)
+                           body.attachments, auto_routed=True, spent=spent)
     run = await _new_task(body)
     latest = get_task(run.id)
     latest.auto_routed = True
@@ -1086,7 +1099,7 @@ async def task_to_chat(run_id: str):
         raise HTTPException(409, "只有待确认的新任务可以改成对话。")
     if run_id in REPLANNING:
         raise HTTPException(409, "正在重新规划，请稍候。")
-    pick = next(iter(chat_models(run.use_cli)), None)
+    pick = next(iter(chat_models(run.use_cli, any(item.kind == "image" for item in run.attachments))), None)
     if pick is None:
         raise HTTPException(422, "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
     run.kind, run.status, run.plan = "chat", RunStatus.DRAFT, _chat_plan(run.prompt, run.project_dir)
@@ -1120,8 +1133,9 @@ async def promote_chat(run_id: str, body: PromoteChat):
         raise HTTPException(422, "请写清要完成的工作。")
     use_cli = run.use_cli if body.use_cli is None else body.use_cli
     context = "这个任务来自用户和模型的一段对话，对话内容如下（供参考，以“新需求”为准）：\n" + supervisor.chat_transcript(run)
+    # The chat's attachments go with it: the planner and the steps see them as a task's own.
     request = CreateTask(prompt=prompt, budget_usd=body.budget_usd, use_cli=use_cli, project_dir=run.project_dir,
-                         allow_network=body.allow_network)
+                         allow_network=body.allow_network, attachments=[item.id for item in run.attachments])
     REPLANNING.add(run_id)
     try:
         plan, session, _, _, background, lessons = await _make_plan(request, context=context)

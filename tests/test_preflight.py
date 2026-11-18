@@ -262,6 +262,13 @@ def test_a_codex_step_reads_only_its_folder_and_what_it_needs(fake_home):
     # A lead reads, the tasks' folders included, and nothing is written.
     lead = rules_of(cli_channels.codex_step_permissions(fake_home / ".codex", network=False, lead=True))
     assert "write" not in lead.values() and not any("other-task" in path for path in lead)
+    # A chat's lead may read its own attachments, and no one else's.
+    mine, theirs = data / "attachments" / "mine" / "content", data / "attachments" / "theirs" / "content"
+    mine.mkdir(parents=True), theirs.mkdir(parents=True)
+    chat = rules_of(cli_channels.codex_step_permissions(fake_home / ".codex", network=False, lead=True, readable=(mine,)))
+    resolved = {str(Path(path).resolve()) if path.startswith("/") else path: mode for path, mode in chat.items()}
+    assert resolved[str(mine)] == "read" and "write" not in resolved.values()
+    assert resolved.get(str(data / "attachments" / "theirs")) == "deny"
 
 
 

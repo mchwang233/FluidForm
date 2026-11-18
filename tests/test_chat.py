@@ -1,4 +1,5 @@
 """A chat: only a conversation with a model, which the user can later turn into a task."""
+import pytest
 from super_partner.config import settings
 from super_partner.models import (
     CapabilityScore,
@@ -8,7 +9,7 @@ from super_partner.models import (
     TaskNode,
     TaskPlan,
 )
-from super_partner.providers import ProviderResult
+from super_partner.providers import ProviderError, ProviderResult
 from super_partner.supervisor import CHAT_ROLE
 
 ORIGIN = {"origin": "http://localhost:5173"}
@@ -23,20 +24,26 @@ def profile(model_id, planning):
 BEST, OTHER = profile("x:best", 95), profile("x:other", 80)
 
 
+class Sent(list):
+    """(model, cwd, prompt) of every message sent; ``attached``: the attachment names of each."""
+
+
 def chatting(api, monkeypatch, answers=("好的。",)):
-    """Two API models that can talk; returns the (model, cwd, prompt) of every message sent."""
-    sent, replies = [], list(answers)
+    """Two API models that can talk; returns what was sent to them (Sent)."""
+    sent, replies, attached = Sent(), list(answers), []
     models = {BEST.id: BEST, OTHER.id: OTHER}
     monkeypatch.setattr(api, "models", models)
     monkeypatch.setattr(api.executor, "model_lookup", models)
     monkeypatch.setattr(api.providers, "configured_models", lambda _ids: set(models))
 
-    async def converse(session, prompt, timeout=None, spend_ok=None):
+    async def converse(session, prompt, timeout=None, spend_ok=None, attachments=()):
         sent.append((session.model_id, session.cwd, prompt))
+        attached.append([item.name for item in attachments])
         session.calls += 1
         return ProviderResult(replies.pop(0) if replies else "嗯。", 10, 10)
 
     monkeypatch.setattr(api.providers, "converse", converse)
+    sent.attached = attached
     return sent
 
 
@@ -193,17 +200,99 @@ async def test_work_left_to_super_partner_is_planned_as_a_task_and_can_still_bec
     assert (await client.post(f"/api/tasks/{run['id']}/as-chat", headers=ORIGIN)).status_code == 409
 
 
-async def test_without_a_clear_answer_or_with_attachments_it_is_a_task(task_api, monkeypatch):
+async def test_without_a_clear_answer_it_is_a_task(task_api, monkeypatch):
     api, client = task_api
     _, asked = triaging(api, monkeypatch, RuntimeError("provider down"))
     run = (await client.post("/api/start", json={"prompt": "随便看看这个"}, headers=ORIGIN)).json()
     # The model was asked and failed: as before chats existed, it is planned as a task.
     assert len(asked) == 1 and api.db.get_run(run["id"]).kind == "task"
-    # A chat takes no attachments, so with them it is a task without asking.
-    monkeypatch.setattr(api.files, "resolve", lambda _ids: [])
-    run = (await client.post("/api/start", json={"prompt": "看看这张图怎么样", "attachments": ["a" * 32]}, headers=ORIGIN)).json()
-    assert len(asked) == 1 and api.db.get_run(run["id"]).kind == "task"
 
     from super_partner.triage import read_kind
     assert [read_kind(text) for text in ['{"kind": "chat"}', "```json\n{\"kind\":\"chat\"}\n```", "chat", "", '{"kind": "task"}']] == \
         ["chat", "chat", "task", "task", "task"]
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+async def test_a_question_about_an_attached_screenshot_is_a_chat_that_sees_it(task_api, monkeypatch):
+    api, client = task_api
+    from super_partner import attachments as files
+    sent, asked = triaging(api, monkeypatch, '{"kind": "chat"}')
+    # The best talker cannot see images: the chat goes to one that can.
+    monkeypatch.setitem(api.models, BEST.id, BEST.model_copy(update={"supports_vision": False}))
+    shot, log = files.save("error.png", PNG), files.save("trace.log", b"Traceback: KeyError 'id'\n")
+    run = (await client.post("/api/start", json={"prompt": "这个报错是什么意思？", "attachments": [shot.id, log.id]},
+                             headers=ORIGIN)).json()
+    await api.executor.lead_tasks[run["id"]]
+    # Deciding knows files came with it; they do not make it a task.
+    assert "error.png" in asked[0][1] and "trace.log" in asked[0][1]
+    chat = api.db.get_run(run["id"])
+    assert chat.kind == "chat" and [item.name for item in chat.attachments] == ["error.png", "trace.log"]
+    assert sent[0][0] == "x:other" and sent.attached == [["error.png", "trace.log"]]
+    # Only the first message carries them; the conversation remembers.
+    await client.post(f"/api/tasks/{run['id']}/lead", json={"message": "怎么修？"}, headers=ORIGIN)
+    await api.executor.lead_tasks[run["id"]]
+    assert sent.attached == [["error.png", "trace.log"], []]
+
+
+async def test_a_chat_with_attachments_hands_them_to_the_task_it_becomes(task_api, monkeypatch):
+    api, client = task_api
+    from super_partner import attachments as files
+    chatting(api, monkeypatch)
+    prompts = []
+
+    async def plan(prompt, *_args, **_kwargs):
+        prompts.append(prompt)
+        return TaskPlan(summary="修复", nodes=[TaskNode(id="a", title="修复", instructions="i", capability="coding")])
+
+    monkeypatch.setattr(api, "autonomous_plan", plan)
+    log = files.save("trace.log", b"Traceback: KeyError 'id'\n")
+    chat = (await client.post("/api/chats", json={"message": "这个报错怎么回事？", "attachments": [log.id]}, headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    assert (await client.post(f"/api/tasks/{chat['id']}/promote", json={"prompt": "修复这个 KeyError"}, headers=ORIGIN)).status_code == 200
+    task = api.db.get_run(chat["id"])
+    assert [item.name for item in task.attachments] == ["trace.log"] and "trace.log" in prompts[0]
+
+
+async def test_a_conversation_message_carries_attachments_to_either_kind_of_model(monkeypatch, tmp_path):
+    from super_partner import attachments as files
+    from super_partner.models import SupervisorSession
+    from super_partner.providers import ProviderRegistry
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    shot, log = files.save("error.png", PNG), files.save("trace.log", b"KeyError 'id'\n")
+    registry = ProviderRegistry()
+    calls = []
+
+    async def complete(model_id, prompt, *_args, **kwargs):
+        calls.append((prompt, [item.name for item in kwargs.get("attachments", [])]))
+        return ProviderResult("看到了。", 10, 10)
+
+    monkeypatch.setattr(registry, "complete", complete)
+    session = SupervisorSession(model_id="x:api")
+    await registry.converse(session, "这是什么错？", attachments=[shot, log])
+    await registry.converse(session, "怎么修？")
+    # An API model: text inline and kept in the conversation; the image sent as an image, once.
+    (first, images), (second, later) = calls
+    assert "KeyError 'id'" in first and images == ["error.png"] and later == []
+    assert "KeyError 'id'" in session.history[0]["content"] and "KeyError 'id'" in second
+
+    # A CLI: told where the files are, allowed to read just those folders, the image given as an image.
+    commands = []
+
+    async def run_input(spec, command, cwd, prompt, timeout, **_kwargs):
+        commands.append((command, prompt))
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(registry.cli, "_run_input", run_input)
+    monkeypatch.setattr("super_partner.cli_channels.shutil.which", lambda name: f"/usr/bin/{name}")
+    for model_id in ("cli:codex", "cli:claude"):
+        with pytest.raises(ProviderError):
+            await registry.converse(SupervisorSession(model_id=model_id, cwd=str(tmp_path / model_id)), "这是什么错？",
+                                    attachments=[shot, log])
+    (codex, codex_prompt), (claude, _) = commands
+    folders = {str(files.path(item).parent) for item in (shot, log)}
+    assert f"--image={files.path(shot)}" in codex and str(files.path(log)) in codex_prompt
+    table = next(arg for arg in codex if "filesystem=" in arg)
+    assert all(f'"{folder}" = "read"' in table for folder in folders)
+    assert set(claude[claude.index("--add-dir") + 1:][:2]) == folders

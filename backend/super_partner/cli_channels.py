@@ -317,12 +317,15 @@ def _shared_tmp(cwd: Path, rules: dict[str, str], shared: Path = Path("/tmp")) -
         rules[str(entry)] = "deny"
 
 
-def codex_step_permissions(cwd: Path, network: bool, lead: bool = False, tmpdir: Optional[str] = None) -> list[str]:
+def codex_step_permissions(cwd: Path, network: bool, lead: bool = False, tmpdir: Optional[str] = None,
+                           readable: tuple[Path, ...] = ()) -> list[str]:
     """``-c`` options defining and selecting the profile for a step working in ``cwd`` with its
     own ``tmpdir`` (CODEX_STEP_PROFILE), or with ``lead`` for a lead's read-only conversation
     there (CODEX_LEAD_PROFILE: the tasks' folders stay readable, so it can look at their results)."""
     cwd = cwd.resolve()
-    keep = [cwd, codex_home().resolve() / "tmp", environment.tools_dir().resolve(),
+    # ``readable``: folders a lead's conversation may also read, such as a chat's attachments.
+    extra = [Path(item).resolve() for item in readable] if lead else []
+    keep = [cwd, codex_home().resolve() / "tmp", environment.tools_dir().resolve(), *extra,
             *([Path(tmpdir).resolve()] if tmpdir and not lead else [])]
     if package := codex_package():
         keep.append(package)
@@ -333,6 +336,7 @@ def codex_step_permissions(cwd: Path, network: bool, lead: bool = False, tmpdir:
             _deny_except(base, keep, rules)
     if lead:
         rules[str(cwd)] = "read"
+        rules.update({str(item): "read" for item in extra})
     else:
         _shared_tmp(cwd, rules)
         rules.update({":tmpdir": "write", str(cwd): "write"})
@@ -647,7 +651,7 @@ class CliChannelRegistry:
         return (text if not process.returncode else f"Exit code {process.returncode}\n{text}"), not process.returncode
 
     async def converse(self, model_id: str, prompt: str, cwd: Path, session_id: Optional[str] = None,
-                       timeout: Optional[float] = None, effort: Optional[str] = None) -> tuple[str, str]:
+                       timeout: Optional[float] = None, effort: Optional[str] = None, attachments=()) -> tuple[str, str]:
         """Say ``prompt`` in the conversation ``session_id`` (a new one without it), in ``cwd``;
         returns the reply and the conversation's id. Only SESSION_CLIS keep conversations.
 
@@ -661,6 +665,8 @@ class CliChannelRegistry:
         if model_id == "cli:claude":
             sid = session_id or str(uuid4())
             args = [*SESSION_ARGS[model_id], "--resume" if session_id else "--session-id", sid]
+            if attachments:
+                args += ["--add-dir", *sorted({str(path(item).parent) for item in attachments})]
             if effort:
                 args += ["--effort", effort]
                 if record := calls.row():
@@ -671,11 +677,15 @@ class CliChannelRegistry:
                     if session_id else [*SESSION_ARGS[model_id], "-"])
             # Refinement can use the lead's per-part choice; ordinary lead calls keep their default.
             options = [*codex_settings(effort or settings.lead_reasoning_effort, settings.codex_lead_service_tier),
-                       *codex_step_permissions(cwd, network=False, lead=True)]
+                       *codex_step_permissions(cwd, network=False, lead=True,
+                                               readable=tuple(path(item).parent for item in attachments))]
             # `exec resume` parses its own options. Overrides on the outer `exec` are
             # discarded on resume, restoring the user's effort/tier/plugins instead.
             position = 3 if session_id else 1
             args = [*args[:position], *options, *args[position:]]
+            if not session_id:
+                # Images go in as real image inputs ("--image=" keeps the trailing "-" for stdin).
+                args = [args[0], *(f"--image={path(item)}" for item in attachments if item.kind == "image"), *args[1:]]
             if record := calls.row():
                 chosen = effort or settings.lead_reasoning_effort
                 record["effective_effort"] = CODEX_EFFORTS.get(chosen, chosen)

@@ -7,8 +7,8 @@ export type PromoteOptions = { prompt: string; budget_usd: number; use_cli: bool
 type ChatRun = { id: string; prompt?: string; project_dir?: string | null; use_cli: boolean; actual_cost_usd: number; budget_usd: number;
   lead_messages?: { status: string }[]; plan: { summary: string } };
 
-export function ChatDetail({ run, model, auto = false, conversation, deleteButton, onPromote }: {
-  run: ChatRun; model: string; auto?: boolean; conversation: React.ReactNode; deleteButton: React.ReactNode;
+export function ChatDetail({ run, model, auto = false, attachments, conversation, deleteButton, onPromote }: {
+  run: ChatRun; model: string; auto?: boolean; attachments?: React.ReactNode; conversation: React.ReactNode; deleteButton: React.ReactNode;
   onPromote: (options: PromoteOptions) => Promise<string | null>;
 }) {
   const [promoting, setPromoting] = useState(false);
@@ -27,6 +27,7 @@ export function ChatDetail({ run, model, auto = false, conversation, deleteButto
         {deleteButton}
       </div>
     </div>
+    {attachments}
     {promoting && <PromoteForm run={run} onCancel={() => setPromoting(false)} onPromote={onPromote} />}
     {conversation}
   </section>;

@@ -395,7 +395,9 @@ class Leading:
             run = self.db.get_run(run_id)
             # A chat is only a conversation; a task's lead answers as the lead who follows it.
             prompt = supervisor.chat_opening(run, text) if run.kind == "chat" else supervisor.chat_message(text)
-            answer, status = await self.ask_lead(run_id, prompt), "done"
+            # A chat's attachments come with its first message, which opens the conversation.
+            first = run.kind == "chat" and not (run.supervisor and run.supervisor.calls)
+            answer, status = await self.ask_lead(run_id, prompt, run.attachments if first else ()), "done"
             # The lead may bring the platform engineer in at once.
             answer, call = supervisor.split_engineer(answer)
             if call:

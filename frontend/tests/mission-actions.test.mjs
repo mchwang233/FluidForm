@@ -1979,8 +1979,9 @@ test("the composer starts a chat with the chosen model instead of planning a tas
   await click(button("对话", document.querySelector(".mode-switch")));
   const composer = document.querySelector(".composer");
   assert.match(composer.querySelector("h3").textContent, /新对话/);
-  // A chat has no attachments, network or fleet; it picks the model to talk with.
-  assert.equal(composer.querySelector(".attach-button, .fleet-anchor"), null);
+  // A chat takes attachments but no network or fleet; it picks the model to talk with.
+  assert.ok(composer.querySelector(".attach-button"));
+  assert.equal(composer.querySelector(".fleet-anchor"), null);
   assert.doesNotMatch(composer.textContent, /允许联网/);
   const select = composer.querySelector('[aria-label="对话用的模型"]');
   assert.deepEqual([...select.options].map(option => option.textContent), ["自动（Claude Code CLI）", "Claude Code CLI", "Fast"]);
@@ -1995,6 +1996,7 @@ test("the composer starts a chat with the chosen model instead of planning a tas
   assert.equal(state.chatPosts.length, 1);
   assert.equal(state.chatPosts[0].message, "WAL 是什么？");
   assert.equal(state.chatPosts[0].model_id, "x:fast");
+  assert.deepEqual(state.chatPosts[0].attachments, []);
   // It opens as a conversation: no numbers or tabs, the model answering under its own name.
   const page = document.querySelector(".chat-page");
   assert.ok(page);
@@ -2067,4 +2069,27 @@ test("a task told apart automatically can still become a chat before it is confi
   const page = document.querySelector(".chat-page");
   assert.match(page.querySelector(".task-meta").textContent, /对话自动识别/);
   assert.match(page.querySelector(".lead-panel").textContent, /WAL 和回滚日志.*正在思考/s);
+});
+
+test("a chat can be started with attachments, which its page shows", async t => {
+  const { state, window, document, act, button, click } = await setup(t, [mission("finished-task", "succeeded")]);
+  await click(button("对话", document.querySelector(".mode-switch")));
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => window.setTimeout(resolve, 0)); });
+  const picker = document.querySelector('.composer input[type="file"]');
+  await act(async () => {
+    Object.defineProperty(picker, "files", { configurable: true, value: [new window.File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" })] });
+    picker.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await settle();
+  const box = document.querySelector('.composer [aria-label="想问的问题"]');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, "这个报错是什么意思？");
+    box.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => document.querySelector(".composer form").requestSubmit());
+  assert.equal(state.chatPosts[0].attachments.length, 1);
+  // The stub echoes no attachments; a saved chat with one shows it on its page.
+  state.records[0] = { ...state.records[0], attachments: [{ id: "a1", name: "error.png", size: 4, kind: "image", media_type: "image/png" }] };
+  await act(async () => state.poll());
+  assert.match(document.querySelector(".chat-page .task-attachments").textContent, /error\.png/);
 });

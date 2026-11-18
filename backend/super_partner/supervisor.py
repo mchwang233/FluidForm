@@ -145,17 +145,18 @@ def role(run: ExecutionRun) -> str:
     return CHAT_ROLE if run.kind == "chat" else ROLE
 
 
-async def converse(providers, session: SupervisorSession, prompt: str, charged) -> tuple[str, SupervisorSession]:
+async def converse(providers, session: SupervisorSession, prompt: str, charged, attachments=()) -> tuple[str, SupervisorSession]:
     """Send ``prompt`` to ``session``'s lead through ``charged(model_id, call)``, which bills the
     call to the task. Returns the reply and the session, now continued."""
-    result = await charged(session.model_id, lambda budget: providers.converse(session, prompt, spend_ok=budget))
+    extra = {"attachments": list(attachments)} if attachments else {}
+    result = await charged(session.model_id, lambda budget: providers.converse(session, prompt, spend_ok=budget, **extra))
     if session.history:
         trim(session)
     return result.text, session
 
 
 async def ask(providers, models: list[ModelProfile], configured: set[str], run: ExecutionRun,
-              prompt: str, charged) -> tuple[str, SupervisorSession]:
+              prompt: str, charged, attachments=()) -> tuple[str, SupervisorSession]:
     """Ask the task's lead; a lost conversation or an unavailable model hands the task over to
     the next best lead, which is briefed first."""
     session = run.supervisor if run.supervisor and run.supervisor.model_id else None
@@ -171,7 +172,7 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
             session = new_session(pick, run.supervisor, chat_folder(run))
             message = role(run) + handover(run) + prompt
         try:
-            return await converse(providers, session, message, charged)
+            return await converse(providers, session, message, charged, attachments)
         except SessionLost as exc:
             # The model is fine; only its conversation is gone. Brief a new one.
             last_error = exc

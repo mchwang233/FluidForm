@@ -1200,7 +1200,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
 
 
 
-    async def ask_lead(self, run_id: str, prompt: str) -> str:
+    async def ask_lead(self, run_id: str, prompt: str, attachments=()) -> str:
         """Ask the task's lead (supervisor.py); its conversation is saved with the task. One
         message at a time per task, so the conversation stays in order."""
         async with self.lead_locks.setdefault(run_id, asyncio.Lock()):
@@ -1214,7 +1214,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
                 return await self._charged(run, None, model_id, call)
 
             text, session = await supervisor.ask(self.providers, list(self.model_lookup.values()),
-                                                 self._configured(run), run, prompt, charged)
+                                                 self._configured(run), run, prompt, charged, attachments)
             async with self.locks.setdefault(run_id, asyncio.Lock()):
                 latest = self.db.get_run(run_id)
                 latest.supervisor = session

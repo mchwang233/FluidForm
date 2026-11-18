@@ -234,7 +234,7 @@ class ProviderRegistry:
 
     @call_records.observed
     async def converse(self, session: SupervisorSession, prompt: str, timeout: Optional[float] = None,
-                       spend_ok=None) -> ProviderResult:
+                       spend_ok=None, attachments=()) -> ProviderResult:
         """One message in a conversation that lasts (the task's lead, supervisor.py): a membership
         CLI continues its own conversation; an API model is sent the whole history again, which
         its prompt cache makes cheap. ``session`` is updated in place."""
@@ -244,12 +244,18 @@ class ProviderRegistry:
             record["requested_effort"] = effort
         if self.quota.exhausted(model_id):
             raise self.quota.error(model_id)
+        # Files the user attached to this message (a chat's first one): a CLI is told where they are and
+        # may read them; an API model gets text files inline and images as images, as in a step.
+        attachments = list(attachments)
+        if attachments:
+            prompt += files.describe(attachments, with_paths=model_id.startswith("cli:")) + files.inline_text(attachments)
         if model_id.startswith("cli:"):
             Path(session.cwd).mkdir(parents=True, exist_ok=True)
             try:
                 text, session.session_id = await self.cli.converse(
                     model_id, prompt, Path(session.cwd), session.session_id, timeout,
-                    **({"effort": session.reasoning_effort} if session.reasoning_effort else {}))
+                    **({"effort": session.reasoning_effort} if session.reasoning_effort else {}),
+                    **({"attachments": attachments} if attachments else {}))
             except (SessionLost, InputTooLarge):
                 raise
             except RuntimeError as exc:
@@ -261,8 +267,9 @@ class ProviderRegistry:
                 raise ProviderError(str(exc)) from exc
             result = _cli_result(text, model_id)
         else:
+            images = [item for item in attachments if item.kind == "image"]
             result = await self.complete(model_id, _transcript(session.history, prompt), spend_ok=spend_ok,
-                                         effort=effort)
+                                         effort=effort, **({"attachments": images} if images else {}))
             session.history += [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.text}]
         session.calls += 1
         return result
