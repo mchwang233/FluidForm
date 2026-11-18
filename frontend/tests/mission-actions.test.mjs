@@ -2237,53 +2237,58 @@ test("the platform engineer page lists the capabilities on this machine, to swit
   assert.equal(document.querySelectorAll(".capability-shelf .capability").length, 1);
 });
 
-test("the 平台 page is one conversation with its engineer, what waits for your nod pinned above it", async t => {
-  const { state, window, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+test("the 平台 page lists its conversations beside the one open, each one to go on talking in", async t => {
+  const run = mission("ime-task", "succeeded");
+  run.plan = { ...run.plan, title: "中文输入法交付" };
+  const { state, window, document, button, click, act } = await setup(t, [run], [], { openComposer: false });
   const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   state.engineer = { available: true, jobs: [
-    engineerJob({ id: "done", title: "修复状态", headline: "步骤结果误判", plain: "以后不会再误判了。", status: "applied", kind: "repair",
-      report: "根本原因：quality.py:398", files: ["backend/super_partner/quality.py", "tests/test_unable.py"], checks: ["Backend tests"],
-      messages: [{ role: "user", text: "步骤明明没阻塞却算失败", created_at: "2026-10-28T10:00:00Z" },
-        { role: "engineer", text: "以后不会再误判了。", created_at: "2026-10-28T10:20:00Z" },
-        { role: "system", text: "已生效", created_at: "2026-10-28T10:30:00Z" }], updated_at: "2026-10-28T10:30:00Z" }),
-    engineerJob({ id: "new", title: "飞书", headline: "飞书发消息", plan_plain: "写一个往飞书群发消息的小工具。",
-      messages: [{ role: "user", text: "加一个能往飞书群发消息的能力", created_at: "2026-11-18T06:00:00Z" }], updated_at: "2026-11-18T06:01:00Z" }),
-    engineerJob({ id: "csv", title: "导出", headline: "结果导出 CSV", plan_plain: "结果页加一个导出按钮。", updated_at: "2026-11-18T05:00:00Z" }),
+    // A task's two pieces of work are one conversation.
+    engineerJob({ id: "t1", run_id: "ime-task", origin: "lead", title: "判定", headline: "步骤结果误判", plain: "以后不会再误判了。", status: "applied", kind: "repair",
+      report: "根本原因：quality.py:398", files: ["a.py", "b.py"], checks: ["Backend tests"],
+      messages: [{ role: "lead", text: "步骤明明没阻塞却算失败", created_at: "2026-10-28T10:00:00Z" },
+        { role: "engineer", text: "以后不会再误判了。", created_at: "2026-10-28T10:20:00Z" }], created_at: "2026-10-28T10:00:00Z", updated_at: "2026-10-28T10:30:00Z" }),
+    engineerJob({ id: "t2", run_id: "ime-task", origin: "lead", title: "超时", headline: "长回归超时", status: "applied", kind: "repair",
+      messages: [{ role: "lead", text: "长回归被提前判超时", created_at: "2026-10-28T11:00:00Z" }], created_at: "2026-10-28T11:00:00Z", updated_at: "2026-10-28T11:30:00Z" }),
+    // What the user started here is a conversation of its own.
+    engineerJob({ id: "mine", headline: "飞书发消息", plan_plain: "写一个往飞书群发消息的小工具。",
+      messages: [{ role: "user", text: "加一个能往飞书群发消息的能力", created_at: "2026-11-18T06:00:00Z" }], created_at: "2026-11-18T06:00:00Z", updated_at: "2026-11-18T06:01:00Z" }),
   ] };
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await settle();
-  const page = document.querySelector(".platform-page");
-  // Waiting for a nod, in plain words, with its buttons.
-  const card = name => [...page.querySelectorAll(".platform-pending")].find(node => node.textContent.includes(name));
-  const pending = card("飞书发消息");
-  assert.match(pending.textContent, /等你点头.*新增「飞书发消息」.*写一个往飞书群发消息的小工具/s);
-  // One conversation by day: the user's words, the engineer's plain answer, then the result in one line.
-  const thread = page.querySelector(".platform-thread").textContent;
-  // One segment per piece of work, by the day it began; finished work is one line that opens.
-  assert.match(thread, /^10 月 28 日● 已生效修复：步骤结果误判 · 改了 2 个文件 · 测试全部通过.*11 月 18 日.*加一个能往飞书群发消息的能力/s);
-  const finished = page.querySelector("details.platform-segment");
-  assert.equal(finished.open, false);
-  assert.match(finished.querySelector(".platform-segment-said").textContent, /步骤明明没阻塞却算失败.*以后不会再误判了.*已生效/s);
-  assert.match(page.querySelector(".platform-segment.open").textContent, /加一个能往飞书群发消息的能力/);
-  // The engineer's technical report is only in the result's folded details.
-  const result = page.querySelector(".platform-result");
-  assert.equal(result.querySelector(".platform-result-tech").open, false);
-  assert.match(result.querySelector(".platform-result-tech").textContent, /quality\.py:398/);
-  assert.doesNotMatch([...page.querySelectorAll(".platform-msg")].map(node => node.textContent).join(""), /quality\.py/);
-  // Beside it: recent changes, and all records a click away.
-  assert.match(page.querySelector(".platform-changes").textContent, /修复步骤结果误判/);
-  // 改一改 turns the box into a reply to it; 批准 approves.
-  await click(button("改一改", pending));
-  assert.match(page.querySelector(".platform-reply-to").textContent, /回复「飞书发消息」/);
-  const box = page.querySelector('.platform-composer textarea');
+  const page = () => document.querySelector(".platform-page");
+  assert.match(page().querySelector(".platform-pending").textContent, /等你点头.*新增「飞书发消息」/s);
+  // The conversations are listed in the side panel, where 最近改进 was.
+  const rows = () => [...page().querySelectorAll(".platform-side .platform-thread-row")];
+  assert.equal(page().querySelector(".platform-changes"), null);
+  assert.deepEqual(rows().map(row => row.querySelector("b").textContent), ["飞书发消息", "中文输入法交付"]);
+  assert.match(rows()[0].textContent, /你发起 · 1 项.*等你点头/s);
+  assert.match(rows()[1].textContent, /来自任务 · 2 项 · 长回归超时.*已生效/s);
+
+  // Inside the task's conversation: both pieces of work, each with what came of it; the report folded.
+  await click(rows()[1]);
+  const thread = page().querySelector(".platform-thread").textContent;
+  assert.match(thread, /步骤明明没阻塞却算失败.*以后不会再误判了.*已生效修复：步骤结果误判 · 改了 2 个文件 · 测试全部通过.*长回归被提前判超时.*修复：长回归超时/s);
+  assert.equal(page().querySelector(".platform-result").open, false);
+  assert.doesNotMatch([...page().querySelectorAll(".platform-msg")].map(node => node.textContent).join(""), /quality\.py/);
+  // Going on in it: new work in this conversation.
+  const box = page().querySelector(".platform-composer textarea");
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, "密钥放环境变量里");
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, "超时再放宽一点");
     box.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
-  await act(async () => page.querySelector(".platform-composer").requestSubmit());
-  await click(button("批准，开始做", card("结果导出 CSV")));
-  assert.deepEqual(state.engineerActions.map(item => [item.path, item.body]),
-    [["/api/engineer/jobs/new/reply", { text: "密钥放环境变量里" }], ["/api/engineer/jobs/csv/approve", {}]]);
-  await click(button("全部 3 条记录 ›"));
+  await act(async () => page().querySelector(".platform-composer").requestSubmit());
+  assert.deepEqual(state.engineerActions.at(-1), { path: "/api/engineer/jobs", body: { request: "超时再放宽一点", kind: "repair", thread_id: "task:ime-task" } });
+
+  // The other one is a click away in the list; inside the waiting one, the box answers it.
+  await click(rows()[0]);
+  assert.equal(rows()[0].getAttribute("aria-pressed"), "true");
+  assert.match(page().querySelector(".platform-reply-to").textContent, /回复「飞书发消息」/);
+  await click(button("批准，开始做", page().querySelector(".platform-thread")));
+  assert.equal(state.engineerActions.at(-1).path, "/api/engineer/jobs/mine/approve");
+  // 新对话 empties the main column for a new one.
+  await click(page().querySelector(".platform-new"));
+  assert.equal(page().querySelector(".platform-composer textarea").getAttribute("placeholder"), "跟平台工程师说要加什么、修什么…（开始一段新对话）");
+  await click(button(`全部 ${state.engineer.jobs.length} 条记录 ›`));
   assert.ok(document.querySelector(".engineer-list") && button("← 平台"));
 });

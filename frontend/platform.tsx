@@ -13,10 +13,6 @@ type RunRef = { id: string; plan: { summary: string; title?: string } };
 type Skill = { name: string; description: string; tools: string[]; machine: boolean };
 
 const DONE = new Set(["applied", "failed", "rejected", "cancelled"]);
-// Pieces of work the conversation shows; older work is in 全部记录.
-const SHOWN_JOBS = 8;
-// Skills listed beside the conversation; the rest are named in one line.
-const SHOWN_SKILLS = 6;
 // A message longer than this shows its start, the rest folded.
 const LONG_MESSAGE = 280;
 const WORKING: Record<string, string> = {
@@ -47,6 +43,46 @@ function planPoints(job: EngineerJob): string[] {
     .filter(Boolean).slice(0, 3);
 }
 
+/** The conversation a job belongs to: its own record, else its task's, else itself (engineer.thread_of). */
+export function threadOf(job: Pick<EngineerJob, "thread_id" | "run_id" | "id">): string {
+  return job.thread_id || (job.run_id ? `task:${job.run_id}` : job.id);
+}
+
+type Thread = { id: string; jobs: EngineerJob[]; run?: RunRef; started: string; updated: string };
+
+function threads(jobs: EngineerJob[], runs: RunRef[]): Thread[] {
+  const groups = new Map<string, EngineerJob[]>();
+  for (const job of jobs) groups.set(threadOf(job), [...(groups.get(threadOf(job)) ?? []), job]);
+  return [...groups.entries()].map(([id, items]) => {
+    const sorted = [...items].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const runId = id.startsWith("task:") ? id.slice(5) : sorted[0].run_id;
+    return { id, jobs: sorted, run: runs.find(run => run.id === runId), started: sorted[0].created_at,
+      updated: sorted.map(job => job.updated_at).sort().at(-1)! };
+  }).sort((a, b) => b.updated.localeCompare(a.updated));
+}
+
+function threadTitle(thread: Thread): string {
+  // A task's conversation is named by its task; once the task is gone, by its first piece of work.
+  if (thread.run) {
+    const name = thread.run.plan.title || thread.run.plan.summary.split(/[，。；,.]/)[0];
+    return name.length > 24 ? `${name.slice(0, 23)}…` : name;
+  }
+  return headlineOf(thread.jobs[0]);
+}
+
+function threadSource(thread: Thread): string {
+  return thread.id.startsWith("task:") ? (thread.run ? "来自任务" : "来自已删除的任务") : "你发起";
+}
+
+function threadState(thread: Thread): { label: string; tone: string } {
+  if (thread.jobs.some(job => ENGINEER_WAITING.has(job.status))) return { label: "等你点头", tone: "warn" };
+  if (thread.jobs.some(job => !DONE.has(job.status))) return { label: "进行中", tone: "busy" };
+  return ENGINEER_STATUS[thread.jobs.at(-1)!.status] ?? { label: thread.jobs.at(-1)!.status, tone: "muted" };
+}
+
+// Conversations the 平台 page lists; older ones are in 全部记录.
+const SHOWN_THREADS = 12;
+
 export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabilities }: {
   apiBase: string; runs: RunRef[]; onOpenRun: (id: string) => void;
   onRecords: (jobId?: string) => void; onCapabilities: () => void;
@@ -58,19 +94,23 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
     fetch(`${apiBase}/api/skills`).then(r => r.ok ? r.json() : []).then(list => Array.isArray(list) && setSkills(list)).catch(() => {});
   }, [apiBase]);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
-  const [target, setTarget] = useState<string | null>(null);
-  const replyTo = waiting.find(job => job.id === target);
-  const applied = jobs.filter(job => job.status === "applied").slice(0, 5);
+  const all = threads(jobs, runs);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = all.find(thread => thread.id === openId);
   return <div className="platform-page">
     <section className="platform-main">
-      <header className="platform-head">
-        <h2>平台</h2>
-        <p>跟平台工程师说要加什么能力、修什么问题。改动先在副本里做，测试通过、你点头才生效。</p>
-      </header>
-      {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
-      {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setTarget(job.id)} />)}
-      <Conversation jobs={jobs} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
-      <PlatformComposer act={act} replyTo={replyTo} onDone={() => setTarget(null)} disabled={!available} />
+      {open ? <ThreadView thread={open} title={threadTitle(open)} act={act} available={available} runs={runs}
+        onOpenRun={onOpenRun} onRecords={onRecords} /> : <>
+        <header className="platform-head">
+          <h2>平台</h2>
+          <p>跟平台工程师说要加什么能力、修什么问题。改动先在副本里做，测试通过、你点头才生效。</p>
+        </header>
+        {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
+        {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setOpenId(threadOf(job))} />)}
+        <p className="platform-empty">{all.length ? "开始一段新对话，或在右边接着之前的对话聊。" : "还没有对话。在下面说要加什么能力、修什么问题。"}</p>
+        <div className="platform-spacer" />
+        <PlatformComposer act={act} disabled={!available} />
+      </>}
     </section>
     <aside className="platform-side" aria-label="平台现在能做的">
       <h3>平台现在能做的</h3>
@@ -87,24 +127,23 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
       </ul>
       {!!capabilities.length && <button type="button" className="platform-link" onClick={onCapabilities}>管理能力 ›</button>}
       <p className="platform-side-sub">技能 · 只有用法说明</p>
-      <ul className="platform-abilities">
-        {skills.slice(0, SHOWN_SKILLS).map(item => <li key={`skill-${item.name}`}>
-          <div>
-            <span className="platform-ability-icon"><Icon name={"file" as IconName} size={15} /></span>
-            <span className="platform-ability-text"><b>{item.name}</b><small title={item.description}>{item.description}</small></span>
-            <span className="platform-ability-status active">会用</span>
-          </div>
-        </li>)}
-        {skills.length > SHOWN_SKILLS && <li className="muted" title={skills.slice(SHOWN_SKILLS).map(item => item.name).join("、")}>还会 {skills.length - SHOWN_SKILLS} 项：{skills.slice(SHOWN_SKILLS).map(item => item.name).join("、")}</li>}
-        {!skills.length && <li className="muted">还没有。</li>}
-      </ul>
-      <h3>最近改进</h3>
-      <ul className="platform-changes">
-        {applied.map(job => <li key={job.id}><button type="button" onClick={() => onRecords(job.id)}>
-          <span className="platform-change-verb">{verb(job)}</span><span className="platform-change-name">{headlineOf(job)}</span><small>{short(job.finished_at ?? job.updated_at)}</small>
-        </button></li>)}
-        {!applied.length && <li className="muted">还没有。</li>}
-      </ul>
+      <p className="platform-skills" title={skills.map(item => `${item.name}：${item.description}`).join("\n")}>
+        {skills.length ? skills.map(item => item.name).join("、") : "还没有。"}</p>
+
+      <div className="platform-side-head"><h3>对话</h3>
+        <button type="button" className="platform-new" aria-pressed={!open} onClick={() => setOpenId(null)}><Icon name="plus" size={13} />新对话</button></div>
+      <div className="platform-threads" aria-label="对话">
+        {all.slice(0, SHOWN_THREADS).map(thread => {
+          const state = threadState(thread);
+          return <button type="button" key={thread.id} className="platform-thread-row" aria-pressed={thread.id === openId} onClick={() => setOpenId(thread.id)}>
+            <span className="platform-thread-main"><b>{threadTitle(thread)}</b>
+              <small>{threadSource(thread)} · {thread.jobs.length} 项 · {headlineOf(thread.jobs.at(-1)!)}</small></span>
+            <span className="platform-thread-side"><span className={`platform-thread-state ${state.tone}`}>{state.label}</span>
+              <small className="platform-thread-date">{short(thread.updated)}</small></span>
+          </button>;
+        })}
+        {!all.length && <p className="muted">还没有。</p>}
+      </div>
       <button type="button" className="platform-link" onClick={() => onRecords()}>全部 {jobs.length} 条记录 ›</button>
     </aside>
   </div>;
@@ -139,64 +178,57 @@ function Pending({ job, act, onRevise }: { job: EngineerJob; act: (path: string,
   </section>;
 }
 
-/** The conversation, one segment per piece of work, by the day it began: finished work folds to its
- * result line, work under way or waiting for you shows its own messages. */
-function Conversation({ jobs, runs, onOpenRun, onRecords }: {
-  jobs: EngineerJob[]; runs: RunRef[]; onOpenRun: (id: string) => void; onRecords: (jobId?: string) => void;
+/** One conversation: everything said in it, each piece of work followed by what came of it, and
+ * the box to go on — a reply to what waits for you, or new work in this conversation. */
+function ThreadView({ thread, title, act, available, runs, onOpenRun, onRecords }: {
+  thread: Thread; title: string; act: (path: string, body?: unknown) => Promise<string | null>; available: boolean;
+  runs: RunRef[]; onOpenRun: (id: string) => void; onRecords: (jobId?: string) => void;
 }) {
-  const started = (job: EngineerJob) => job.messages?.[0]?.created_at ?? job.created_at;
-  // Work with nothing said yet is only in the cards pinned above.
-  const said = jobs.filter(job => job.messages?.length || DONE.has(job.status));
-  const recent = [...said].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, SHOWN_JOBS)
-    .sort((a, b) => started(a).localeCompare(started(b)));
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [recent.length]);
-  const older = said.length - recent.length;
+  const said = thread.jobs.reduce((count, job) => count + (job.messages?.length ?? 0), 0);
+  useEffect(() => { end.current?.scrollIntoView?.({ block: "end" }); }, [said, thread.id]);
+  const waiting = thread.jobs.find(job => ENGINEER_WAITING.has(job.status));
   let shownDay = "";
-  return <div className="platform-thread" aria-label="和平台工程师的对话">
-    {older > 0 && <button type="button" className="platform-older" onClick={() => onRecords()}>更早的 {older} 项在全部记录里 ›</button>}
-    {!recent.length && <p className="platform-empty">还没有对话。在下面说要加什么能力、修什么问题。</p>}
-    {recent.map(job => {
-      const thisDay = day(started(job)), divider = thisDay !== shownDay;
-      shownDay = thisDay;
-      return <React.Fragment key={job.id}>
-        {divider && <p className="platform-day">{thisDay}</p>}
-        <Segment job={job} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
-      </React.Fragment>;
-    })}
-    <div ref={end} />
-  </div>;
+  return <>
+    <header className="platform-head">
+      <h2>{title}</h2>
+      <p>{thread.run ? <>来自任务 <button type="button" className="link-button" onClick={() => onOpenRun(thread.run!.id)}>「{thread.run.plan.title || thread.run.plan.summary.slice(0, 30)}」</button> · </> : `${threadSource(thread) === "你发起" ? "你发起的对话" : "来自已删除的任务"} · `}{thread.jobs.length} 项工作</p>
+    </header>
+    <div className="platform-thread" aria-label="对话内容">
+      {thread.jobs.map(job => <React.Fragment key={job.id}>
+        {(job.messages ?? []).map((message, index) => {
+          const thisDay = day(message.created_at), divider = thisDay !== shownDay;
+          shownDay = thisDay;
+          return <React.Fragment key={index}>{divider && <p className="platform-day">{thisDay}</p>}
+            <Message job={job} message={message} runs={runs} onOpenRun={onOpenRun} /></React.Fragment>;
+        })}
+        {DONE.has(job.status) && <Result job={job} onRecords={onRecords} />}
+        {WORKING[job.status] && <p className="platform-working"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{headlineOf(job)} · {WORKING[job.status]}</p>}
+        {ENGINEER_WAITING.has(job.status) && <Pending job={job} act={act} onRevise={() => document.querySelector<HTMLTextAreaElement>(".platform-composer textarea")?.focus()} />}
+      </React.Fragment>)}
+      <div ref={end} />
+    </div>
+    <PlatformComposer act={act} disabled={!available} replyTo={waiting} threadId={thread.id} />
+  </>;
 }
 
-/** One piece of work. Finished, it is one line that opens to its messages and details. */
-function Segment({ job, runs, onOpenRun, onRecords }: {
-  job: EngineerJob; runs: RunRef[]; onOpenRun: (id: string) => void; onRecords: (jobId?: string) => void;
-}) {
-  const messages = job.messages ?? [];
-  const said = <>{messages.map((message, index) => <Message key={index} job={job} message={message} runs={runs} onOpenRun={onOpenRun} />)}</>;
-  if (!DONE.has(job.status)) return <section className="platform-segment open" aria-label={headlineOf(job)}>
-    {messages.filter(message => message.role !== "system").map((message, index) => <Message key={index} job={job} message={message} runs={runs} onOpenRun={onOpenRun} />)}
-    {WORKING[job.status] && <p className="platform-working"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{headlineOf(job)} · {WORKING[job.status]}</p>}
-  </section>;
+/** What came of a piece of work, in one line; the engineer's technical report folded inside. */
+function Result({ job, onRecords }: { job: EngineerJob; onRecords: (jobId?: string) => void }) {
   const status = ENGINEER_STATUS[job.status] ?? { label: job.status, tone: "muted" };
   const facts = [
     `${verb(job)}：${headlineOf(job)}`,
     ...(job.files?.length ? [`改了 ${job.files.length} 个文件`] : []),
     ...(job.status === "applied" && job.checks?.length ? ["测试全部通过"] : []),
   ];
-  return <details className={`platform-segment platform-result ${job.status}`}>
+  return <details className={`platform-result ${job.status}`}>
     <summary><span className={`platform-result-status ${status.tone}`}>● {status.label}</span><span className="platform-result-facts">{facts.join(" · ")}</span>
-      <small>{short(job.finished_at ?? job.updated_at)}</small><span className="platform-result-more" aria-hidden="true">›</span></summary>
+      <span className="platform-result-more" aria-hidden="true">›</span></summary>
     <div className="platform-result-body">
-      {job.plain && <p className="platform-result-plain">{job.plain}</p>}
-      <div className="platform-segment-said">{said}</div>
-      <details className="platform-result-tech"><summary>技术细节</summary>
-        {job.report && <MarkdownView text={job.report} />}
-        {!!job.files?.length && <p className="platform-result-line">改动的文件：{job.files.map(file => <code key={file}>{file}</code>)}</p>}
-        {!!job.checks?.length && <p className="platform-result-line">检查通过：{job.checks.map(check => CHECKS[check] ?? check).join("、")}</p>}
-        {job.commit && <p className="platform-result-line">已提交到 git：<code>{job.commit.slice(0, 8)}</code>（没有推送）</p>}
-        {job.error && <p className="error">{job.error}</p>}
-      </details>
+      {job.report && <MarkdownView text={job.report} />}
+      {!!job.files?.length && <p className="platform-result-line">改动的文件：{job.files.map(file => <code key={file}>{file}</code>)}</p>}
+      {!!job.checks?.length && <p className="platform-result-line">检查通过：{job.checks.map(check => CHECKS[check] ?? check).join("、")}</p>}
+      {job.commit && <p className="platform-result-line">已提交到 git：<code>{job.commit.slice(0, 8)}</code>（没有推送）</p>}
+      {job.error && <p className="error">{job.error}</p>}
       <button type="button" className="link-button" onClick={() => onRecords(job.id)}>在全部记录里打开 ›</button>
     </div>
   </details>;
@@ -228,12 +260,11 @@ function Folded({ text, plain = false }: { text: string; plain?: boolean }) {
 }
 
 /** The box at the foot: a new request, or a reply to what waits for the user. */
-function PlatformComposer({ act, replyTo, onDone, disabled }: {
-  act: (path: string, body?: unknown) => Promise<string | null>; replyTo?: EngineerJob; onDone: () => void; disabled: boolean;
+function PlatformComposer({ act, replyTo, threadId, disabled }: {
+  act: (path: string, body?: unknown) => Promise<string | null>; replyTo?: EngineerJob; threadId?: string; disabled: boolean;
 }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { if (replyTo) box.current?.focus(); }, [replyTo?.id]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     const said = text.trim();
@@ -241,19 +272,19 @@ function PlatformComposer({ act, replyTo, onDone, disabled }: {
     setBusy(true); setError("");
     const problem = replyTo
       ? await act(`/api/engineer/jobs/${encodeURIComponent(replyTo.id)}/reply`, { text: said })
-      : await act("/api/engineer/jobs", { request: said, kind: kindOf(said) });
+      : await act("/api/engineer/jobs", { request: said, kind: kindOf(said), ...(threadId ? { thread_id: threadId } : {}) });
     setBusy(false);
-    if (problem) setError(problem); else { setText(""); onDone(); }
+    if (problem) setError(problem); else setText("");
   }
   function keys(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
   }
   return <form className="platform-composer" onSubmit={submit} aria-label="给平台工程师留言">
-    {replyTo && <p className="platform-reply-to">回复「{headlineOf(replyTo)}」<button type="button" className="link-button" onClick={onDone}>取消</button></p>}
+    {replyTo && <p className="platform-reply-to">回复「{headlineOf(replyTo)}」</p>}
     <div className="platform-input">
       <textarea ref={box} aria-label="给平台工程师的消息" rows={2} maxLength={20000} value={text} disabled={disabled || busy}
         onChange={event => setText(event.target.value)} onKeyDown={keys}
-        placeholder={replyTo ? "写下要改的地方，或回答它的问题…" : "跟平台工程师说要加什么、修什么…"} />
+        placeholder={replyTo ? "写下要改的地方，或回答它的问题…" : threadId ? "接着说…" : "跟平台工程师说要加什么、修什么…（开始一段新对话）"} />
       <button type="submit" className="primary send-button" disabled={disabled || busy || !text.trim()} title="Ctrl + Enter" aria-label="发送">
         {busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
     </div>

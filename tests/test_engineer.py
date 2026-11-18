@@ -386,3 +386,30 @@ async def test_the_engineer_says_what_it_does_in_plain_words_for_the_user(setup)
 def test_a_reply_without_plain_lines_is_kept_whole():
     from super_partner.engineer import plain_lines
     assert plain_lines("改了 api.py\nSTATUS: FIXED") == ("", "", "改了 api.py\nSTATUS: FIXED")
+
+
+async def test_going_on_with_a_conversation_tells_the_engineer_what_came_before(setup):
+    from super_partner.engineer import EngineerError, thread_of
+    build, _, _ = setup
+    providers = PlainEngineer()
+    executor = build(providers)
+    first = executor.engineer_request("给结果页加一个导出按钮")
+    await idle(executor)
+    executor.engineer_approve(first.id)
+    await idle(executor)
+    first = executor.db.get_engineer_job(first.id)
+    assert thread_of(first) == first.id
+
+    # Said on in the same conversation once the first work is done: a new job in it, told what came before.
+    later = executor.engineer_request("导出的文件名加上日期", "component", thread_id=first.id)
+    assert (later.thread_id, thread_of(later)) == (first.id, first.id)
+    assert "给结果页加一个导出按钮" in later.context and "结果页现在可以导出 CSV 了" in later.context
+    await idle(executor)
+    prompt = providers.prompts[-1][0]
+    assert "Earlier in this conversation" in prompt and "给结果页加一个导出按钮" in prompt and "导出的文件名加上日期" in prompt
+
+    # A task's jobs are its conversation; going on in it keeps the job with the task.
+    task = executor.engineer_request("放行许可证端口", "repair", thread_id="task:r9")
+    assert task.run_id == "r9" and thread_of(task) == "task:r9"
+    with pytest.raises(EngineerError):
+        executor.engineer_request("随便", "repair", thread_id="nothing-here")

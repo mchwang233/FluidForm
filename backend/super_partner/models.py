@@ -601,6 +601,10 @@ class EngineerJob(BaseModel):
     headline: str = ""
     plan_plain: str = ""
     plain: str = ""
+    # The conversation it belongs to (engineer.thread_of): a task's jobs share one, a job the user
+    # started is its own, and what the user says on in it joins it. ``context`` is what came before.
+    thread_id: Optional[str] = None
+    context: str = ""
     request: str
     # queued | planning | plan_ready | editing | validating | ready | needs_input | applying, or
     # one of ENGINEER_DONE; ``phase`` is the work a queued job waits to do (plan | edit).

@@ -250,6 +250,8 @@ class EngineerRequest(BaseModel):
     request: str = Field(min_length=1, max_length=20_000)
     kind: str = Field(default="component", pattern="^(repair|component)$")
     budget_usd: Optional[float] = Field(default=None, ge=0, le=100)
+    # Go on with this conversation (engineer.thread_of); a new one when empty.
+    thread_id: Optional[str] = Field(default=None, max_length=200)
 
 
 class EngineerReply(BaseModel):
@@ -287,7 +289,8 @@ async def engineer_join(run_id: str, body: EngineerRequest):
 async def engineer_request(body: EngineerRequest):
     """Ask the platform engineer for a repair (applied once checked) or a component (planned
     first; applied once the user approves the checked change)."""
-    return _engineer(lambda: executor.engineer_request(body.request, body.kind, budget_usd=body.budget_usd))
+    return _engineer(lambda: executor.engineer_request(body.request, body.kind, budget_usd=body.budget_usd,
+                                                       thread_id=body.thread_id))
 
 
 @app.post("/api/engineer/jobs/{job_id}/reply")

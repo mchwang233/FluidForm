@@ -9,7 +9,7 @@ import { Composer, when, type Diagnosis } from "./diagnosis";
 export type EngineerMessage = { role: "user" | "engineer" | "lead" | "system"; text: string; created_at: string };
 export type EngineerJob = {
   id: string; kind: "repair" | "component"; origin: "user" | "lead" | "diagnosis" | "retrospective"; title: string; request: string;
-  headline?: string; plan_plain?: string; plain?: string;
+  headline?: string; plan_plain?: string; plain?: string; thread_id?: string | null;
   status: string; plan?: string | null; report?: string | null; question?: string | null; choices?: string[];
   run_id?: string | null; node_id?: string | null; files?: string[]; checks?: string[]; diff?: string | null;
   commit?: string | null; model_id?: string | null; messages?: EngineerMessage[]; budget_usd: number; cost_usd: number;

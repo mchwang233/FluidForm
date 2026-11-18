@@ -69,6 +69,24 @@ def plain_lines(text: str) -> tuple[str, str, str]:
     return found.get("HEADLINE", "")[:24], found.get("PLAIN", "")[:300], rest
 
 
+# Characters of a conversation's earlier work a job continuing it is told.
+MAX_THREAD_CONTEXT = 6000
+
+
+def thread_of(job: EngineerJob) -> str:
+    """The conversation a job belongs to: its own record, else its task's, else itself (older jobs)."""
+    return job.thread_id or (f"task:{job.run_id}" if job.run_id else job.id)
+
+
+def thread_context(jobs: list[EngineerJob]) -> str:
+    """What was asked and came of it earlier in a conversation, oldest first, the latest kept."""
+    lines = []
+    for job in sorted(jobs, key=lambda item: item.created_at):
+        outcome = job.plain or (job.report or job.error or "")[:600]
+        lines.append(f"- 需求：{job.request[:800]}\n  结果（{job.status}）：{outcome}".rstrip())
+    return "\n".join(lines)[-MAX_THREAD_CONTEXT:]
+
+
 def _conversation(job: EngineerJob) -> str:
     return "\n".join(f"{item.role}: {item.text[:2000]}" for item in job.messages[-20:]) or "(none)"
 
@@ -80,6 +98,7 @@ def plan_prompt(job: EngineerJob, guide: str) -> str:
         + "The working directory is an isolated copy of Super Partner's source. Read it to plan the "
         "change below; do not edit anything yet. Read docs/ARCHITECTURE.md first, then only the code "
         f"you need.\n{asker}:\n{job.request}\n\nConversation so far:\n{_conversation(job)}\n"
+        + (f"\nEarlier in this conversation, before this request:\n{job.context}\n" if job.context else "")
         + (f"\nYour previous plan, which the user wants changed:\n{job.plan}\n" if job.plan else "")
         + "\n" + PLAIN_RULE.format(what="in two or three short sentences: what you will make or fix, how it will be used, roughly how big the change is")
         + "Write the plan in Chinese, short, for the user to approve:\n"
@@ -105,7 +124,8 @@ def edit_prompt(job: EngineerJob, guide: str, feedback: str = "") -> str:
         "a repair, a regression test that fails without it); never weaken or delete existing tests. Do "
         "not touch task data, credentials, Git history, the live source, or running services. The "
         f"controller then runs the backend tests, frontend tests and build independently{after}.\n\n"
-        + what + f"\nConversation so far:\n{_conversation(job)}\n" + feedback
+        + what + f"\nConversation so far:\n{_conversation(job)}\n"
+        + (f"\nEarlier in this conversation, before this request:\n{job.context}\n" if job.context else "") + feedback
         + "\n" + PLAIN_RULE.format(what="one or two sentences: what was wrong or wanted, and what works now")
         + "When done, report in Chinese (改了什么, 测试, 验证) and end with `STATUS: FIXED`. If a real "
         "choice belongs to the user, ask with QUESTION, OPTIONS (a JSON array) and `STATUS: NEEDS_INPUT`.\n\n"
@@ -176,8 +196,9 @@ class Engineering:
     def engineer_request(self, request: str, kind: str = "component", origin: str = "user", *,
                          run_id: Optional[str] = None, node_id: Optional[str] = None,
                          decision_id: Optional[str] = None, budget_usd: Optional[float] = None,
-                         improvement_id: Optional[str] = None) -> EngineerJob:
-        """A new job: a component is planned first, a repair is made at once. It waits its turn."""
+                         improvement_id: Optional[str] = None, thread_id: Optional[str] = None) -> EngineerJob:
+        """A new job: a component is planned first, a repair is made at once. It waits its turn.
+        With ``thread_id`` it goes on with that conversation, told what came of it before."""
         if not self.engineer_available():
             raise EngineerError("平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的 Super Partner 源码。")
         request = (request or "").strip()
@@ -185,8 +206,16 @@ class Engineering:
             raise EngineerError("请写明要修复什么，或要添加什么组件。")
         if kind not in {"repair", "component"}:
             raise EngineerError("工作类型只能是修复或添加组件。")
+        context = ""
+        if thread_id:
+            earlier = [item for item in self.db.engineer_jobs(1000) if thread_of(item) == thread_id]
+            if not earlier and not thread_id.startswith("task:"):
+                raise EngineerError("这段对话不存在。")
+            context = thread_context(earlier)
+            if thread_id.startswith("task:") and not run_id:
+                run_id = thread_id.split(":", 1)[1]
         job = EngineerJob(
-            kind=kind, origin=origin, request=request, title=title_of(request),
+            kind=kind, origin=origin, request=request, title=title_of(request), thread_id=thread_id, context=context,
             phase="plan" if kind == "component" else "edit", run_id=run_id, node_id=node_id,
             decision_id=decision_id,
             improvement_id=improvement_id,
