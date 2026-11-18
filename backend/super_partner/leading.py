@@ -392,7 +392,10 @@ class Leading:
     async def _lead_chat(self, run_id: str, text: str, reply_id: str) -> None:
         job = None
         try:
-            answer, status = await self.ask_lead(run_id, supervisor.chat_message(text)), "done"
+            run = self.db.get_run(run_id)
+            # A chat is only a conversation; a task's lead answers as the lead who follows it.
+            prompt = supervisor.chat_opening(run, text) if run.kind == "chat" else supervisor.chat_message(text)
+            answer, status = await self.ask_lead(run_id, prompt), "done"
             # The lead may bring the platform engineer in at once.
             answer, call = supervisor.split_engineer(answer)
             if call:
@@ -402,7 +405,8 @@ class Leading:
             answer, status = "这条回复被中断了，请重新提问。", "failed"
             raise
         except Exception as exc:
-            answer, status = f"负责人暂时无法回答：{str(exc)[:300]}", "failed"
+            chat = (latest := self.db.get_run(run_id)) is not None and latest.kind == "chat"
+            answer, status = f"{'模型' if chat else '负责人'}暂时无法回答：{str(exc)[:300]}", "failed"
         finally:
             async with self.locks.setdefault(run_id, asyncio.Lock()):
                 run = self.db.get_run(run_id)

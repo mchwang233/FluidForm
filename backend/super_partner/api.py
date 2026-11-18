@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel, Field
 
 from . import attachments as files
-from . import briefing, cli_quota, folders, learning, publish, retrospect, skills, team
+from . import briefing, cli_quota, folders, learning, publish, retrospect, skills, supervisor, team
 from . import diagnosis as diagnosis_module
 from .benchmarks import BenchmarkCatalog
 from .catalog_sync import CatalogSync, seed_catalog
@@ -36,6 +36,7 @@ from .models import (
     NodeStatus,
     RunStatus,
     SupervisorSession,
+    TaskPlan,
 )
 from .outline import INTERNET_NOTE
 from .planner import autonomous_plan
@@ -506,10 +507,12 @@ async def _new_task(body: CreateTask, parent: Optional[ExecutionRun] = None) -> 
     return run
 
 
-async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, decided: str = ""):
+async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, decided: str = "",
+                     context: str = ""):
     """The routed and estimated plan of ``body`` (see _new_task), and what it was made with:
     (plan, lead session, attachments, project folder, background, lessons). ``decided``: the
-    user's answers to an earlier plan's open choices (replan_with_choices)."""
+    user's answers to an earlier plan's open choices (replan_with_choices). ``context``: the
+    background when there is no parent, such as the conversation a task grew out of (promote_chat)."""
     configured = providers.configured_models(list(models))
     if not body.use_cli:
         configured = {model_id for model_id in configured if not model_id.startswith("cli:")}
@@ -524,7 +527,7 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
     except files.AttachmentError as exc:
         raise HTTPException(400, str(exc)) from exc
     needs_vision = any(item.kind == "image" for item in attached)
-    background = change_background(parent) if parent else None
+    background = change_background(parent) if parent else (context or None)
     request = body.prompt + files.describe(attached, with_paths=False)
     if decided:
         request += "\n\n" + decided
@@ -823,7 +826,8 @@ async def delete_task(run_id: str):
         raise HTTPException(409, "该任务的改进仍由平台工程师处理，请完成或放弃后再删除。")
     deleted_attachments = existing.attachments if existing else []
     try:
-        deleted = db.delete_run(run_id)
+        # A chat is a draft that never runs; a draft task is not deleted (only finished ones are).
+        deleted = db.delete_run(run_id, chat=bool(existing and existing.kind == "chat"))
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     if not deleted:
@@ -970,6 +974,111 @@ async def ask_lead(run_id: str, body: LeadQuestion):
     if not executor.start_lead_chat(run_id, body.message.strip()):
         raise HTTPException(409, "负责人还在回答上一条消息，请稍候。")
     return get_task(run_id)
+
+
+class CreateChat(BaseModel):
+    message: str = Field(min_length=1, max_length=20_000)
+    budget_usd: float = Field(default=1, gt=0, le=10_000)
+    use_cli: bool = True
+    project_dir: Optional[str] = Field(default=None, max_length=4096)
+    # A model that can hold a conversation (supervisor.candidates); the best one when empty.
+    model_id: Optional[str] = Field(default=None, max_length=200)
+
+
+# Characters of a chat's title, from its first message.
+CHAT_TITLE_CHARS = 60
+
+
+def chat_models(use_cli: bool = True) -> list:
+    """Models a chat can be held with, best first: those that can lead a task's conversation."""
+    configured = providers.configured_models(list(models))
+    if not use_cli:
+        configured = {model_id for model_id in configured if not model_id.startswith("cli:")}
+    return supervisor.candidates(list(models.values()), configured)
+
+
+@app.get("/api/chats/models")
+def list_chat_models(use_cli: bool = True):
+    return [{"id": model.id, "display_name": model.display_name, "channel": model.channel}
+            for model in chat_models(use_cli)]
+
+
+@app.post("/api/chats", response_model=ExecutionRun, status_code=201)
+async def create_chat(body: CreateChat):
+    """Only a conversation: no plan, no steps. The model may read the project folder, if one is
+    given (a CLI's read-only lead conversation there); it edits nothing. The first message is
+    answered in the background, as in a task's conversation with its lead."""
+    available = chat_models(body.use_cli)
+    pick = next((model for model in available if model.id == body.model_id), None) if body.model_id else \
+        next(iter(available), None)
+    if pick is None:
+        raise HTTPException(422, "这个模型不能用来对话。" if body.model_id else "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
+    project_dir = None
+    if body.project_dir and body.project_dir.strip():
+        try:
+            project_dir = str(resolve_project_dir(body.project_dir.strip()))
+        except ProjectDirError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    message = body.message.strip()
+    title = message.splitlines()[0][:CHAT_TITLE_CHARS] if message else "对话"
+    run = ExecutionRun(
+        id=str(uuid4()), prompt=message, kind="chat", status=RunStatus.DRAFT,
+        plan=TaskPlan(summary=title, nodes=[], request=message, in_project=bool(project_dir)),
+        budget_usd=body.budget_usd, use_cli=body.use_cli, project_dir=project_dir,
+        supervisor=supervisor.new_session(pick, folder=project_dir),
+    )
+    db.save_run(run)
+    db.add_event(Event(run_id=run.id, kind="chat.created", data={"model_id": pick.id, "project_dir": project_dir}))
+    executor.start_lead_chat(run.id, message)
+    return get_task(run.id)
+
+
+class PromoteChat(BaseModel):
+    # What the task is to do; the chat's first message when empty. The conversation goes with it.
+    prompt: str = Field(default="", max_length=20_000)
+    budget_usd: float = Field(default=2, gt=0, le=10_000)
+    use_cli: Optional[bool] = None
+    allow_network: bool = False
+
+
+@app.post("/api/tasks/{run_id}/promote", response_model=ExecutionRun)
+async def promote_chat(run_id: str, body: PromoteChat):
+    """Turn a chat into a task, in place: it is planned with the conversation as its background
+    and waits for confirmation like any new task. Its id and messages stay."""
+    run = get_task(run_id)
+    if run.kind != "chat" or run.status != RunStatus.DRAFT:
+        raise HTTPException(409, "只有对话可以转成任务。")
+    answering = executor.lead_tasks.get(run_id)
+    if (answering and not answering.done()) or run_id in REPLANNING:
+        raise HTTPException(409, "对方还在回复，请等它说完再转成任务。")
+    prompt = body.prompt.strip() or run.prompt
+    if len(prompt) < 3:
+        raise HTTPException(422, "请写清要完成的工作。")
+    use_cli = run.use_cli if body.use_cli is None else body.use_cli
+    context = "这个任务来自用户和模型的一段对话，对话内容如下（供参考，以“新需求”为准）：\n" + supervisor.chat_transcript(run)
+    request = CreateTask(prompt=prompt, budget_usd=body.budget_usd, use_cli=use_cli, project_dir=run.project_dir,
+                         allow_network=body.allow_network)
+    REPLANNING.add(run_id)
+    try:
+        plan, session, _, _, background, lessons = await _make_plan(request, context=context)
+    finally:
+        REPLANNING.discard(run_id)
+    latest = get_task(run_id)
+    if latest.kind != "chat" or latest.status != RunStatus.DRAFT:
+        raise HTTPException(409, "对话在规划期间已改变，新计划未采用。")
+    latest.kind, latest.status, latest.prompt, latest.plan = "task", RunStatus.AWAITING_CONFIRMATION, prompt, plan
+    latest.budget_usd, latest.use_cli, latest.allow_network = body.budget_usd, use_cli, body.allow_network
+    latest.background, latest.improvement_uses = background, lessons
+    # The planner leads the task from here; the chat's messages stay in its conversation.
+    latest.supervisor = session if session.model_id else latest.supervisor
+    latest.actual_cost_usd = round(latest.actual_cost_usd + plan.planning_cost_usd, 6)
+    if not latest.project_dir:
+        latest.folder_name = await asyncio.to_thread(folders.task_folder, plan.folder or plan.summary or prompt)
+    db.save_run(latest)
+    db.add_event(Event(run_id=run_id, kind="chat.promoted",
+                       data={"estimate": plan.estimate.model_dump() if plan.estimate else None,
+                             "planner_model_id": plan.planner_model_id}))
+    return latest
 
 
 @app.post("/api/tasks/{run_id}/diagnoses/{diagnosis_id}/reply", response_model=ExecutionRun)

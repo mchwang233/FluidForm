@@ -8,6 +8,9 @@ type MissionRecord = {
   created_at?: string;
   project_dir?: string | null;
   prompt?: string;
+  // "chat": only a conversation (a draft that never runs); tasks may leave it out.
+  kind?: string;
+  lead_messages?: { role: string }[];
   plan: { summary: string; nodes?: { status: string }[] };
 };
 
@@ -15,6 +18,8 @@ type MissionRecord = {
 export const MISSION_GROUPS = [
   { id: "active", label: "进行中", statuses: ["queued", "running"] },
   { id: "attention", label: "需要处理", statuses: ["awaiting_confirmation", "paused", "failed", "incomplete"] },
+  // Chats are kept as drafts: nothing of theirs runs.
+  { id: "chats", label: "对话", statuses: ["draft"] },
   { id: "done", label: "已结束", statuses: ["succeeded", "cancelled"] },
 ] as const;
 
@@ -46,6 +51,11 @@ export const STATUS_LABELS: Record<string, string> = {
   paused: "已暂停", succeeded: "已完成", failed: "失败", cancelled: "已取消", incomplete: "未能完成",
   pending: "等待中", blocked: "未执行", unable: "无法完成",
 };
+
+/** What the sidebar says a record is: a chat, or its task's status. */
+export function missionLabel(mission: { status: string; kind?: string }): string {
+  return mission.kind === "chat" ? "对话" : statusLabel(mission.status);
+}
 
 export function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status.replaceAll("_", " ");
@@ -102,8 +112,8 @@ export function estimateNote(status: string, actual: number, estimate: { high_us
     ? `按以往任务，可能约 ${formatUsd(calibrated)}` : null;
 }
 
-export function canDeleteMission(status: string): boolean {
-  return ["succeeded", "failed", "cancelled", "incomplete"].includes(status);
+export function canDeleteMission(status: string, kind?: string): boolean {
+  return ["succeeded", "failed", "cancelled", "incomplete"].includes(status) || (kind === "chat" && status === "draft");
 }
 
 export function canCancelMission(status: string): boolean {
@@ -118,15 +128,16 @@ type DeleteProps<T extends MissionRecord> = {
 };
 
 export function DeleteMissionButton<T extends MissionRecord>({ mission, deletingId, onDelete, compact = false }: DeleteProps<T>) {
-  if (!canDeleteMission(mission.status)) return null;
+  if (!canDeleteMission(mission.status, mission.kind)) return null;
+  const what = mission.kind === "chat" ? "对话" : "任务记录";
   return <button
     type="button"
     className={compact ? "mission-delete-compact" : "danger mission-delete-full"}
-    aria-label={`删除任务记录：${mission.plan.summary}`}
+    aria-label={`删除${what}：${mission.plan.summary}`}
     title="删除任务记录、结果和日志；保留本地工程文件"
     disabled={deletingId !== null}
     onClick={() => onDelete(mission)}
-  >{deletingId === mission.id ? "删除中…" : compact ? "删除" : "删除任务记录"}</button>;
+  >{deletingId === mission.id ? "删除中…" : compact ? "删除" : `删除${what}`}</button>;
 }
 
 type MissionDialogProps<T extends MissionRecord> = {
@@ -216,7 +227,7 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
     <div className="history-rail">{groups.map(group => <React.Fragment key={group.id}>
       <span className="rail-divider" title={group.label} aria-hidden="true" />
       {group.runs.map(run => <button type="button" key={run.id} className={`rail-run ${selectedId === run.id ? "active" : ""}`} aria-pressed={selectedId === run.id}
-        onClick={() => onSelect(run)} title={`${run.plan.summary} · ${statusLabel(run.status)}`} aria-label={run.plan.summary}><span className={`dot ${run.status}`} /></button>)}
+        onClick={() => onSelect(run)} title={`${run.plan.summary} · ${missionLabel(run)}`} aria-label={run.plan.summary}><span className={`dot ${run.kind === "chat" ? "chat" : run.status}`} /></button>)}
     </React.Fragment>)}</div>
   </section>;
   return <section className="panel mission-history" aria-label="任务历史">
@@ -230,9 +241,9 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
         const { done, total } = progressOf(run);
         return <div className={`run-entry ${selectedId === run.id ? "active" : ""}`} key={run.id}>
           <button className={`run ${selectedId === run.id ? "active" : ""}`} aria-pressed={selectedId === run.id} onClick={() => onSelect(run)} title={run.plan.summary}>
-            <span className={`dot ${run.status}`} />
+            <span className={`dot ${run.kind === "chat" ? "chat" : run.status}`} />
             <span className="run-text"><b>{run.plan.summary}</b>
-              <small><span className={`run-status ${run.status}`}>{statusLabel(run.status)}</span>{total > 0 && <> · {done}/{total}</>} · {formatUsd(run.actual_cost_usd)}{run.created_at && <> · {relativeTime(run.created_at)}</>}</small>
+              <small><span className={`run-status ${run.status}`}>{missionLabel(run)}</span>{run.kind === "chat" && <> · {(run.lead_messages ?? []).filter(item => item.role === "user").length} 问</>}{total > 0 && <> · {done}/{total}</>} · {formatUsd(run.actual_cost_usd)}{run.created_at && <> · {relativeTime(run.created_at)}</>}</small>
               {run.project_dir && <small className="run-project" title={run.project_dir}><Icon name="folder" size={12} /> {folder(run.project_dir)}</small>}
               {total > 0 && run.status !== "succeeded" && <span className="run-progress" aria-hidden="true"><i style={{ width: `${(done / total) * 100}%` }} /></span>}
             </span>

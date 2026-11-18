@@ -281,6 +281,27 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.deletes.push(id);
       return state.deleteResponse(id, options.signal);
     }
+    if (path === "/api/chats/models") return json(state.chatModels ?? [{ id: "cli:claude", display_name: "Claude Code CLI" }, { id: "x:fast", display_name: "Fast" }]);
+    if (path === "/api/chats" && options.method === "POST") {
+      const body = JSON.parse(options.body);
+      (state.chatPosts ??= []).push(body);
+      const chat = { ...mission("chat-new", "draft"), kind: "chat", prompt: body.message, supervisor: { model_id: body.model_id ?? "cli:claude", calls: 0 },
+        lead_messages: [{ id: "u1", role: "user", text: body.message, status: "done", created_at: "2026-10-16T04:00:00Z" },
+          { id: "l1", role: "lead", text: "", status: "pending", created_at: "2026-10-16T04:00:01Z" }] };
+      chat.plan = { ...chat.plan, summary: body.message.split("\n")[0] };
+      state.records = [chat, ...state.records];
+      return json(chat, 201);
+    }
+    if (options.method === "POST" && path.endsWith("/promote")) {
+      const id = decodeURIComponent(path.split("/")[3]);
+      const body = JSON.parse(options.body);
+      (state.promotes ??= []).push({ id, ...body });
+      const current = state.records.find(run => run.id === id);
+      const updated = { ...current, kind: "task", status: "awaiting_confirmation", prompt: body.prompt || current.prompt, budget_usd: body.budget_usd,
+        plan: { ...current.plan, summary: "加缓存", nodes: [{ id: "a", title: "加缓存", dependencies: [], status: "pending", estimated_cost_usd: 0.2, attempts: [] }] } };
+      state.records = state.records.map(run => run.id === id ? updated : run);
+      return json(updated);
+    }
     if (path === "/api/tasks" && options.method === "POST") {
       state.taskPosts++; state.taskBodies.push(JSON.parse(options.body));
       if (state.createError) return new Response(JSON.stringify({ detail: state.createError }), { status: 422, headers: { "content-type": "application/json" } });
@@ -1928,4 +1949,69 @@ test("opening the conversation shows its newest message, and new ones follow whi
     { id: "m2", role: "lead", text: "第二条", status: "done", created_at: "2026-10-20T06:17:00Z" }] };
   await act(async () => state.poll());
   assert.deepEqual(scrolled, [["dx-end", "end"]]);
+});
+
+
+function chatRecord(id = "chat-1") {
+  const chat = { ...mission(id, "draft"), kind: "chat", prompt: "接口太慢怎么办？", supervisor: { model_id: "cli:claude", calls: 1 }, actual_cost_usd: 0.01,
+    lead_messages: [{ id: "u1", role: "user", text: "接口太慢怎么办？", status: "done", created_at: "2026-10-16T04:00:00Z" },
+      { id: "l1", role: "lead", text: "可以先加缓存。", status: "done", created_at: "2026-10-16T04:00:05Z" }] };
+  chat.plan = { ...chat.plan, summary: "接口太慢怎么办？" };
+  return chat;
+}
+
+test("the composer starts a chat with the chosen model instead of planning a task", async t => {
+  const models = [{ id: "cli:claude", provider: "anthropic", display_name: "Claude Code CLI", channel: "cli", enabled: true, configured: true, scores: null }];
+  const { state, window, document, act, button, click } = await setup(t, [mission("finished-task", "succeeded")], models);
+  assert.ok(document.querySelector(".composer .attach-button") && document.querySelector(".composer .fleet-anchor"));
+  await click(button("对话", document.querySelector(".mode-switch")));
+  const composer = document.querySelector(".composer");
+  assert.match(composer.querySelector("h3").textContent, /新对话/);
+  // A chat has no attachments, network or fleet; it picks the model to talk with.
+  assert.equal(composer.querySelector(".attach-button, .fleet-anchor"), null);
+  assert.doesNotMatch(composer.textContent, /允许联网/);
+  const select = composer.querySelector('[aria-label="对话用的模型"]');
+  assert.deepEqual([...select.options].map(option => option.textContent), ["自动（Claude Code CLI）", "Claude Code CLI", "Fast"]);
+  await act(async () => { select.value = "x:fast"; select.dispatchEvent(new window.Event("change", { bubbles: true })); });
+  const box = composer.querySelector('[aria-label="想问的问题"]');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, "WAL 是什么？");
+    box.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => composer.querySelector("form").requestSubmit());
+  assert.equal(state.taskBodies.length, 0);
+  assert.equal(state.chatPosts.length, 1);
+  assert.equal(state.chatPosts[0].message, "WAL 是什么？");
+  assert.equal(state.chatPosts[0].model_id, "x:fast");
+  // It opens as a conversation: no numbers or tabs, the model answering under its own name.
+  const page = document.querySelector(".chat-page");
+  assert.ok(page);
+  assert.equal(page.querySelector(".task-metrics, .task-tabs"), null);
+  assert.match(page.querySelector(".lead-panel").textContent, /WAL 是什么.*正在思考/s);
+  assert.ok(page.querySelector('[aria-label="消息"]'));
+});
+
+test("chats sit in their own sidebar group, can be deleted, and turn into a task in place", async t => {
+  const { state, window, document, act, button, click } = await setup(t, [chatRecord(), mission("finished-task", "succeeded")], [], { openComposer: false });
+  const group = document.querySelector(".run-group.chats");
+  assert.match(group.textContent, /对话.*接口太慢怎么办.*对话 · 1 问/s);
+  await click(group.querySelector(".run"));
+  const page = document.querySelector(".chat-page");
+  assert.match(page.querySelector(".task-meta").textContent, /对话.*cli:claude/);
+  assert.match(page.querySelector(".lead-panel").textContent, /可以先加缓存/);
+  assert.ok(button("删除对话", page));
+
+  await click(button("转成任务", page));
+  const form = page.querySelector('[aria-label="转成任务"]');
+  const box = form.querySelector("textarea");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set.call(box, "给商品接口加缓存");
+    box.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => form.requestSubmit());
+  assert.deepEqual(state.promotes, [{ id: "chat-1", prompt: "给商品接口加缓存", budget_usd: 2, use_cli: false, allow_network: false }]);
+  // Now a task waiting for confirmation, with its plan and the usual tabs; the conversation goes with it.
+  assert.equal(document.querySelector(".chat-page"), null);
+  assert.match(document.querySelector(".task-page .task-meta").textContent, /待确认/);
+  assert.ok(document.querySelector(".task-tabs"));
 });

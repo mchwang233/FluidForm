@@ -272,21 +272,22 @@ class Database:
             ).fetchall()
         return [ExecutionRun.model_validate_json(row["body"]) for row in rows]
 
-    def delete_run(self, run_id: str) -> bool:
-        """Delete a finished run and its events atomically, leaving workspace files alone. What was
+    def delete_run(self, run_id: str, chat: bool = False) -> bool:
+        """Delete a finished run (with ``chat``, also a chat: a draft that is never run) and its events atomically, leaving workspace files alone. What was
         learned from it stays: its retrospective, learning review, improvements and their effects
         are what later tasks are planned with."""
         with self.lock, self.connection:
             deleted = self.connection.execute(
-                "DELETE FROM runs WHERE id = ? AND status IN (?, ?, ?, ?)",
-                (run_id, RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.INCOMPLETE),
+                "DELETE FROM runs WHERE id = ? AND status IN (?, ?, ?, ?, ?)",
+                (run_id, RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.INCOMPLETE,
+                 RunStatus.DRAFT if chat else RunStatus.SUCCEEDED),
             )
             if not deleted.rowcount:
                 exists = self.connection.execute(
                     "SELECT 1 FROM runs WHERE id = ?", (run_id,),
                 ).fetchone()
                 if exists:
-                    raise ValueError("只能删除已完成、失败或已取消的任务记录。")
+                    raise ValueError("只能删除已完成、失败或已取消的任务记录，以及对话。")
                 return False
             self.connection.execute("DELETE FROM events WHERE run_id = ?", (run_id,))
             for table in ("conversations", "conversation_archives", "model_calls"):

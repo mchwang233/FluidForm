@@ -26,6 +26,15 @@ ROLE = (
     "up; do not edit anything, the steps' models do the work. Answer in the format each message "
     "asks for.\n\n"
 )
+CHAT_ROLE = (
+    "You are talking with the user in Super Partner. This is a conversation, not a task: nothing is "
+    "planned or run. Answer their questions directly and helpfully, in Chinese unless they write in "
+    "another language. You may read files and run read-only commands to look things up; do not edit "
+    "anything. If what they want needs real work done (files changed, programs built), say so: they "
+    "can turn this conversation into a task.\n\n"
+)
+# Earlier messages a chat's new conversation is told about when its old one is lost.
+MAX_CHAT_HANDOVER_CHARS = 20_000
 # An API lead's conversation is sent whole every time; past this, older exchanges are dropped.
 MAX_HISTORY_CHARS = 300_000
 # Leads tried in turn for one message when a conversation is lost or a model is unavailable.
@@ -49,9 +58,11 @@ def candidates(models: list[ModelProfile], configured: set[str], exclude=()) -> 
     ))
 
 
-def new_session(model: ModelProfile, previous: Optional[SupervisorSession] = None) -> SupervisorSession:
-    """A fresh conversation for ``model``, in a folder of its own (a CLI conversation is tied to it)."""
-    session = SupervisorSession(model_id=model.id, cwd=str(folders.lead_folder(model.id)))
+def new_session(model: ModelProfile, previous: Optional[SupervisorSession] = None,
+                folder: Optional[str] = None) -> SupervisorSession:
+    """A fresh conversation for ``model``, in a folder of its own (a CLI conversation is tied to it),
+    or in ``folder``: a chat's project, which it may read."""
+    session = SupervisorSession(model_id=model.id, cwd=folder or str(folders.lead_folder(model.id)))
     if previous and previous.model_id:
         session.previous = [*previous.previous, previous.model_id]
     return session
@@ -72,9 +83,33 @@ def trim(session: SupervisorSession) -> None:
                                          f"ask for details if you need them.]\n\n{session.history[2]['content']}")
 
 
+def chat_transcript(run: ExecutionRun, limit: int = MAX_CHAT_HANDOVER_CHARS) -> str:
+    """The finished messages of a chat, oldest first, as many of the latest as fit in ``limit``."""
+    lines, size = [], 0
+    for message in reversed([item for item in run.lead_messages if item.status == "done" and item.text]):
+        line = f"{'用户' if message.role == 'user' else '助手'}：{message.text}"
+        if size + len(line) > limit:
+            break
+        lines.append(line)
+        size += len(line)
+    return "\n\n".join(reversed(lines))
+
+
+def chat_opening(run: ExecutionRun, text: str) -> str:
+    """A message in a chat: its first one carries the role and the folder it may read."""
+    if run.supervisor and run.supervisor.calls:
+        return text
+    folder = f"The user's project folder, which you may read: {run.project_dir}\n\n" if run.project_dir else ""
+    return CHAT_ROLE + folder + text
+
+
 def handover(run: ExecutionRun) -> str:
     """What a new lead needs to take over a running task: the request, the plan and where every
     step stands, and the latest problems."""
+    if run.kind == "chat":
+        earlier = chat_transcript(run)
+        return ("This conversation continues one the user had with another model; the messages so far:\n"
+                f"{earlier or '（none）'}\n\n" + (f"Project folder you may read: {run.project_dir}\n\n" if run.project_dir else ""))
     lines = [
         "You are taking over as the lead of a task that is already under way.",
         f"Request:\n{run.prompt}",
@@ -101,6 +136,15 @@ def handover(run: ExecutionRun) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def chat_folder(run: ExecutionRun) -> Optional[str]:
+    """Where a chat's conversation runs: its project, read-only; tasks' leads get folders of their own."""
+    return run.project_dir if run.kind == "chat" else None
+
+
+def role(run: ExecutionRun) -> str:
+    return CHAT_ROLE if run.kind == "chat" else ROLE
+
+
 async def converse(providers, session: SupervisorSession, prompt: str, charged) -> tuple[str, SupervisorSession]:
     """Send ``prompt`` to ``session``'s lead through ``charged(model_id, call)``, which bills the
     call to the task. Returns the reply and the session, now continued."""
@@ -124,16 +168,16 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
             pick = next(iter(candidates(models, configured, tried)), None)
             if pick is None:
                 break
-            session = new_session(pick, run.supervisor)
-            message = ROLE + handover(run) + prompt
+            session = new_session(pick, run.supervisor, chat_folder(run))
+            message = role(run) + handover(run) + prompt
         try:
             return await converse(providers, session, message, charged)
         except SessionLost as exc:
             # The model is fine; only its conversation is gone. Brief a new one.
             last_error = exc
             model = by_id.get(session.model_id)
-            session = new_session(model, session) if model else None
-            message = ROLE + handover(run) + prompt
+            session = new_session(model, session, chat_folder(run)) if model else None
+            message = role(run) + handover(run) + prompt
         except (ModelUnavailable, ProviderError, asyncio.TimeoutError) as exc:
             last_error = exc
             tried.add(session.model_id)

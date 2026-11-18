@@ -982,3 +982,16 @@ input.choice-own:focus{outline:0;border-color:var(--accent)}
 /* The task's tabs stay at the top of the window while its content scrolls under them. */
 .task-tabs{position:sticky;top:0;z-index:5;background:var(--panel)}
 .task-tabs-anchor{height:0}
+
+/* Chats: only a conversation with one model (chat.tsx), started from the composer's 对话 mode. */
+.composer-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mode-switch{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:light-dark(#f1f4f7,#151c25)}
+.mode-switch button{height:28px;padding:0 14px;border-radius:7px;font-size:13px;background:transparent;color:var(--muted)}
+.mode-switch button[aria-pressed="true"]{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 2px light-dark(#10182814,#0006)}
+.chat-model{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.chat-model select{height:32px;max-width:280px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);font:inherit}
+.dot.chat{background:light-dark(#6366f1,#a5b4fc)}
+.pill.chat{background:light-dark(#e0e7ff,#262c4d);color:light-dark(#4338ca,#c7d2fe)}
+.chat-page .promote-panel{margin:4px 0 18px}
+.chat-page .lead-panel{margin-top:8px}
+.chat-page .lead-panel>.diagnosis-head{padding-top:8px}

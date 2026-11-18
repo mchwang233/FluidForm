@@ -677,6 +677,9 @@ class ExecutionRun(BaseModel):
     prompt: str
     status: RunStatus
     plan: TaskPlan
+    # "task": planned and executed. "chat": only a conversation with a model, kept as a draft with
+    # no steps until the user turns it into a task (api.create_chat, api.promote_chat).
+    kind: str = "task"
     budget_usd: float
     use_cli: bool = True
     # Commands may reach the internet (never this machine's local services); off by default.

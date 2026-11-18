@@ -13,7 +13,7 @@ export type LeadMessage = { id: string; role: "user" | "lead"; text: string; sta
 export type LeadThinking = { event: string; node_id?: string | null; started_at: string };
 type Repair = Diagnosis & { decision_id?: string | null };
 type RunLike = {
-  id: string; status: string; updated_at?: string; diagnoses?: Repair[]; waiting_diagnosis_id?: string | null; engineer_job_id?: string | null;
+  id: string; status: string; kind?: string; project_dir?: string | null; updated_at?: string; diagnoses?: Repair[]; waiting_diagnosis_id?: string | null; engineer_job_id?: string | null;
   supervisor?: { model_id?: string | null; calls?: number } | null;
   decisions?: Decision[]; lead_messages?: LeadMessage[]; lead_thinking?: LeadThinking | null;
   plan: { nodes: { id: string; title: string }[] };
@@ -112,14 +112,17 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   const repairing = repairs.some(item => item.status === "running");
   const thinking = run.lead_thinking;
   const decided = (run.decisions ?? []).length;
-  const status = waiting || repairs.some(item => item.id === run.waiting_diagnosis_id) ? { label: "等你回复", tone: "warn" }
+  // A chat: only a conversation with one model, which answers under its own name.
+  const chat = run.kind === "chat" ? model(run.supervisor?.model_id) : null;
+  const status = chat ? (answering ? { label: "思考中", tone: "busy" } : { label: "对话中", tone: "ok" }) : waiting || repairs.some(item => item.id === run.waiting_diagnosis_id) ? { label: "等你回复", tone: "warn" }
     : engineerWaiting ? { label: "平台工程师等你", tone: "warn" }
     : thinking ? { label: "判断中", tone: "busy" } : repairing ? { label: "修复中", tone: "busy" }
     : answering ? { label: "思考中", tone: "busy" }
     : { label: decided ? `已决策 ${decided} 次` : "跟进中", tone: "ok" };
   return <section className={`diagnosis-card dx-panel lead-panel${waiting ? " waiting" : ""}`} aria-label="负责人">
     <div className="diagnosis-head">
-      <span className="lead-who"><span className="dx-avatar" aria-hidden="true">🧭</span><b>负责人</b><span className="lead-model">{model(run.supervisor?.model_id)}</span></span>
+      {chat ? <span className="lead-who"><span className="dx-avatar" aria-hidden="true"><Icon name="chat" size={14} /></span><b>{chat}</b>{run.project_dir && <span className="lead-model">{run.supervisor?.model_id?.startsWith("cli:") ? "可读项目，不改动文件" : "API 模型看不到项目文件"}</span>}</span>
+        : <span className="lead-who"><span className="dx-avatar" aria-hidden="true">🧭</span><b>负责人</b><span className="lead-model">{model(run.supervisor?.model_id)}</span></span>}
       {jobs.length > 0 && <span className="lead-who engineer" title="平台工程师在这个对话里"><span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span><b>平台工程师</b></span>}
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
       {!joining && <button type="button" className="ghost lead-invite" onClick={() => setJoining(true)}>拉平台工程师进来</button>}
@@ -136,18 +139,18 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
           : entry.kind === "engineer"
             ? <EngineerEntry key={`${entry.job.id}-${entry.at}-${entry.first}`} job={entry.job} message={entry.message} first={entry.first}
                 last={entry.last} act={act} onOpenEngineer={onOpenEngineer} />
-            : <ChatMessage key={entry.item.id} item={entry.item} />)}
+            : <ChatMessage key={entry.item.id} item={entry.item} who={chat} />)}
       {thinking && <ThinkingMessage thinking={thinking} step={thinking.node_id ? title(thinking.node_id) : undefined} />}
-      {!waiting && <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} />}
+      {!waiting && <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} chat={!!chat} />}
       <div ref={end} className="dx-end" aria-hidden="true" />
     </div>
   </section>;
 }
 
-function LeadMeta({ note, at, tag }: { note: string; at: string; tag?: React.ReactNode }) {
+function LeadMeta({ note, at, tag, who }: { note: string; at: string; tag?: React.ReactNode; who?: string | null }) {
   return <div className="dx-meta">
-    <span className="dx-avatar" aria-hidden="true">🧭</span>
-    <b>负责人</b>
+    <span className="dx-avatar" aria-hidden="true">{who ? <Icon name="chat" size={15} /> : "🧭"}</span>
+    <b>{who ?? "负责人"}</b>
     {tag}
     <small>{note} · {when(at)}</small>
   </div>;
@@ -237,18 +240,18 @@ function QuestionMessage({ item, step, waiting, onReply }: { item: Diagnosis; st
   </>;
 }
 
-function ChatMessage({ item }: { item: LeadMessage }) {
+function ChatMessage({ item, who }: { item: LeadMessage; who?: string | null }) {
   if (item.role === "user") return <UserMessage message={{ text: item.text, created_at: item.created_at }} />;
   return <article className="dx-msg dx-ai">
-    <LeadMeta note="回复" at={item.created_at} />
+    <LeadMeta note="回复" at={item.created_at} who={who} />
     {item.status === "pending"
-      ? <p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>负责人正在看任务的情况…</p>
+      ? <p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{who ? "正在思考…" : "负责人正在看任务的情况…"}</p>
       : item.status === "failed" ? <p className="error">{item.text}</p>
       : <div className="dx-report"><MarkdownView text={item.text} /></div>}
   </article>;
 }
 
-function AskBox({ disabled, onAsk, engineer }: { disabled: boolean; onAsk: AskLead; engineer: boolean }) {
+function AskBox({ disabled, onAsk, engineer, chat = false }: { disabled: boolean; onAsk: AskLead; engineer: boolean; chat?: boolean }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const form = useRef<HTMLFormElement>(null), box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { const el = box.current; if (el) { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 200)}px`; } }, [text]);
@@ -263,14 +266,14 @@ function AskBox({ disabled, onAsk, engineer }: { disabled: boolean; onAsk: AskLe
   function keys(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); form.current?.requestSubmit(); }
   }
-  return <form ref={form} className="dx-composer compact" onSubmit={submit} aria-label="给负责人留言">
+  return <form ref={form} className="dx-composer compact" onSubmit={submit} aria-label={chat ? "发消息" : "给负责人留言"}>
     <fieldset disabled={disabled || busy}>
       <div className="dx-input">
-        <textarea ref={box} aria-label="给负责人的消息" rows={1} maxLength={6000} value={text}
+        <textarea ref={box} aria-label={chat ? "消息" : "给负责人的消息"} rows={1} maxLength={6000} value={text}
           onChange={event => setText(event.target.value)} onKeyDown={keys}
-          placeholder={engineer ? "问负责人进展，或用「@平台工程师」直接对平台工程师说" : "问它进展、为什么这样决定，或告诉它你的要求；「@平台工程师」可以把平台工程师拉进来"} />
+          placeholder={chat ? "继续问…" : engineer ? "问负责人进展，或用「@平台工程师」直接对平台工程师说" : "问它进展、为什么这样决定，或告诉它你的要求；「@平台工程师」可以把平台工程师拉进来"} />
         <div className="dx-input-bar">
-          <small className="dx-hint">{disabled ? "负责人正在回复上一条消息…" : "它记得这个任务从规划起的全部经过 · Ctrl+Enter 发送"}</small>
+          <small className="dx-hint">{disabled ? (chat ? "正在回复上一条消息…" : "负责人正在回复上一条消息…") : chat ? "它记得这段对话 · Ctrl+Enter 发送" : "它记得这个任务从规划起的全部经过 · Ctrl+Enter 发送"}</small>
           <button type="submit" className="primary" disabled={!text.trim()}>{busy ? "发送中…" : "发送"}</button>
         </div>
       </div>
