@@ -288,7 +288,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
     <div className="task-header">
       <div className="task-title">
         <p className="eyebrow">{run.parent_run_id&&<span className="change-of">需求变更 · 基于{parent?<button type="button" className="link-button" onClick={()=>onOpenRun(parent)}>「{parent.plan.summary}」</button>:"之前的任务"} · </span>}{planner}{run.project_dir&&<span className="project-path" title={run.project_dir}> · 📁 {run.project_dir}</span>}</p>
-        <h3>{run.plan.summary}</h3>
+        <h3 title={run.plan.summary}>{run.plan.summary}</h3>
       </div>
       <div className="task-actions">
         <span className={`pill ${run.status}`}>{run.waiting_diagnosis_id?"等待回复":run.maintenance_id?"平台修复生效中":statusLabel(run.status)}</span>
@@ -299,7 +299,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
         <DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>
       </div>
     </div>
-    <Stepper status={run.status}/>
+    {run.status!=="succeeded"&&<Stepper status={run.status}/>}
     <div className="task-metrics">
       <div><small>进度</small><b>{done} / {nodes.length}</b><span className="spend-bar" aria-hidden="true"><i style={{width:`${nodes.length?done/nodes.length*100:0}%`}}/></span></div>
       <div><small>用时</small><b>{elapsed??"—"}</b></div>

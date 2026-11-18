@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 
 type MissionRecord = {
   id: string;
@@ -6,6 +6,7 @@ type MissionRecord = {
   actual_cost_usd: number;
   created_at?: string;
   project_dir?: string | null;
+  prompt?: string;
   plan: { summary: string; nodes?: { status: string }[] };
 };
 
@@ -196,8 +197,19 @@ type HistoryProps<T extends MissionRecord> = {
   onDelete: (mission: T) => void;
 };
 
+// Past this many tasks the list gets a search box.
+const SEARCH_FROM = 6;
+
+function matches(run: MissionRecord, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return !needle || [run.plan.summary, run.prompt, run.project_dir].some(text => text?.toLowerCase().includes(needle));
+}
+
 export function MissionHistory<T extends MissionRecord>({ runs, selectedId, deletingId, error, onSelect, onDelete, collapsed = false, onToggle }: HistoryProps<T> & { collapsed?: boolean; onToggle?: () => void }) {
-  const groups = MISSION_GROUPS.map(group => ({ ...group, runs: runs.filter(run => (group.statuses as readonly string[]).includes(run.status)) })).filter(group => group.runs.length);
+  const [query, setQuery] = useState("");
+  const searchable = !collapsed && runs.length >= SEARCH_FROM;
+  const shown = searchable ? runs.filter(run => matches(run, query)) : runs;
+  const groups = MISSION_GROUPS.map(group => ({ ...group, runs: shown.filter(run => (group.statuses as readonly string[]).includes(run.status)) })).filter(group => group.runs.length);
   if (collapsed) return <section className="panel mission-history collapsed" aria-label="任务历史（已收起）">
     <button type="button" className="history-toggle" onClick={onToggle} aria-expanded={false} title="展开任务栏">»<span>{runs.length}</span></button>
     <div className="history-rail">{groups.map(group => <React.Fragment key={group.id}>
@@ -208,8 +220,10 @@ export function MissionHistory<T extends MissionRecord>({ runs, selectedId, dele
   </section>;
   return <section className="panel mission-history" aria-label="任务历史">
     <div className="title"><h3>任务</h3><span className="history-count">{runs.length}</span>{onToggle && <button type="button" className="history-toggle" onClick={onToggle} aria-expanded={true} title="收起任务栏">«</button>}</div>
+    {searchable && <input className="history-search" type="search" value={query} placeholder="搜索标题、需求或项目" aria-label="搜索任务"
+      onChange={event => setQuery(event.target.value)} />}
     {error && <p className="mission-delete-error" role="alert">{error}</p>}
-    {runs.length === 0 ? <p className="empty">还没有任务。点右上角的“＋ 新任务”开始。</p> : <div className="run-list">{groups.map(group => <div className={`run-group ${group.id}`} key={group.id}>
+    {runs.length === 0 ? <p className="empty">还没有任务。点右上角的“＋ 新任务”开始。</p> : shown.length === 0 ? <p className="empty">没有匹配的任务。</p> : <div className="run-list">{groups.map(group => <div className={`run-group ${group.id}`} key={group.id}>
       <p className="run-group-title">{group.label}<span>{group.runs.length}</span></p>
       {group.runs.map(run => {
         const { done, total } = progressOf(run);

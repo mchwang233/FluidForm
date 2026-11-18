@@ -28,6 +28,14 @@ export function PlanChoices({ choices, editable, onReplan }: {
     setError(await onReplan(answers) || "");
     setBusy(false);
   }
+  // Once the plan is settled the choices are a record: folded, a click away.
+  if (!editable) return <details className="plan-choices">
+    <summary className="plan-choices-head"><p className="eyebrow">规划时的取舍</p><span>{choices.length} 项</span></summary>
+    <ol>{choices.map((choice, index) => <li key={index}>
+      <p className="choice-question"><span>{String(index + 1).padStart(2, "0")}</span>{choice.question}</p>
+      <p className="choice-answer">{choice.assumed}</p>
+    </li>)}</ol>
+  </details>;
   return <section className="plan-choices" aria-label="规划时的取舍">
     <div className="plan-choices-head">
       <p className="eyebrow">规划时的取舍</p>

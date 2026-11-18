@@ -996,6 +996,46 @@ test("before a task finishes, the estimate card adds what past tasks suggest it 
   assert.equal(card().querySelector(".over-estimate"), null);
 });
 
+test("a finished task keeps its page compact: no all-done stepper, choices folded, long title clamped", async t => {
+  const run = mission("finished-compact", "succeeded");
+  run.plan.summary = "为该服务器交付可安装、可运行的中文输入法，以 Windows 11 微软拼音的常用功能和输入体验为目标";
+  run.plan.choices = [{ question: "覆盖哪些功能？", assumed: "整句、模糊音" }];
+  const { document, click } = await setup(t, [run]);
+  assert.equal(document.querySelector(".task-steps"), null);
+  const title = document.querySelector(".task-title h3");
+  assert.equal(title.getAttribute("title"), run.plan.summary);
+  const folded = document.querySelector("details.plan-choices");
+  assert.equal(folded.open, false);
+  assert.match(folded.querySelector("summary").textContent, /规划时的取舍.*1 项/);
+  await click(folded.querySelector("summary"));
+  assert.match(folded.textContent, /整句、模糊音/);
+});
+
+test("with many tasks the list can be searched by title, request or project", async t => {
+  const runs = Array.from({ length: 6 }, (_, i) => mission(`task-${i}`, "succeeded"));
+  runs[2].plan.summary = "异步 FIFO 验证"; runs[4].project_dir = "/work/server-ime";
+  const { window, document, act } = await setup(t, runs);
+  const search = document.querySelector(".history-search");
+  const type = async value => act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(search, value);
+    search.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  const listed = () => [...document.querySelectorAll(".mission-history .run b")].map(b => b.textContent);
+  await type("fifo");
+  assert.deepEqual(listed(), ["异步 FIFO 验证"]);
+  await type("server-ime");
+  assert.deepEqual(listed(), ["task-4"]);
+  await type("找不到");
+  assert.match(document.querySelector(".mission-history").textContent, /没有匹配的任务/);
+  await type("");
+  assert.equal(listed().length, 6);
+});
+
+test("a short task list has no search box", async t => {
+  const { document } = await setup(t);
+  assert.equal(document.querySelector(".history-search"), null);
+});
+
 test("retrospective settings persist and manual generation shows its progress", async t => {
   const { state, document, button, click } = await setup(t);
   await click(button("复盘与改进"));

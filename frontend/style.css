@@ -355,6 +355,8 @@ pre.result-text{max-height:none}
 .run-group+.run-group{margin-top:10px}
 .run-group-title{display:flex;align-items:center;gap:6px;margin:4px 8px 4px;font-size:11px;font-weight:600;color:var(--faint);letter-spacing:.04em}
 .run-group-title span{font-weight:500}
+.history-search{display:block;width:100%;box-sizing:border-box;margin:0 0 10px;padding:7px 10px;font:13px inherit;font-family:inherit;color:var(--text);background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+.history-search:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .run-group.active .run-group-title{color:var(--warn)}.run-group.attention .run-group-title{color:light-dark(#2563c9,#9ec5ff)}
 .run-text{display:flex;flex-direction:column;min-width:0;flex:1}
 .run-project{color:var(--faint)!important}
@@ -382,6 +384,7 @@ pre.result-text{max-height:none}
 .task-title .eyebrow{text-transform:none;letter-spacing:.02em}
 .task-title .project-path{font-family:inherit}
 .task-title h3{font:600 20px/1.35 Manrope,'PingFang SC',sans-serif;margin:6px 0 0;overflow-wrap:anywhere}
+.task-title h3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .task-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .task-actions button{padding:7px 12px;font-size:12px}
 .task-steps{list-style:none;display:flex;gap:0;margin:16px 0 0;padding:0}
@@ -882,6 +885,9 @@ button.link{padding:0;border:0;background:none;color:var(--accent);font:inherit;
 .plan-choices{margin:0 0 16px;padding:14px 16px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel-2)}
 .plan-choices-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .plan-choices-head span{font-size:12px;color:var(--faint)}
+summary.plan-choices-head{cursor:pointer;list-style:none}summary.plan-choices-head::-webkit-details-marker{display:none}
+summary.plan-choices-head .eyebrow{margin:0}summary.plan-choices-head .eyebrow::before{content:"▸ ";color:var(--faint)}
+details.plan-choices[open] summary .eyebrow::before{content:"▾ "}
 .plan-choices ol{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:14px}
 .choice-question{margin:0 0 6px;font:600 14px/1.45 Manrope,'PingFang SC',sans-serif;color:var(--text)}
 .choice-question span{margin-right:8px;font-size:11px;font-weight:600;color:var(--faint);font-variant-numeric:tabular-nums}
