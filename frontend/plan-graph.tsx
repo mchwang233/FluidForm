@@ -43,10 +43,13 @@ function ToolLog({ calls, open = false, title = "工具调用" }: { calls: ToolC
 const OUTCOME_LABELS: Record<string, string> = { stopped: "达到上限", blocked: "被阻塞", delegated: "已委派，等待子任务", passed: "通过", rejected: "验收未通过", unverified: "尚未验证", superseded: "上游返工，结果失效", budget: "预算不足", cancelled: "已中止", error: "执行出错", verify_failed: "验证发现问题", quota: "额度用完", unavailable: "模型服务暂时不可用", unable: "无法完成" };
 const INPUT_LABELS: Record<string, string> = { full: "完整结果", summary: "摘要", truncated: "截断的结果" };
 
+/** What a node done without a check says; its status tag already says it, so cards leave it out. */
+export const DONE_LINE = "✓ 完成";
+
 /** One line on the card saying where the node stands right now. */
 export function nodeLine(node: PlanNode, nodes: PlanNode[], number: Map<string, string>): { tone: string; text: string } {
   const attempts = node.attempts ?? [], last = attempts[attempts.length - 1];
-  if (node.status === "succeeded") return { tone: "ok", text: node.verifies?.length ? "✓ 验证通过" : node.review_passed ? "✓ 验收通过" : "✓ 完成" };
+  if (node.status === "succeeded") return { tone: "ok", text: node.verifies?.length ? "✓ 验证通过" : node.review_passed ? "✓ 验收通过" : DONE_LINE };
   if (node.status === "failed") return { tone: "bad", text: `✗ ${last ? OUTCOME_LABELS[last.outcome] ?? "失败" : "失败"}` };
   if (node.status === "unable") return { tone: "bad", text: "⊘ 当前环境无法完成" };
   if (node.status === "blocked") return { tone: "muted", text: "前置步骤无法完成，未执行" };
@@ -206,7 +209,7 @@ export function PlanGraph({ apiBase, runId, runStatus, nodes, all = nodes, inPro
                   <div className="plan-node-line"><span className="num">{number.get(node.id)}</span>
                     <button type="button" className="plan-node-title" aria-expanded={selectedId === node.id} onClick={event => { event.stopPropagation(); open(); }} onFocus={() => setActive(node.id)} onBlur={() => setActive(null)}>{node.title}</button>
                     <span className={`state ${node.status}`}>{nodeStatusLabel(node)}</span></div>
-                  <p className={`plan-check ${line.tone}`} title={node.review ?? undefined}>{line.text}</p>
+                  {line.text !== DONE_LINE && <p className={`plan-check ${line.tone}`} title={node.review ?? undefined}>{line.text}</p>}
                   <button type="button" className="plan-model" onClick={event => { event.stopPropagation(); setOpenNode(node); }} title={`${selectionReason(node, model)}点击查看模型能力图。`}>{model?.display_name ?? node.model_id ?? "未分配模型"}</button>
                 </article>;
               })}

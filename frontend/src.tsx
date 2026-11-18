@@ -246,9 +246,29 @@ function NetworkSwitch({run,onNetwork}:{run:Run;onNetwork:SetNetwork}){
   return <label className="switch network-switch" title={NETWORK_HINT}><input type="checkbox" checked={!!run.allow_network} disabled={busy} onChange={e=>toggle(e.target.checked)}/><span/>允许联网{error&&<em role="alert">{error}</em>}</label>;
 }
 
+type TimelineEvent={id:number;kind:string;data:Record<string,any>;created_at:string};
+const clock=(at:string)=>new Date(at).toLocaleTimeString("zh-CN",{hour12:false});
+/** Entries that only say work goes on as it should: checks that let a step continue, skills being prepared, the lead starting to think. */
+function routineEvent(event:TimelineEvent){
+  if(["node.progress_check","node.overrun_check","node.critical_overrun_check"].includes(event.kind))return !event.data?.stop;
+  return ["run.skill_searching","run.skill_search_finished","run.skill_reference","run.skill_selected","run.skill_generating","run.lead_thinking","node.queued","node.dequeued"].includes(event.kind);
+}
+const FOLD_EVENTS=3;
+/** Runs of routine entries fold behind one line, so what changed the task stands out. */
+function foldEvents(events:TimelineEvent[]):(TimelineEvent|TimelineEvent[])[]{
+  const out:(TimelineEvent|TimelineEvent[])[]=[];let run:TimelineEvent[]=[];
+  const flush=()=>{if(run.length>=FOLD_EVENTS)out.push(run);else out.push(...run);run=[]};
+  for(const event of events){if(routineEvent(event))run.push(event);else{flush();out.push(event)}}
+  flush();return out;
+}
+function EventLine({event,title}:{event:TimelineEvent;title:(id:string)=>string}){
+  const text=EVENT_LABELS[event.kind]?.(event.data??{},title)??event.kind;
+  return <li className={event.kind.replace(".","-")}><time>{clock(event.created_at)}</time><span title={text}>{text}</span></li>;
+}
+
 /** Request, attachments, planning notes, settings, and the full event log. */
 function TaskDetails({run,onNetwork}:{run:Run;onNetwork:SetNetwork}){
-  const [events,setEvents]=useState<{id:number;kind:string;data:Record<string,any>;created_at:string}[]>([]);
+  const [events,setEvents]=useState<TimelineEvent[]>([]);
   useEffect(()=>{let live=true;fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/timeline`).then(r=>r.ok?r.json():[]).then(list=>{if(live&&Array.isArray(list))setEvents(list)}).catch(()=>{});return()=>{live=false}},[run.id,run.status,run.updated_at]);
   const number=new Map(run.plan.nodes.map((node,index)=>[node.id,`${String(index+1).padStart(2,"0")} ${node.title}`]));
   const title=(id:string)=>number.get(id)??"某个步骤";
@@ -265,7 +285,10 @@ function TaskDetails({run,onNetwork}:{run:Run;onNetwork:SetNetwork}){
       <div><dt>工作位置</dt><dd>{run.project_dir?<><Icon name="folder" size={12}/> {run.project_dir}</>:"独立的临时工作区"}</dd></div>
       {run.created_at&&<div><dt>创建时间</dt><dd>{new Date(run.created_at).toLocaleString("zh-CN",{hour12:false})}</dd></div>}
     </dl>
-    <section><h5>事件记录</h5>{events.length?<ol className="event-log">{events.map(event=><li key={event.id} className={event.kind.replace(".","-")}><time>{new Date(event.created_at).toLocaleTimeString("zh-CN",{hour12:false})}</time>{(text=><span title={text}>{text}</span>)(EVENT_LABELS[event.kind]?.(event.data??{},title)??event.kind)}</li>)}</ol>:<p className="empty">还没有事件。</p>}</section>
+    <section><h5>事件记录</h5>{events.length?<ol className="event-log">{foldEvents(events).map(item=>Array.isArray(item)
+      ?<li key={`fold-${item[0].id}`} className="event-fold"><details><summary><time>{clock(item[0].created_at)}</time><span>{item.length} 条例行记录：进度检查、技能准备、负责人在判断</span></summary>
+        <ol className="event-log">{item.map(event=><EventLine key={event.id} event={event} title={title}/>)}</ol></details></li>
+      :<EventLine key={item.id} event={item} title={title}/>)}</ol>:<p className="empty">还没有事件。</p>}</section>
   </div>;
 }
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Model } from "./model-profiles";
 import { formatUsd, nodeStatusLabel } from "./mission-history";
-import { ModelCapabilityDialog, NodeProgress, PlanGraph, nodeLine, planStages, useLinks, type PlanNode } from "./plan-graph";
+import { ModelCapabilityDialog, NodeProgress, PlanGraph, DONE_LINE, nodeLine, planStages, useLinks, type PlanNode } from "./plan-graph";
 
 /** A part of a plan made top-down (backend outline.py): 大项 at the top, then smaller parts, then tasks. */
 export type PlanPart = { employee_id?: string | null; id: string; title: string; goal?: string; acceptance?: string; parent_id?: string | null; dependencies?: string[];
@@ -85,7 +85,7 @@ function PartBoard({ apiBase, runId, runStatus, parts, nodes, models, onOpenProf
       <button type="button" className="part-task-title" aria-expanded={selectedId === node.id} onClick={() => setSelectedId(current => current === node.id ? null : node.id)}>
         <span className="num">{number.get(node.id)}</span><span>{node.title}</span><span className={`state ${node.status}`}>{nodeStatusLabel(node)}</span>
       </button>
-      <p className={`plan-check ${line.tone}`}>{line.text}</p>
+      {line.text !== DONE_LINE && <p className={`plan-check ${line.tone}`}>{line.text}</p>}
     </li>;
   }
 

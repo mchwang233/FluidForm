@@ -1668,3 +1668,12 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 .models-used-in li>span{min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .models-detail-wrap{min-width:0;display:contents}
 @media (max-width:1000px){.models-detail-wrap{display:block;scroll-margin-top:8px}}
+/* The event log: routine entries fold behind one line. */
+.event-log li.event-fold{display:block}
+.event-log li.event-fold::before{border-style:dashed}
+.event-fold>details>summary{display:flex;gap:8px;align-items:baseline;cursor:pointer;list-style:none;color:var(--faint)}
+.event-fold>details>summary::-webkit-details-marker{display:none}
+.event-fold>details>summary>span::after{content:" ›";display:inline-block;transition:transform .15s}
+.event-fold>details[open]>summary>span::after{transform:rotate(90deg)}
+.event-fold>details>summary:hover{color:var(--text)}
+.event-fold .event-log{margin:7px 0 2px;border-left-style:dashed}

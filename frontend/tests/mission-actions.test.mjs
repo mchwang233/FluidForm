@@ -2381,6 +2381,32 @@ test("the event log names every step in words, and models as people call them", 
   assert.doesNotMatch(document.querySelector(".task-details, .details-panel, main").textContent, /cli:codex/);
 });
 
+test("routine entries of the event log fold behind one line; what changed the task stays in view", async t => {
+  const run = mission("long-log", "succeeded");
+  run.plan.nodes = [{ id: "a", title: "实现", dependencies: [], status: "succeeded", estimated_cost_usd: 0, attempts: [] }];
+  const { state, document, click } = await setup(t, [run], [], { openComposer: false });
+  const at = n => `2026-10-28T03:${String(n).padStart(2, "0")}:00Z`;
+  state.timeline = [
+    { id: 1, kind: "run.started", data: {}, created_at: at(0) },
+    ...[1, 2, 3, 4].map(n => ({ id: 1 + n, kind: "node.progress_check", data: { node_id: "a", minutes: n * 10, stop: false }, created_at: at(n) })),
+    { id: 6, kind: "node.progress_check", data: { node_id: "a", minutes: 50, stop: true, reason: "卡住" }, created_at: at(5) },
+    { id: 7, kind: "run.skill_searching", data: { name: "x" }, created_at: at(6) },
+    { id: 8, kind: "node.succeeded", data: { node_id: "a" }, created_at: at(7) },
+  ];
+  // A step done without a check says so once, in its status tag.
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("进度")));
+  const card = document.querySelector(".plan-node, .part-task");
+  assert.match(card.textContent, /已完成/);
+  assert.equal(card.querySelector(".plan-check"), null);
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("详情")));
+  const top = [...document.querySelector(".event-log").children];
+  assert.deepEqual(top.map(item => item.className), ["run-started", "event-fold", "node-progress_check", "run-skill_searching", "node-succeeded"]);
+  assert.match(top[1].querySelector("summary").textContent, /4 条例行记录/);
+  assert.equal(top[1].querySelectorAll("li").length, 4);
+  // A check that stopped the step is not routine.
+  assert.match(top[2].textContent, /判断已卡住并停止（卡住）/);
+});
+
 test("picking 平台 again goes back to its home, and a long message folds keeping its formatting", async t => {
   const { state, window, document, click, act } = await setup(t, [], [], { openComposer: false });
   const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
