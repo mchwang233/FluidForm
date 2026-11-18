@@ -1192,7 +1192,7 @@ test("the sidebar groups tasks by what they need and folds into a rail it rememb
     mission("broken-task", "failed"), mission("finished-task", "succeeded"),
   ], [], { openComposer: false });
   const groups = [...document.querySelectorAll(".run-group")];
-  assert.deepEqual(groups.map(group => group.querySelector(".run-group-title").textContent), ["进行中1", "需要处理2", "已结束1"]);
+  assert.deepEqual(groups.map(group => group.querySelector(".run-group-title").textContent), ["进行中1", "需要处理2", "最近1"]);
   assert.match(groups[0].querySelector(".run small").textContent, /运行中 · 1\/2/);
   assert.equal(window.document.title, "● (2) 搭子");
 
@@ -2138,4 +2138,17 @@ test("a task is shown by the lead's short title, its occasional actions behind �
   assert.ok(button("删除任务记录", menu));
   await click(menu.querySelector("summary"));
   assert.equal(menu.open, true);
+});
+
+test("new is a page of its own: picking a task leaves it, and it offers to pick up unfinished work", async t => {
+  const waiting = mission("waiting-task", "awaiting_confirmation");
+  const { document, click, button } = await setup(t, [waiting, mission("finished-task", "succeeded")]);
+  assert.ok(document.querySelector(".app-content.composing .composer"));
+  const resume = button("继续「waiting-task」", document.querySelector(".composer-suggestions"));
+  assert.ok(resume);
+  await click(button("修一个失败的测试", document.querySelector(".composer-suggestions")));
+  assert.equal(document.querySelector(".composer textarea").value, "修一个失败的测试");
+  await click([...document.querySelectorAll(".run")].find(node => node.textContent.includes("finished-task")));
+  assert.equal(document.querySelector(".composer"), null);
+  assert.equal(document.querySelector(".app-content.composing"), null);
 });

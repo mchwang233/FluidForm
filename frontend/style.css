@@ -1088,3 +1088,32 @@ button{color:var(--on-accent)}
 .more-menu-items>button.danger,.more-menu-items>.mission-delete-full{color:var(--danger)}
 .task-header h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
 .task-meta .pill{font-weight:500}
+
+/* ===== Closer to the mock-up ===== */
+/* New is a page of its own: the greeting and the input, centred; the task waits behind. */
+.app-content.composing .detail{display:none}
+.app-content.composing .workbench-main{min-height:calc(100vh - 68px);display:flex;flex-direction:column;justify-content:center}
+.app-content.composing .composer.composer-home{margin:0 auto 12vh;width:100%}
+.composer-suggestions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:28px}
+.composer-suggestions button{height:34px;padding:0 14px;border:1px solid var(--line-soft);border-radius:99px;background:var(--panel-2);color:var(--muted);font-weight:500;box-shadow:none}
+.composer-suggestions button:hover{color:var(--text);border-color:var(--line)}
+/* Sidebar: one line per record, a dot and its name; only work under way or needing you says more. */
+.app-sidebar .run-group.done .run small,.app-sidebar .run-group.chats .run small{display:none}
+.app-sidebar .run-group.done .run,.app-sidebar .run-group.chats .run{align-items:center;padding-top:7px;padding-bottom:7px}
+.app-sidebar .run-group.done .dot,.app-sidebar .run-group.chats .dot{margin-top:0}
+.app-sidebar .run-text b{font-weight:500;font-size:13.5px}
+.app-sidebar .run-group-title{font-weight:500;letter-spacing:0;text-transform:none}
+/* A task's numbers in one quiet line. */
+.task-metrics{gap:0 32px;border:0;padding:4px 0 2px;margin:14px 0 6px}
+.task-metrics>div{flex:none;padding:0;border:0;display:flex;align-items:baseline;gap:6px}
+.task-metrics>div small{font-size:13px;color:var(--faint)}
+.task-metrics>div b{font-size:13.5px;font-weight:600}
+.task-metrics .spend-bar{display:none}
+.task-metrics .over-estimate{background:none;padding:0;font-size:13px}
+.task-page details.plan-choices{border-bottom:0}
+/* The conversation: an avatar and the words, no cards. */
+.dx-panel .dx-ai,.engineer-chat .dx-ai{background:none;padding:0 0 2px;border-radius:0}
+.dx-panel .dx-user,.engineer-chat .dx-user{background:var(--accent-bg)}
+.dx-panel .lead-engineer-msg{background:none}
+.dx-panel .dx-msg.dx-ai,.engineer-chat .dx-msg.dx-ai{border:0;box-shadow:none}
+.dx-panel .dx-input,.engineer-chat .dx-input{border-radius:18px;border-color:var(--line);box-shadow:0 8px 28px light-dark(#1114180f,#0006)}

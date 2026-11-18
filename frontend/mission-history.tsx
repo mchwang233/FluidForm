@@ -20,7 +20,7 @@ export const MISSION_GROUPS = [
   { id: "attention", label: "需要处理", statuses: ["awaiting_confirmation", "paused", "failed", "incomplete"] },
   // Chats are kept as drafts: nothing of theirs runs.
   { id: "chats", label: "对话", statuses: ["draft"] },
-  { id: "done", label: "已结束", statuses: ["succeeded", "cancelled"] },
+  { id: "done", label: "最近", statuses: ["succeeded", "cancelled"] },
 ] as const;
 
 // Finished well: the sidebar says only when; the numbers are on its page.
