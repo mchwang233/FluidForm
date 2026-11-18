@@ -87,6 +87,32 @@ def test_a_cli_is_priced_by_its_share_of_the_subscription_and_charged_like_an_ap
     assert models["cli:codex"].input_per_million == pytest.approx(week_usd / 20, rel=1e-4)
 
 
+def test_quota_used_where_its_tokens_cannot_be_seen_never_prices_a_cli_above_its_providers_api(codex):
+    from super_partner.models import CapabilityScore, ModelProfile
+    offered = {"context_window": 200_000, "scores": codex_model().scores or CapabilityScore()}
+    priciest = ModelProfile(id="openai:big", provider="openai", display_name="Big", channel="api",
+                            input_per_million=10, output_per_million=50, cached_input_per_million=1, **offered)
+    cheap = ModelProfile(id="openai:small", provider="openai", display_name="Small", channel="api",
+                         input_per_million=0.1, output_per_million=0.5, **offered)
+    other = ModelProfile(id="x:huge", provider="x", display_name="Huge", channel="api",
+                         input_per_million=100, output_per_million=500, **offered)
+    retired = ModelProfile(id="openai:old-pro", provider="openai", display_name="Old Pro", channel="api",
+                           input_per_million=150, output_per_million=600, catalog_status="retired", **offered)
+    models = {"cli:codex": codex_model(), priciest.id: priciest, cheap.id: cheap, other.id: other, retired.id: retired}
+    session(codex, "user.jsonl", codex / "project", [(0, 0, 0, 0, 20.0)])
+    cli_quota.apply(models, now=NOW)
+    # 30% of the week went on another machine or the web; here only 10,000 tokens were seen.
+    session(codex, "user.jsonl", codex / "project", [(0, 0, 0, 0, 20.0), (60, 10_000, 0, 0, 50.0)])
+    cli_quota.apply(models, now=NOW + timedelta(hours=1))
+
+    # Taken at its word that would be $1,538 per million tokens; a subscription is never dearer
+    # than the provider's own API, so the dearest of its models still offered bounds it.
+    model = models["cli:codex"]
+    assert (model.input_per_million, model.output_per_million, model.cached_input_per_million) == (10, 50, 1)
+    assert token_cost(model, 29_478, 412, 11_904) < 0.25
+    assert "看不到的用量" in model.usage_note
+
+
 def test_a_tight_quota_loses_first_place_and_a_full_one_takes_no_new_work_until_it_resets(codex):
     models, tracker = {"cli:codex": codex_model()}, QuotaTracker()
     session(codex, "user.jsonl", codex / "project", [(0, 0, 0, 0, 75.0)])

@@ -11,6 +11,8 @@ outlives deleted tasks; sessions in the leads' folders are the platform's too an
   window's part of the monthly fee over that is the price per token. It is set as the CLI's
   catalog price, so charging, task budgets, routing and the lead's team choice all use it like
   any API price. Until enough of the window is used after the baseline, the CLI has no price.
+  Quota used where its tokens cannot be seen (another machine, the web) would make it look
+  dearer than it is; it is never priced above the provider's dearest API model (api_ceiling).
 - pressure: from `cli_quota_soft_percent` of a window used, the CLI loses its first place in
   routing and the lead is told; from `cli_quota_stop_percent` it is marked out of quota until
   the window resets (quota.QuotaTracker), so new work goes to other models.
@@ -367,18 +369,34 @@ def starting_price(plan: dict) -> Optional[tuple[float, float]]:
     return start if min(start) >= 0 else None
 
 
+def api_ceiling(models: dict, provider: str) -> Optional[tuple[float, float, float]]:
+    """The most a membership's tokens can cost: the provider's dearest API model (input, output,
+    cached per million). A subscription is never dearer than paying the API; a calibration above
+    this means quota went where its tokens cannot be seen here (another machine, the web)."""
+    # Models still offered: a retired premium tier's price says nothing about the subscription.
+    priced = [model for model in models.values() if model.provider == provider and model.channel != "cli"
+              and model.routing_ready and model.input_per_million and model.output_per_million]
+    if not priced:
+        return None
+    return (max(model.input_per_million for model in priced), max(model.output_per_million for model in priced),
+            max(model.cached_input_per_million or model.input_per_million * CACHED_WEIGHT for model in priced))
+
+
 def _price(model, input_usd: float, output_usd: float, cached_usd: float) -> None:
     model.input_per_million, model.output_per_million = input_usd, output_usd
     model.cached_input_per_million = cached_usd
 
 
 def note(usage: Usage, price: Optional[float], monthly_usd: float,
-         start: Optional[tuple[float, float]] = None) -> str:
+         start: Optional[tuple[float, float]] = None, capped: bool = False) -> str:
     parts = []
     for window in sorted(usage.windows, key=lambda item: item.minutes, reverse=True):
         label = "周" if window.minutes >= 7 * 24 * 60 else f"{window.minutes // 60} 小时"
         parts.append(f"{label}额度已用 {window.used_percent:g}%，{window.resets_at.astimezone():%m-%d %H:%M} 重置")
-    if price:
+    if price and capped:
+        priced = (f"按月费 ${monthly_usd:g} 折算是 ${price:.3g}/百万 tokens，比 API 还贵：额度里有本机看不到的用量"
+                  "（其他设备或网页），按同厂商 API 的最高价计")
+    elif price:
         priced = f"按月费 ${monthly_usd:g} 折算 ${price:.3g}/百万 tokens"
     elif start:
         priced = f"月费 ${monthly_usd:g}，暂未折算，先按设定价 输入 ${start[0]:g}/输出 ${start[1]:g} 每百万 tokens"
@@ -439,15 +457,21 @@ def apply(models: dict, tracker=None, now: Optional[datetime] = None) -> None:
                                               mine.get("per_window"))
         if per_window and per_window != mine.get("per_window"):
             mine["per_window"], changed = per_window, True
+        ceiling = api_ceiling(models, model.provider)
+        capped = price is not None and ceiling is not None and price > ceiling[0]
         if price is not None:
-            _price(model, round(price, 6), round(price, 6), round(price * CACHED_WEIGHT, 6))
+            if ceiling:
+                _price(model, round(min(price, ceiling[0]), 6), round(min(price, ceiling[1]), 6),
+                       round(min(price * CACHED_WEIGHT, ceiling[2]), 6))
+            else:
+                _price(model, round(price, 6), round(price, 6), round(price * CACHED_WEIGHT, 6))
         elif set_price:
             _price(model, *set_price, set_price[0] * CACHED_WEIGHT)
         fullest = usage.fullest
         tight = fullest is not None and fullest.used_percent >= settings.cli_quota_soft_percent
         # A CLI goes first in routing only while its quota is comfortable.
         model.execution_priority = 100 if tight else (original.execution_priority if original else 0)
-        model.usage_note = note(usage, price, monthly, set_price) + ("；额度紧张，优先给其他模型" if tight else "")
+        model.usage_note = note(usage, price, monthly, set_price, capped) + ("；额度紧张，优先给其他模型" if tight else "")
         if tracker is not None and fullest is not None:
             if fullest.used_percent >= settings.cli_quota_stop_percent:
                 if not tracker.exhausted(model_id):
