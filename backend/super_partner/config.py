@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # When a task succeeds, ask its lead whether it built a reusable capability (a tool, an
     # automation) for the user to solidify (capabilities.py). Off by default: one more lead call.
     capability_proposals: bool = False
+    # The Feishu bot (feishu.py, docs/design/feishu.md): answers private and @ messages in Feishu,
+    # turns work into tasks that wait for confirmation. Off: it never starts.
+    feishu_bot: bool = False
+    # What the bot may spend a day deciding and answering, unless changed in its panel.
+    feishu_daily_budget_usd: float = Field(default=2.0, ge=0, le=1000)
     skill_generation_max_turns: int = Field(default=6, ge=1, le=30)
     # Optional post-task learning; the UI can persist overrides. Its budget is separate and shown.
     learning_enabled: bool = False

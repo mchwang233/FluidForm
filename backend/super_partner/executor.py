@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import logging
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -101,6 +102,8 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
         self.lead_tasks: dict[str, asyncio.Task] = {}
         # A succeeded task's lead, asked what it built that is reusable (capabilities.py).
         self.capability_tasks: dict[str, asyncio.Task] = {}
+        # Called with (run_id, end event) whenever a task ends (emit).
+        self.end_listeners: list = []
         # Steps working in one folder at once (scopes.py).
         self.folder_locks: dict[str, scopes.FolderLock] = {}
         # Files a step changed outside its own that a step alongside it reads (Scope.intrusions).
@@ -156,6 +159,12 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
     def emit(self, run_id: str, kind: str, **data) -> None:
         self.db.add_event(Event(run_id=run_id, kind=kind, data=data))
         if kind in retrospect.END_EVENTS:
+            # Told whenever a task ends (the Feishu bot sends its result back where it was asked).
+            for listener in self.end_listeners:
+                try:
+                    listener(run_id, kind)
+                except Exception:
+                    logging.getLogger(__name__).exception("an end listener failed for %s", run_id)
             # The task has ended: look back on it while its records are fresh.
             retrospect.record(self.db, run_id)
             self._name_problems(run_id)

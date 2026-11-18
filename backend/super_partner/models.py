@@ -735,6 +735,9 @@ class ExecutionRun(BaseModel):
     kind: str = "task"
     # Super Partner told chat from task itself (triage.py), rather than the user choosing.
     auto_routed: bool = False
+    # Where the request came from when not this page: {"channel": "feishu", "chat_id", "message_id"}
+    # (feishu.py); its result is sent back there when the task ends.
+    origin: Optional[dict] = None
     # What the lead found reusable when the task succeeded (capabilities.py).
     capability_proposals: list[CapabilityProposal] = Field(default_factory=list)
     budget_usd: float

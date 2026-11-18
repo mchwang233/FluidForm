@@ -83,7 +83,9 @@ def delete_provider_key(provider: str) -> str:
 def _change_keyring(action: str) -> int:
     request = json.loads(sys.stdin.read())
     try:
-        if action == "set":
+        if action == "get":
+            sys.stdout.write(json.dumps({"value": keyring.get_password(SERVICE, request["provider"])}))
+        elif action == "set":
             keyring.set_password(SERVICE, request["provider"], request["value"])
         else:
             try:
@@ -94,6 +96,53 @@ def _change_keyring(action: str) -> int:
         # Never echo the exception: it may contain the credential.
         return 2
     return 0
+
+
+# Secrets only Super Partner itself reads (the Feishu bot's app credentials, feishu.py): kept in
+# the keyring and never put in the environment, which the CLIs that steps run inherit.
+PRIVATE_SECRETS = ("feishu_app_id", "feishu_app_secret")
+# Kept here for this session when the keyring cannot be used.
+_session_secrets: dict[str, str] = {}
+
+
+def set_secret(name: str, value: str) -> str:
+    """Store one of PRIVATE_SECRETS; returns "keyring", or "session" if only kept in memory."""
+    if name not in PRIVATE_SECRETS:
+        raise ValueError(f"Unsupported secret: {name}")
+    _session_secrets[name] = value
+    try:
+        _keyring_write("set", name, value)
+    except KeyringUnavailable:
+        logger.warning("OS keyring unavailable; %s is kept for this session only.", name)
+        return "session"
+    return "keyring"
+
+
+def delete_secret(name: str) -> None:
+    if name not in PRIVATE_SECRETS:
+        raise ValueError(f"Unsupported secret: {name}")
+    _session_secrets.pop(name, None)
+    with contextlib.suppress(KeyringUnavailable):
+        _keyring_write("delete", name)
+
+
+def get_secret(name: str) -> Optional[str]:
+    """One of PRIVATE_SECRETS, from this session or the keyring (read in a child process, so a
+    locked keyring cannot hang the service); None when it is not stored or cannot be read."""
+    if name not in PRIVATE_SECRETS:
+        raise ValueError(f"Unsupported secret: {name}")
+    if name in _session_secrets:
+        return _session_secrets[name]
+    try:
+        result = subprocess.run([sys.executable, "-m", "super_partner.secrets", "get"],
+                                input=json.dumps({"provider": name, "value": None}),
+                                capture_output=True, text=True, check=False, timeout=KEYRING_TIMEOUT)
+        value = json.loads(result.stdout or "{}").get("value") if not result.returncode else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if value:
+        _session_secrets[name] = value
+    return value or None
 
 
 def _read_provider_keys() -> dict[str, str]:
@@ -225,7 +274,7 @@ def configured_providers() -> list[str]:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in {"set", "delete"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"get", "set", "delete"}:
         sys.exit(_change_keyring(sys.argv[1]))
     try:
         print(json.dumps(_read_provider_keys()))

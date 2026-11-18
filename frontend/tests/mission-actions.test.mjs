@@ -379,6 +379,20 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       (state.modelToggles ??= []).push(body);
       return json({ ...state.models.find(model => model.id === body.model_id), enabled: body.enabled });
     }
+    if (path.startsWith("/api/feishu")) {
+      const feishu = state.feishu ??= { available: true, installed: true, configured: false, enabled: false, status: "off", error: "",
+        daily_budget_usd: 2, spent_today_usd: 0.12, handled: 3, conversations: 1 };
+      const body = options.body ? JSON.parse(options.body) : {};
+      (state.feishuCalls ??= []).push({ path, method: options.method ?? "GET", body });
+      if (path === "/api/feishu/credentials" && options.method === "PUT") feishu.configured = true;
+      if (path === "/api/feishu/credentials" && options.method === "DELETE") { feishu.configured = false; feishu.enabled = false; return new Response(null, { status: 204 }); }
+      if (path === "/api/feishu" && options.method === "PUT") {
+        if (body.enabled && !feishu.configured) return json({ detail: "先填好 App ID 和 App Secret。" }, 409);
+        if (body.enabled !== undefined) { feishu.enabled = body.enabled; feishu.status = body.enabled ? "connected" : "off"; }
+        if (body.daily_budget_usd !== undefined) feishu.daily_budget_usd = body.daily_budget_usd;
+      }
+      return json({ ...feishu });
+    }
     if (path === "/api/models/usage") return json({ days: 30, models: state.modelUsage ?? {} });
     if (path === "/api/models/sync") return json(state.catalogSync ?? { last_checked_at: null, providers: [] });
     if (path === "/api/models") return json(state.models);
@@ -809,6 +823,39 @@ test("the 模型 page lists models by what they are doing for you, and the chose
   // Filtering.
   await click([...page.querySelectorAll(".models-filter button")].find(node => node.textContent === "会员 CLI"));
   assert.equal(page.querySelectorAll(".models-row").length, 1);
+});
+
+test("设置 → 飞书机器人 keeps its credentials, switches the bot and sets its daily budget", async t => {
+  const { state, window, document, click, act } = await setup(t, [], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const type = async (input, value) => act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await click([...document.querySelectorAll(".settings-link")].find(node => node.textContent === "飞书机器人"));
+  await settle();
+  const panel = () => document.querySelector('[role="dialog"][aria-label="飞书机器人"]');
+  assert.match(panel().textContent, /私聊它，或在群里 @ 它.*没开.*今天花了 \$0\.12 · 已回 3 条/s);
+  // Not set up: it cannot be switched on yet.
+  assert.equal(panel().querySelector('[role="switch"]').disabled, true);
+  const [appId, secret] = panel().querySelectorAll(".feishu-form input");
+  assert.equal(secret.type, "password");
+  await type(appId, "cli_a1b2c3");
+  await type(secret, "s3cr3t-value");
+  await act(async () => panel().querySelector(".feishu-form").requestSubmit());
+  await settle();
+  assert.deepEqual(state.feishuCalls.find(call => call.path === "/api/feishu/credentials").body, { app_id: "cli_a1b2c3", app_secret: "s3cr3t-value" });
+  assert.equal(panel().querySelector(".feishu-form input").value, "");
+  await click(panel().querySelector('[role="switch"]'));
+  assert.match(panel().textContent, /已连接/);
+  const budget = panel().querySelector('[aria-label="每天最多花（美元）"]');
+  await type(budget, "5");
+  await act(async () => budget.dispatchEvent(new window.FocusEvent("blur", { bubbles: false })));
+  await act(async () => budget.dispatchEvent(new window.Event("focusout", { bubbles: true })));
+  await settle();
+  assert.ok(state.feishuCalls.some(call => call.method === "PUT" && call.body.daily_budget_usd === 5));
+  await click(panel().querySelector('[aria-label="关闭"]'));
+  assert.equal(panel(), null);
 });
 
 test("a plan made in parts shows its major parts as stages; each opens in place, or all at once", async t => {

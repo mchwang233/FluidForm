@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from . import (
     briefing,
     capabilities,
     cli_quota,
+    feishu,
     folders,
     learning,
     publish,
@@ -32,6 +34,7 @@ from . import (
     triage,
 )
 from . import diagnosis as diagnosis_module
+from . import secrets as secret_store
 from .benchmarks import BenchmarkCatalog
 from .catalog_sync import CatalogSync, seed_catalog
 from .config import settings
@@ -164,6 +167,10 @@ async def lifespan(_: FastAPI):
     executor.restore_platform()
     executor.restore_engineer()
     executor.restore_learning()
+    # The Feishu bot, when switched on: tasks asked for there hear how they ended.
+    executor.end_listeners.append(feishu_task_ended)
+    if feishu_bot.state["enabled"]:
+        feishu_bot.start(asyncio.get_running_loop())
     # Keys saved in a keyring that was locked at startup: load them once it is unlocked.
     keys = asyncio.create_task(keep_loading_keys(
         lambda loaded: [providers.quota.clear_provider(item) for item in loaded]))
@@ -174,6 +181,7 @@ async def lifespan(_: FastAPI):
     finally:
         keys.cancel()
         usage.cancel()
+        feishu_bot.stop()
         await executor.shutdown()
         await catalog_sync.close()
         await providers.client.aclose()
@@ -1362,6 +1370,136 @@ def list_skills():
     return [{"name": item.name, "description": item.description, "summary": item.summary, "tools": item.tools,
              "machine": item.machine}
             for item in skills.library()]
+
+
+# ---- The Feishu bot (feishu.py, docs/design/feishu.md) ----
+
+# How a task asked for in Feishu ended, as Feishu is told.
+FEISHU_ENDED = {"run.succeeded": "做完了", "run.incomplete": "只做完了一部分", "run.failed": "没能做完",
+                "run.cancelled": "已取消"}
+
+
+def _feishu_name(run: ExecutionRun) -> str:
+    return run.plan.title or run.plan.summary[:40]
+
+
+async def feishu_message(message: feishu.Message) -> tuple[Optional[str], float]:
+    """What a Feishu message becomes, decided as 新建's 自动 decides (triage.classify): a question is
+    answered by the Feishu conversation's own chat; work is planned as a task that waits for the
+    owner's confirmation, and Feishu is told. Returns the reply and what it cost."""
+    configured = providers.configured_models(list(models))
+    kind, spent = await triage.classify(message.text, providers, brief_writer(list(models.values()), configured))
+    origin = {"channel": "feishu", "chat_id": message.chat_id, "message_id": message.message_id}
+    if kind == "task" and len(message.text) >= 3:
+        task = await _new_task(CreateTask(prompt=message.text))
+        latest = get_task(task.id)
+        latest.origin, latest.auto_routed = origin, True
+        latest.actual_cost_usd = round(latest.actual_cost_usd + spent, 6)
+        db.save_run(latest)
+        estimate = latest.plan.estimate
+        guess = f"，预计 ${estimate.low_usd:.2f}–${estimate.high_usd:.2f}" if estimate else ""
+        reply = (f"这件事要动手做。我在搭子里排好了计划「{_feishu_name(latest)}」{guess}，"
+                 "等主人确认后开工，做完在这里告诉你。")
+        return reply, latest.actual_cost_usd
+    # A question: the Feishu conversation goes on in one chat, which its first message started.
+    known = feishu_bot.state["chats"].get(message.chat_id)
+    run = db.get_run(known) if known else None
+    if run is None or run.kind != "chat":
+        run = _start_chat(message.text, max(feishu_bot.remaining(), 0.01), True, None, None, auto_routed=True, spent=spent)
+        latest = get_task(run.id)
+        latest.plan.title = "飞书 · " + message.text.splitlines()[0][:CHAT_TITLE_CHARS - 5]
+        latest.origin = origin
+        db.save_run(latest)
+        feishu_bot.state["chats"][message.chat_id] = run.id
+        feishu_bot.save()
+        before, extra = 0.0, 0.0
+    else:
+        async with executor.locks.setdefault(run.id, asyncio.Lock()):
+            latest = get_task(run.id)
+            # The chat may spend what is left of the bot's day.
+            latest.budget_usd = round(latest.actual_cost_usd + max(feishu_bot.remaining(), 0.01), 6)
+            db.save_run(latest)
+        before, extra = latest.actual_cost_usd, spent
+        while not executor.start_lead_chat(run.id, message.text):
+            with contextlib.suppress(Exception):
+                await executor.lead_tasks[run.id]
+    with contextlib.suppress(Exception):
+        await executor.lead_tasks[run.id]
+    latest = get_task(run.id)
+    answer = next((item for item in reversed(latest.lead_messages) if item.role == "lead"), None)
+    return (answer.text if answer else None), round(latest.actual_cost_usd - before + extra, 6)
+
+
+feishu_bot = feishu.Bot(feishu_message)
+
+
+def feishu_task_ended(run_id: str, kind: str) -> None:
+    """A task asked for in Feishu has ended: its result goes back to the message that asked."""
+    run = db.get_run(run_id)
+    if not run or run.kind == "chat" or not run.origin or run.origin.get("channel") != "feishu":
+        return
+    text = f"「{_feishu_name(run)}」{FEISHU_ENDED.get(kind, '结束了')}。"
+    if body := (run.final_result or run.error or "").strip():
+        text += "\n\n" + body
+    with contextlib.suppress(RuntimeError):  # no loop: nothing to send from
+        asyncio.get_running_loop().create_task(feishu_bot.reply(run.origin["message_id"], text))
+
+
+class FeishuSettings(BaseModel):
+    enabled: Optional[bool] = None
+    daily_budget_usd: Optional[float] = Field(default=None, ge=0, le=1000)
+
+
+class FeishuCredentials(BaseModel):
+    app_id: str = Field(min_length=4, max_length=200)
+    app_secret: str = Field(min_length=8, max_length=500)
+
+
+@app.get("/api/feishu")
+def feishu_status():
+    return feishu_bot.public()
+
+
+@app.put("/api/feishu")
+async def feishu_settings(body: FeishuSettings):
+    """Switch the bot on or off, or change what it may spend a day."""
+    if body.enabled:
+        if not settings.feishu_bot:
+            raise HTTPException(409, "本机还没开启飞书机器人：在 .env 里设 SUPER_PARTNER_FEISHU_BOT=true 后重启。")
+        if not feishu.installed():
+            raise HTTPException(409, "还没安装飞书 SDK：pip install 'super-partner[feishu]'。")
+        if not feishu.configured():
+            raise HTTPException(409, "先填好 App ID 和 App Secret。")
+    if body.daily_budget_usd is not None:
+        feishu_bot.state["daily_budget_usd"] = body.daily_budget_usd
+    if body.enabled is not None:
+        feishu_bot.state["enabled"] = body.enabled
+    feishu_bot.save()
+    if body.enabled:
+        feishu_bot.start(asyncio.get_running_loop())
+    elif body.enabled is False:
+        feishu_bot.stop()
+    return feishu_bot.public()
+
+
+@app.put("/api/feishu/credentials")
+async def feishu_credentials(body: FeishuCredentials):
+    """Keep the app's ID and secret in the keyring (never in a file); a running bot reconnects with them."""
+    stored = secret_store.set_secret(feishu.APP_ID, body.app_id.strip())
+    secret_store.set_secret(feishu.APP_SECRET, body.app_secret.strip())
+    if feishu_bot.status != "off":
+        feishu_bot.stop()
+        feishu_bot.start(asyncio.get_running_loop())
+    return {**feishu_bot.public(), "stored": stored}
+
+
+@app.delete("/api/feishu/credentials", status_code=204)
+def feishu_forget():
+    feishu_bot.stop()
+    feishu_bot.state["enabled"] = False
+    feishu_bot.save()
+    for name in (feishu.APP_ID, feishu.APP_SECRET):
+        secret_store.delete_secret(name)
 
 
 # ---- Capabilities: what finished tasks left the platform able to do (capabilities.py) ----
