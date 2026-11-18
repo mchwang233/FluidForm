@@ -86,6 +86,9 @@ def test_a_package_hears_what_came_before_in_brief(database):
     prompt, _ = node_prompt(step, run, 4000)
     assert "It provides: GET /api/admin/mail-settings -> {host, port}" in prompt
     assert prompt.count("很长的过程说明") < 200  # 1500 characters of it, not the whole result
+    # Its answer is the result the user reads: in the task's language, headed in it too.
+    assert "in the language the task was asked in" in prompt and "改动 / 提供 / 检查" in prompt
+    assert "Changed:" not in prompt and "Provides:" not in prompt
 
 
 async def test_a_package_far_past_its_turns_goes_to_the_lead(tmp_path, monkeypatch):

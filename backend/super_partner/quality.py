@@ -82,10 +82,13 @@ BACKGROUND_CHARS = 2500
 # What a scoped work package gets of each step before it: what that step provides, and this much
 # of its result. The files themselves are attached (briefing.attached_files).
 SCOPED_HANDOFF_CHARS = 1500
+# The answer is what the user reads as the step's result: it is written in the task's language, its
+# three parts headed in that language too.
 SCOPED_ANSWER = (
-    "Answer briefly, in at most 15 lines: Changed: the files and what changed in them; Provides: what "
-    "later steps can rely on (names, signatures, endpoints, fields, classes); Check: the command you ran "
-    "and its result."
+    "Answer briefly, in at most 15 lines, in the language the task was asked in, in three parts each "
+    "headed in that language (for a task asked in Chinese: 改动 / 提供 / 检查): the files and what changed "
+    "in them; what later steps can rely on (names, signatures, endpoints, fields, classes); the command "
+    "you ran to check it and its result."
 )
 
 
