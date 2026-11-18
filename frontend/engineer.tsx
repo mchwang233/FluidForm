@@ -1,6 +1,7 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { CapabilityShelf } from "./capabilities";
+import { EngineerChat } from "./engineer-bubble";
 import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
@@ -25,6 +26,13 @@ export const ENGINEER_STATUS: Record<string, { label: string; tone: string }> = 
   rejected: { label: "已放弃", tone: "muted" }, cancelled: { label: "已取消", tone: "muted" },
 };
 const KIND = { repair: "修复", component: "组件" } as const;
+const WAITING = new Set(["plan_ready", "ready", "needs_input"]);
+const DONE = new Set(["applied", "failed", "rejected", "cancelled"]);
+// The checks the engineer's changes pass, in the user's words.
+const CHECKS: Record<string, string> = {
+  "Python syntax": "语法检查", "Existing database compatibility": "旧数据兼容", "Backend tests": "后端测试",
+  "Frontend tests": "前端测试", "Frontend build": "前端构建",
+};
 const ORIGIN = { user: "你提出", lead: "负责人请求", diagnosis: "任务诊断发起", retrospective: "任务复盘改进" } as const;
 const SPEAKER: Record<string, string> = { user: "你", engineer: "平台工程师", lead: "负责人", system: "系统" };
 
@@ -77,72 +85,55 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
       return null;
     } catch (failure) { return failure instanceof Error ? failure.message : String(failure); }
   };
+  const waiting = jobs.filter(job => WAITING.has(job.status));
+  const active = jobs.filter(job => !DONE.has(job.status) && !WAITING.has(job.status));
+  const applied = jobs.filter(job => job.status === "applied");
+  const others = jobs.filter(job => DONE.has(job.status) && job.status !== "applied");
+  // Opening the page shows what the platform can do; work that needs you or is under way shows the records.
+  // The page opens on the conversation with the engineer; a job opened from a task shows its record.
+  type Tab = "chat" | "capabilities" | "records";
+  const [tab, setTab] = useState<Tab>(focusId ? "records" : "chat");
+  useEffect(() => { if (focusId) setTab("records"); }, [focusId]);
+  const pick = (next: Tab) => setTab(next);
+  const open = (id: string) => { setSelectedId(id); pick("records"); };
+  const row = (job: EngineerJob) => <button type="button" key={job.id} aria-pressed={selected?.id === job.id} onClick={() => setSelectedId(job.id)}>
+    <span className="engineer-list-title">{plainTitle(job)}</span>
+    <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
+  </button>;
   return <div className="engineer-page">
-    <section className="panel engineer-intro">
-      <div className="engineer-intro-head">
-        <span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
-        <div>
-          <h2>平台工程师</h2>
-          <p className="muted">修复平台自身的缺陷，或给它添加组件：模型和渠道、工具和技能、界面功能、调度和流程。</p>
-        </div>
-      </div>
-      <ul className="engineer-rules" aria-label="工作方式">
-        <li>在隔离的源码副本里修改，测试和构建都通过才生效</li>
-        <li>组件先由你批准方案，生效前再确认改动</li>
-        <li>生效后在本地提交 git，不会推送</li>
-      </ul>
-      {data && !data.available && <p className="error">平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的平台源码。</p>}
-      {error && <p className="error" role="alert">{error}</p>}
-      {data?.available && <RequestForm act={act} />}
-    </section>
-    <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} />
-    <div className="engineer-layout">
-      <nav className="panel engineer-list" aria-label="平台工程师的工作">
-        <h3>工作记录{!!jobs.length && <small>{jobs.length}</small>}</h3>
+    <header className="engineer-head">
+      <h2>平台</h2>
+      <p>平台能做什么，以及它的平台工程师：修复平台自身的问题，或给它加能力。改动在隔离的副本里完成，测试通过、你确认后才生效，只在本地提交 git。</p>
+    </header>
+    {error && <p className="error" role="alert">{error}</p>}
+    {!!waiting.length && <section className="engineer-attention" aria-label="等你处理">
+      <h3>等你处理</h3>
+      {waiting.map(job => <button type="button" key={job.id} onClick={() => open(job.id)}>
+        <StatusChip status={job.status} /><span>{plainTitle(job)}</span><small>{when(job.created_at)}</small>
+      </button>)}
+    </section>}
+    <nav className="engineer-tabs" aria-label="平台">
+      <button type="button" aria-pressed={tab === "chat"} onClick={() => pick("chat")}>对话</button>
+      <button type="button" aria-pressed={tab === "capabilities"} onClick={() => pick("capabilities")}>能力</button>
+      <button type="button" aria-pressed={tab === "records"} onClick={() => pick("records")}>工作记录{!!jobs.length && <small>{jobs.length}</small>}</button>
+    </nav>
+    {tab === "chat" ? <EngineerChat apiBase={apiBase} runs={runs} tick="" onOpenPage={open} />
+      : tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
+      <nav className="engineer-list" aria-label="平台工程师的工作">
         {!jobs.length && <p className="empty">还没有记录。</p>}
-        {jobs.map(job => <button type="button" key={job.id} aria-pressed={selected?.id === job.id} onClick={() => setSelectedId(job.id)}>
-          <span className="engineer-list-title">{plainTitle(job)}</span>
-          <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
-        </button>)}
+        {!!(waiting.length + active.length) && <><h4>进行中</h4>{[...waiting, ...active].map(row)}</>}
+        {!!applied.length && <><h4>已生效</h4>{applied.map(row)}</>}
+        {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
       {selected ? <JobDetail job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} />
-        : <section className="panel empty big">提出第一个需求后，这里会显示平台工程师的方案、改动和结果。</section>}
-    </div>
+        : <section className="engineer-job empty big">提出第一个需求后，这里会显示平台工程师的方案、改动和结果。</section>}
+    </div>}
   </div>;
 }
 
 function StatusChip({ status }: { status: string }) {
   const known = ENGINEER_STATUS[status] ?? { label: status, tone: "ok" };
   return <span className={`dx-chip ${known.tone}`}>{known.tone === "busy" && <i className="pulse" aria-hidden="true" />}{known.label}</span>;
-}
-
-function RequestForm({ act }: { act: Act }) {
-  const [kind, setKind] = useState<"component" | "repair">("component"), [text, setText] = useState("");
-  const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (busy || !text.trim()) return;
-    setBusy(true); setError("");
-    const problem = await act("jobs", { request: text.trim(), kind });
-    setBusy(false);
-    if (problem) setError(problem); else setText("");
-  }
-  return <form className="engineer-request" onSubmit={submit} aria-label="向平台工程师提需求">
-    <div className="engineer-kind" role="radiogroup" aria-label="工作类型">
-      {(["component", "repair"] as const).map(value => <label key={value} className={kind === value ? "selected" : ""}>
-        <input type="radio" name="engineer-kind" checked={kind === value} onChange={() => setKind(value)} />
-        {value === "component" ? "添加组件" : "修复缺陷"}
-      </label>)}
-    </div>
-    <textarea aria-label="需求" rows={3} maxLength={20000} value={text} onChange={event => setText(event.target.value)}
-      onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
-      placeholder={kind === "component" ? "要加什么、为什么，例如：给执行模型加一个读取 PDF 的工具" : "哪里出了问题、怎么复现，例如：任务暂停后点继续，状态一直显示排队中"} />
-    <div className="engineer-request-bar">
-      <small className="muted">{kind === "component" ? "先写方案给你批准，再动手；改好后由你确认才生效。" : "改好并通过检查后自动生效。"} · Ctrl+Enter 提交</small>
-      <button type="submit" className="primary" disabled={busy || !text.trim()}>{busy ? "提交中…" : "交给平台工程师"}</button>
-    </div>
-    {error && <p className="error" role="alert">{error}</p>}
-  </form>;
 }
 
 function JobDetail({ job, working, runs, act, onOpenRun }: {
@@ -157,9 +148,9 @@ function JobDetail({ job, working, runs, act, onOpenRun }: {
   }
   const reply = (_id: string, body: { text: string; choice?: string }) => act(`jobs/${encodeURIComponent(job.id)}/reply`, body);
   const open = !["applied", "failed", "rejected", "cancelled", "applying"].includes(job.status);
-  // The first message usually repeats the request shown above.
-  const history = (job.messages ?? []).filter(message => message.text.trim() !== job.request.trim());
-  return <section className="panel engineer-job" aria-label="工作详情">
+  // The first message usually repeats the request shown above, and the engineer's last its report.
+  const history = (job.messages ?? []).filter(message => ![job.request, job.report ?? ""].some(text => message.text.trim() === text.trim()));
+  return <section className="engineer-job" aria-label="工作详情">
     <div className="engineer-job-head">
       <div className="engineer-job-title"><h3 title={plainTitle(job)}>{plainTitle(job)}</h3><StatusChip status={job.status} /></div>
       <p className="engineer-job-meta">{KIND[job.kind]} · {ORIGIN[job.origin]}{job.model_id ? ` · ${job.model_id}` : ""} · 花费 ${job.cost_usd.toFixed(4)}</p>
@@ -177,22 +168,22 @@ function JobDetail({ job, working, runs, act, onOpenRun }: {
     </div>}
     {job.report && <div className="engineer-section"><h4>{job.status === "applied" ? "结果" : "工程师的报告"}</h4><div className="dx-report"><MarkdownView text={job.report} /></div></div>}
     {!!job.files?.length && <div className="engineer-section"><h4>改动的文件</h4><ul className="engineer-files">{job.files.map(file => <li key={file}><code>{file}</code></li>)}</ul>
-      {!!job.checks?.length && <p className="muted">检查通过：{job.checks.join("、")}</p>}
+      {!!job.checks?.length && <p className="engineer-checks">检查通过：{job.checks.map(check => CHECKS[check] ?? check).join("、")}</p>}
       {job.diff && <details className="engineer-diff"><summary>查看改动内容</summary><pre>{job.diff}</pre></details>}</div>}
     {job.status === "ready" && <div className="engineer-actions">
       <button type="button" className="primary" disabled={!!busy} onClick={() => post("approve", "apply")}>{busy === "apply" ? "提交中…" : "应用这项改动"}</button>
       <button type="button" className="ghost" disabled={!!busy} onClick={() => post("reject", "reject")}>放弃</button>
       <small className="muted">应用时会等进行中的模型调用结束，再重启服务。</small>
     </div>}
-    {job.commit && <p className="muted">已提交到 git：<code>{job.commit.slice(0, 8)}</code>（没有推送）</p>}
+    {job.commit && <p className="engineer-checks">已提交到 git：<code>{job.commit.slice(0, 8)}</code>（没有推送）</p>}
     {job.error && <p className="error">{job.error}</p>}
     {error && <p className="error" role="alert">{error}</p>}
-    {!!history.length && <div className="engineer-section"><h4>经过</h4><ol className="engineer-history">
+    {!!history.length && <details className="engineer-section engineer-history-box" open={open}><summary>经过 · {history.length}</summary><ol className="engineer-history">
       {history.map((message, index) => <li key={index} className={`engineer-msg ${message.role}`}>
         <small>{SPEAKER[message.role] ?? message.role} · {when(message.created_at)}</small>
         <div>{message.role === "engineer" ? <MarkdownView text={message.text} /> : <p>{message.text}</p>}</div>
       </li>)}
-    </ol></div>}
+    </ol></details>}
     {(job.status === "plan_ready" || job.status === "ready" || job.status === "needs_input") && <Composer
       item={{ id: job.id, trigger: "engineer", status: "done", created_at: job.created_at, question: job.question, choices: job.choices ?? [] } satisfies Diagnosis}
       waiting={job.status === "needs_input"} disabled={false} onReply={reply}

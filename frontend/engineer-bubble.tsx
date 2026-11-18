@@ -4,15 +4,39 @@ import { ENGINEER_STATUS, type EngineerJob } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, kindOf, shortTitle, useEngineerJobs } from "./lead-engineer";
 
 type RunRef = { id: string; plan: { summary: string } };
+// Threads the 平台 page's conversation shows.
+const INLINE_THREADS = 8;
 
-/** A bubble in the page's corner that opens a chat with the platform engineer, outside any task:
- * every job's thread, newest last, and a box to ask for a fix or a component, or to answer it. */
+/** A bubble in the page's corner that opens the chat with the platform engineer (EngineerChat). */
 export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
   apiBase: string; runs: RunRef[]; tick: string; onOpenPage: (jobId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   // Closed, it looks again whenever the app reloads its tasks (``tick``), for the badge.
-  const { jobs, act, available } = useEngineerJobs(apiBase, null, `${open}|${tick}`, open);
+  const { jobs } = useEngineerJobs(apiBase, null, `${open}|${tick}`, false);
+  const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+  return <>
+    <button type="button" className={`engineer-bubble${open ? " open" : ""}`} aria-expanded={open} aria-label="平台工程师"
+      title="和平台工程师聊：修复平台自身，或给它添加组件" onClick={() => setOpen(value => !value)}>
+      <span aria-hidden="true">{open ? "×" : <Icon name="wrench" size={20} />}</span>
+      {!open && waiting.length > 0 && <i className="engineer-bubble-badge" title="等你处理">{waiting.length}</i>}
+    </button>
+    {open && <EngineerChat apiBase={apiBase} runs={runs} tick={tick} onOpenPage={onOpenPage} onClose={() => setOpen(false)} />}
+  </>;
+}
+
+/** The chat with the platform engineer, outside any task: every job's thread, newest last, and a box
+ * to ask for a fix or a component, or to answer it. In the corner bubble (``onClose``) or on the 平台 page. */
+export function EngineerChat({ apiBase, runs, tick, onOpenPage, onClose }: {
+  apiBase: string; runs: RunRef[]; tick: string; onOpenPage: (jobId: string) => void; onClose?: () => void;
+}) {
+  const { jobs, act, available } = useEngineerJobs(apiBase, null, tick, true);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
   const [target, setTarget] = useState<string | null>(null);
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -21,14 +45,11 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
   const end = useRef<HTMLDivElement>(null);
   // Answers go to the job waiting for the user, unless another one is picked.
   const replyTo = jobs.find(job => job.id === target && ENGINEER_WAITING.has(job.status)) ?? (target === "new" ? undefined : waiting[0]);
-  const threads = [...jobs].slice(0, 20).sort((a, b) => a.updated_at.localeCompare(b.updated_at));
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [open]);
-  useEffect(() => { if (open) end.current?.scrollIntoView?.({ block: "end" }); }, [open, jobs.length]);
+  // The page shows the latest few; older work is in 工作记录.
+  const limit = onClose ? 20 : INLINE_THREADS;
+  const threads = [...jobs].slice(0, limit).sort((a, b) => a.updated_at.localeCompare(b.updated_at));
+  const older = Math.max(0, jobs.length - limit);
+  useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [jobs.length]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     const said = text.trim();
@@ -44,22 +65,17 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
   }
   const taskOf = (job: EngineerJob) => runs.find(run => run.id === job.run_id)?.plan.summary;
-  return <>
-    <button type="button" className={`engineer-bubble${open ? " open" : ""}`} aria-expanded={open} aria-label="平台工程师"
-      title="和平台工程师聊：修复平台自身，或给它添加组件" onClick={() => setOpen(value => !value)}>
-      <span aria-hidden="true">{open ? "×" : <Icon name="wrench" size={20} />}</span>
-      {!open && waiting.length > 0 && <i className="engineer-bubble-badge" title="等你处理">{waiting.length}</i>}
-    </button>
-    {open && <section className="engineer-chat diagnosis-card" role="dialog" aria-label="平台工程师聊天">
+  return <section className={`engineer-chat diagnosis-card${onClose ? "" : " inline"}`} role={onClose ? "dialog" : undefined} aria-label="平台工程师聊天">
       <div className="engineer-chat-head">
         {/* The same mark as the engineer's avatar in a task's conversation. */}
         <span className="dx-avatar engineer-avatar engineer-chat-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span>
         <div><b>平台工程师</b><small>修复平台自身，或给它添加组件</small></div>
-        <button type="button" className="modal-close" onClick={() => setOpen(false)} aria-label="关闭平台工程师聊天">×</button>
+        {onClose && <button type="button" className="modal-close" onClick={onClose} aria-label="关闭平台工程师聊天">×</button>}
       </div>
       <div className="engineer-chat-body dx-thread">
         {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
         {!threads.length && <p className="muted engineer-chat-empty">还没有工作记录。直接在下面说要修什么、加什么；修复通过检查后自动生效，组件先写方案给你批准。</p>}
+        {older > 0 && <p className="muted engineer-chat-older">更早的 {older} 项在「工作记录」里。</p>}
         {threads.map((job, index) => {
           const done = ["applied", "failed", "rejected", "cancelled"].includes(job.status) && index < threads.length - 1;
           const expanded = done ? toggled.has(job.id) : !toggled.has(job.id);
@@ -72,7 +88,7 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
             <span className={`dx-chip ${status.tone}`}>{status.label}</span>
           </button>
           {expanded && (job.messages ?? []).map((message, index, all) => <EngineerEntry key={index} job={job} message={message} first={index === 0}
-            last={index === all.length - 1} act={act} onOpenEngineer={onOpenPage} />)}
+            last={index === all.length - 1} act={act} onOpenEngineer={onOpenPage} inThread />)}
           {ENGINEER_WAITING.has(job.status) && replyTo?.id !== job.id &&
             <button type="button" className="link engineer-reply-to" onClick={() => setTarget(job.id)}>回复这一项</button>}
         </div>; })}
@@ -89,13 +105,12 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
               placeholder={replyTo ? "回复它的方案或问题，比如要改的地方" : "说要修什么，或要加什么能力"} />
             <div className="dx-input-bar">
               <small className="dx-hint">Ctrl+Enter 发送</small>
-              <button type="submit" className="primary" disabled={!text.trim()}>{busy ? "发送中…" : "发送"}</button>
+              <button type="submit" className="primary send-button" disabled={!text.trim()} aria-label="发送">{busy ? <span>发送中…</span> : <><Icon name="arrowUp" /><span className="sr-only">发送</span></>}</button>
             </div>
           </div>
         </fieldset>
         {error && <p className="error" role="alert">{error}</p>}
       </form>
-    </section>}
-  </>;
+    </section>;
 }
 

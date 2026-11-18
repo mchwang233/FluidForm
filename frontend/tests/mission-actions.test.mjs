@@ -1723,8 +1723,8 @@ test("the platform engineer page opens from a task's conversation, shows finishe
   await act(async () => state.poll());
   await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
   // The engineer has its page in the sidebar's foot, and works in tasks' conversations too.
-  assert.equal([...document.querySelectorAll(".app-nav button")].some(node => node.textContent.startsWith("平台工程师")), true);
-  await click([...document.querySelectorAll(".lead-panel button")].find(node => node.textContent === "在平台工程师页面查看"));
+  assert.equal([...document.querySelectorAll(".app-nav button")].some(node => node.textContent === "平台"), true);
+  await click([...document.querySelectorAll(".lead-panel button")].find(node => node.textContent === "查看工作记录"));
   const page = document.querySelector(".engineer-page");
   assert.match(page.querySelector(".engineer-job").textContent, /方案待批准.*结果页可以导出 CSV/s);
   await click([...page.querySelectorAll("button")].find(node => node.textContent === "批准方案，开始实施"));
@@ -1732,16 +1732,16 @@ test("the platform engineer page opens from a task's conversation, shows finishe
   // A finished repair shows its files, checks, diff and commit.
   await click([...page.querySelectorAll(".engineer-list button")].find(node => node.textContent.includes("修复状态")));
   const detail = document.querySelector(".engineer-job");
-  assert.match(detail.textContent, /已生效.*executor\.py.*检查通过：Backend tests.*abcdef12/s);
-  // A new request goes to the engineer with its kind.
-  await click([...page.querySelectorAll(".engineer-kind label")].find(node => node.textContent === "修复缺陷"));
-  const box = page.querySelector(".engineer-request textarea");
+  assert.match(detail.textContent, /已生效.*executor\.py.*检查通过：后端测试.*abcdef12/s);
+  // A new request goes to the engineer through the page's conversation, its kind told from its words.
+  await click([...page.querySelectorAll(".engineer-tabs button")].find(node => node.textContent === "对话"));
+  const box = page.querySelector('[aria-label="给平台工程师的消息"]');
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
     setter.call(box, "暂停后继续一直显示排队中");
     box.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
-  await click([...page.querySelectorAll("button")].find(node => node.textContent === "交给平台工程师"));
+  await act(async () => page.querySelector(".engineer-chat-composer").requestSubmit());
   const posted = state.engineerActions.at(-1);
   assert.equal(posted.path, "/api/engineer/jobs");
   assert.deepEqual(posted.body, { request: "暂停后继续一直显示排队中", kind: "repair" });
@@ -2181,10 +2181,10 @@ test("new is a page of its own: picking a task leaves it, and it offers to pick 
   assert.equal(document.querySelector(".app-content.composing"), null);
 });
 
-test("the sidebar's foot is 模型 · 平台工程师 · 设置, the theme and common failures inside 设置", async t => {
+test("the sidebar's foot is 模型 · 平台 · 设置, the theme and common failures inside 设置", async t => {
   const { window, document, button, click } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
   const nav = document.querySelector(".app-nav");
-  assert.deepEqual([...nav.querySelectorAll(":scope > button")].map(node => node.textContent), ["模型", "平台工程师"]);
+  assert.deepEqual([...nav.querySelectorAll(":scope > button")].map(node => node.textContent), ["模型", "平台"]);
   const settings = nav.querySelector(".settings-menu");
   await click(settings.querySelector("summary"));
   await click(button("深色", settings));
@@ -2217,7 +2217,8 @@ test("the platform engineer page lists the capabilities on this machine, to swit
   const { state, document, button, click, act } = await setup(t, [run], [], { openComposer: false });
   state.capabilities = [{ ...FEISHU, id: "feishu-send", status: "active", source_run_id: "built-task", check_ok: true, check_output: "ok", created_at: "2026-11-18T08:00:00Z" },
     { ...FEISHU, id: "feishu-reply", name: "飞书自动回复", kind: "automation", status: "failed", check_ok: false, check_output: "Exit code 1", created_at: "2026-11-18T07:00:00Z" }];
-  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台工程师"));
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await click([...document.querySelectorAll(".engineer-tabs button")].find(node => node.textContent === "能力"));
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   const shelf = document.querySelector(".capability-shelf");
   const [send, reply] = shelf.querySelectorAll(".capability");
@@ -2232,4 +2233,43 @@ test("the platform engineer page lists the capabilities on this machine, to swit
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   assert.deepEqual(state.capabilities.map(item => item.id), ["feishu-reply"]);
   assert.equal(document.querySelectorAll(".capability-shelf .capability").length, 1);
+});
+
+test("the 平台 page opens on the conversation with its engineer, its capabilities a tab away, work that needs you first", async t => {
+  const { state, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.engineer = { available: true, jobs: [
+    engineerJob({ id: "done", title: "修复状态", status: "applied", kind: "repair", report: "改好了",
+      messages: [{ role: "engineer", text: "改好了", created_at: "2026-10-19T08:00:00Z" }, { role: "system", text: "已生效", created_at: "2026-10-19T08:01:00Z" }] }),
+    engineerJob({ id: "gone", title: "旧想法", status: "rejected" }),
+  ] };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  const page = document.querySelector(".engineer-page");
+  assert.equal(button("对话", page.querySelector(".engineer-tabs")).getAttribute("aria-pressed"), "true");
+  // The conversation: each job a thread; a finished one folds; its system lines do not repeat its title.
+  const chat = page.querySelector(".engineer-chat.inline");
+  assert.ok(chat && chat.querySelector('[aria-label="给平台工程师的消息"]'));
+  assert.equal(page.querySelector(".engineer-attention"), null);
+  await click(button("能力", page.querySelector(".engineer-tabs")));
+  assert.ok(page.querySelector(".capability-shelf"));
+
+  await click(button("工作记录2", page.querySelector(".engineer-tabs")));
+  const list = page.querySelector(".engineer-list");
+  assert.deepEqual([...list.querySelectorAll("h4, summary")].map(node => node.textContent), ["已生效", "未完成或放弃 · 1"]);
+  // The report is shown once: 经过 keeps only what it does not already say.
+  const detail = page.querySelector(".engineer-job");
+  assert.equal(detail.textContent.split("改好了").length - 1, 1);
+  assert.match(detail.querySelector(".engineer-history-box summary").textContent, /经过 · 1/);
+
+  // A plan waiting for approval goes first, and opens where it can be approved.
+  state.engineer.jobs = [engineerJob({ id: "new", title: "导出按钮" }), ...state.engineer.jobs];
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "模型"));
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  const again = document.querySelector(".engineer-page");
+  const waiting = again.querySelector(".engineer-attention");
+  assert.match(waiting.textContent, /等你处理.*方案待批准.*导出按钮/s);
+  await click(waiting.querySelector("button"));
+  assert.match(again.querySelector(".engineer-job").textContent, /导出按钮.*批准方案，开始实施/s);
 });

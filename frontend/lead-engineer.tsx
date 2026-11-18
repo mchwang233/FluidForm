@@ -93,8 +93,10 @@ function EngineerMeta({ note, at }: { note: string; at: string }) {
 }
 
 /** One line of a job's conversation in the group chat; the job's card follows its latest line. */
-export function EngineerEntry({ job, message, first, last, act, onOpenEngineer }: {
+export function EngineerEntry({ job, message, first, last, act, onOpenEngineer, inThread = false }: {
   job: EngineerJob; message: EngineerMessage; first: boolean; last: boolean; act: Act; onOpenEngineer?: (jobId: string) => void;
+  // In the job's own thread (the 平台 page), whose head already names it.
+  inThread?: boolean;
 }) {
   const kind = KIND[job.kind] ?? job.kind;
   const said = first ? `@平台工程师 ${message.text}` : message.text;
@@ -112,7 +114,7 @@ export function EngineerEntry({ job, message, first, last, act, onOpenEngineer }
       : message.role === "engineer"
         ? <article className="dx-msg dx-ai lead-engineer-msg"><EngineerMeta note={`${kind} · ${shortTitle(job.title)}`} at={message.created_at} />
             <Folded text={message.text} /></article>
-        : <p className="engineer-system" role="note"><span><Icon name="wrench" size={12} /> {shortTitle(job.title)} · {message.text} · {when(message.created_at)}</span></p>;
+        : <p className="engineer-system" role="note"><span>{inThread ? null : <><Icon name="wrench" size={12} /> {shortTitle(job.title)} · </>}{message.text} · {when(message.created_at)}</span></p>;
   return <>{line}{last && <JobCard job={job} act={act} onOpenEngineer={onOpenEngineer} />}</>;
 }
 
@@ -144,7 +146,7 @@ function JobCard({ job, act, onOpenEngineer }: { job: EngineerJob; act: Act; onO
       {job.status === "needs_input" && (job.choices ?? []).map(choice =>
         <button type="button" key={choice} className="ghost" disabled={busy} onClick={() => run(`${base}/reply`, { choice, text: "" })}>{choice}</button>)}
       {open && <button type="button" className="ghost" disabled={busy} onClick={() => run(`${base}/reject`)}>放弃</button>}
-      {onOpenEngineer && <button type="button" className="link" onClick={() => onOpenEngineer(job.id)}>在平台工程师页面查看</button>}
+      {onOpenEngineer && <button type="button" className="link" onClick={() => onOpenEngineer(job.id)}>查看工作记录</button>}
     </div>
     {ENGINEER_WAITING.has(job.status) && <small className="dx-hint">要改什么，在下面输入「@平台工程师」加上你的意见。</small>}
     {error && <p className="error" role="alert">{error}</p>}

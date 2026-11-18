@@ -536,7 +536,7 @@ function App() {
       <MissionHistory runs={runs} selectedId={view==="missions"?selected?.id:undefined} deletingId={deletingRunId} error={deleteTarget?"":deleteError} onSelect={run=>{setSelected(run);setView("missions");setComposerOpen(false)}} onDelete={requestDeleteRun} collapsed={historyCollapsed} onToggle={()=>setHistoryCollapsed(value=>!value)}/>
       <nav className="app-nav" aria-label="页面导航">
         <button type="button" aria-pressed={view==="models"} title="模型" onClick={()=>setView("models")}><Icon name="cpu"/><span>模型</span></button>
-        <button type="button" aria-pressed={view==="engineer"} title="平台工程师" onClick={()=>{setEngineerFocus(null);setView("engineer")}}><Icon name="wrench"/><span>平台工程师</span></button>
+        <button type="button" aria-pressed={view==="engineer"} title="平台：能力和平台工程师" onClick={()=>{setEngineerFocus(null);setView("engineer")}}><Icon name="wrench"/><span>平台</span></button>
         <SettingsMenu active={view==="problems"} onProblems={()=>setView("problems")}/>
       </nav>
     </aside>
