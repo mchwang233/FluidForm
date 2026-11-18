@@ -1479,3 +1479,8 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .engineer-go-on .platform-input{border-radius:16px}
 .engineer-go-on p{margin:6px 2px 0;font-size:12.5px}
 .engineer-open-thread{display:inline-block;margin-top:12px;font-size:12.5px}
+.platform-search{display:flex;align-items:center;gap:8px;height:32px;margin:0 0 8px;padding:0 10px;border:1px solid var(--line-soft);border-radius:9px;color:var(--faint)}
+.platform-search:focus-within{border-color:var(--line)}
+.platform-search input{flex:1;min-width:0;height:auto;padding:0;border:0;background:transparent;box-shadow:none;font-size:13px;color:var(--text)}
+.platform-search input:focus,.platform-search input:focus-visible{outline:none;border:0;box-shadow:none}
+.platform-side .platform-threads{max-height:none}

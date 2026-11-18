@@ -70,6 +70,13 @@ function threadTitle(thread: Thread): string {
   return headlineOf(thread.jobs[0]);
 }
 
+/** Whether a conversation mentions ``needle``: its name, its work's names, what was asked and what came of it. */
+function matches(thread: Thread, needle: string): boolean {
+  const text = [threadTitle(thread), thread.run?.plan.summary, ...thread.jobs.flatMap(job => [headlineOf(job), job.title, job.request, job.plain, job.report])]
+    .filter(Boolean).join("\n").toLowerCase();
+  return text.includes(needle);
+}
+
 function threadSource(thread: Thread): string {
   return thread.id.startsWith("task:") ? (thread.run ? "来自任务" : "来自已删除的任务") : "你发起";
 }
@@ -97,7 +104,9 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   }, [apiBase]);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
   const all = threads(jobs, runs);
-  const [openId, setOpenId] = useState<string | null>(openThread);
+  const [openId, setOpenId] = useState<string | null>(openThread), [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const found = needle ? all.filter(thread => matches(thread, needle)) : all.slice(0, SHOWN_THREADS);
   useEffect(() => { if (openThread) setOpenId(openThread); }, [openThread]);
   const open = all.find(thread => thread.id === openId);
   return <div className="platform-page">
@@ -112,18 +121,6 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
         <PlatformComposer act={act} disabled={!available} />
         <p className="platform-hint">平台工程师先在副本里改，测试通过、你点头才生效。</p>
         {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setOpenId(threadOf(job))} />)}
-        {!!all.length && <div className="platform-recent">
-          <div className="platform-recent-head"><h3>最近的对话</h3><button type="button" className="platform-link" onClick={() => onRecords()}>全部 {jobs.length} 条记录 ›</button></div>
-          {all.slice(0, SHOWN_THREADS).map(thread => {
-            const state = threadState(thread);
-            return <button type="button" key={thread.id} className="platform-thread-row" onClick={() => setOpenId(thread.id)}>
-              <span className="platform-thread-main"><b>{threadTitle(thread)}</b>
-                <small>{threadSource(thread)} · {thread.jobs.length} 项 · {headlineOf(thread.jobs.at(-1)!)}</small></span>
-              <span className={`platform-thread-state ${state.tone}`}>{state.label}</span>
-              <small className="platform-thread-date">{short(thread.updated)}</small>
-            </button>;
-          })}
-        </div>}
       </div>}
     </section>
     <aside className="platform-side" aria-label="平台现在能做的">
@@ -148,6 +145,24 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
         </li>)}
         {!skills.length && <li className="muted">还没有。</li>}
       </ul>
+      <div className="platform-side-head"><h3>最近的对话 <small>{all.length}</small></h3>
+        {openId && <button type="button" className="platform-link" onClick={() => setOpenId(null)}>新对话</button>}</div>
+      {all.length > 0 && <label className="platform-search"><Icon name="search" size={14} />
+        <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索对话" aria-label="搜索对话" /></label>}
+      <div className="platform-threads" aria-label="对话列表">
+        {found.map(thread => {
+          const state = threadState(thread);
+          return <button type="button" key={thread.id} className="platform-thread-row" aria-pressed={thread.id === openId} onClick={() => setOpenId(thread.id)}>
+            <span className="platform-thread-main"><b>{threadTitle(thread)}</b>
+              <small>{threadSource(thread)} · {thread.jobs.length} 项 · {headlineOf(thread.jobs.at(-1)!)}</small></span>
+            <span className="platform-thread-side"><span className={`platform-thread-state ${state.tone}`}>{state.label}</span>
+              <small className="platform-thread-date">{short(thread.updated)}</small></span>
+          </button>;
+        })}
+        {!all.length && <p className="muted">还没有。</p>}
+        {!!all.length && needle && !found.length && <p className="muted">没有匹配的对话。</p>}
+      </div>
+      <button type="button" className="platform-link" onClick={() => onRecords()}>全部 {jobs.length} 条记录 ›</button>
     </aside>
   </div>;
 }

@@ -2259,9 +2259,9 @@ test("the 平台 page lists its conversations beside the one open, each one to g
   await settle();
   const page = () => document.querySelector(".platform-page");
   assert.match(page().querySelector(".platform-pending").textContent, /等你点头.*新增「飞书发消息」/s);
-  // The page is the engineer's conversation, centred like 新建; recent conversations under the box.
+  // The page is the engineer's conversation, centred like 新建; recent conversations are in the side panel.
   assert.match(page().querySelector(".platform-greeting").textContent, /要平台加什么能力、修什么问题？/);
-  const rows = () => [...page().querySelectorAll(".platform-recent .platform-thread-row")];
+  const rows = () => [...page().querySelectorAll(".platform-side .platform-thread-row")];
   assert.deepEqual(rows().map(row => row.querySelector("b").textContent), ["飞书发消息", "中文输入法交付"]);
   assert.match(rows()[0].textContent, /你发起 · 1 项.*等你点头/s);
   assert.match(rows()[1].textContent, /来自任务 · 2 项 · 长回归超时.*已生效/s);
@@ -2281,12 +2281,25 @@ test("the 平台 page lists its conversations beside the one open, each one to g
   await act(async () => page().querySelector(".platform-composer").requestSubmit());
   assert.deepEqual(state.engineerActions.at(-1), { path: "/api/engineer/jobs", body: { request: "超时再放宽一点", kind: "repair", thread_id: "task:ime-task" } });
 
-  // Back to the page, then into the waiting one: the box answers it.
-  await click(button("← 平台"));
+  // The other one is beside it; inside the waiting one, the box answers it.
   await click(rows()[0]);
+  assert.equal(rows()[0].getAttribute("aria-pressed"), "true");
   assert.match(page().querySelector(".platform-reply-to").textContent, /回复「飞书发消息」/);
   await click(button("批准，开始做", page().querySelector(".platform-thread")));
   assert.equal(state.engineerActions.at(-1).path, "/api/engineer/jobs/mine/approve");
+  // Searching the conversations: by name, the work's names, what was asked or came of it.
+  const search = page().querySelector('[aria-label="搜索对话"]');
+  const type = async text => act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(search, text);
+    search.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await type("超时");
+  assert.deepEqual(rows().map(row => row.querySelector("b").textContent), ["中文输入法交付"]);
+  await type("飞书");
+  assert.deepEqual(rows().map(row => row.querySelector("b").textContent), ["飞书发消息"]);
+  await type("没有这个");
+  assert.match(page().querySelector(".platform-side").textContent, /没有匹配的对话/);
+  await type("");
   await click(button("← 平台"));
   assert.equal(page().querySelector(".platform-composer textarea").getAttribute("placeholder"), "跟平台工程师说要加什么、修什么…（开始一段新对话）");
   await click(button(`全部 ${state.engineer.jobs.length} 条记录 ›`));
