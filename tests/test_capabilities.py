@@ -127,3 +127,9 @@ async def test_only_files_inside_the_tasks_folder_are_kept_and_a_proposal_can_be
 def test_records_saved_before_capabilities_existed_load():
     stored = {"id": "old", "prompt": "p", "status": "succeeded", "budget_usd": 1, "plan": {"summary": "s", "nodes": []}}
     assert ExecutionRun.model_validate(stored).capability_proposals == []
+
+
+async def test_the_platform_page_can_list_what_the_steps_know_how_to_use(task_api):
+    _, client = task_api
+    listed = (await client.get("/api/skills")).json()
+    assert any(item["name"] == "synopsys-vcs" and "vcs" in item["tools"] and item["machine"] is False for item in listed)

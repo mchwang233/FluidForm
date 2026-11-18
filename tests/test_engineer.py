@@ -353,3 +353,36 @@ async def test_the_user_brings_the_engineer_into_a_task(task_api):
     listed = (await client.get("/api/engineer", params={"run_id": "t"})).json()["jobs"]
     assert [job["id"] for job in listed] == [joined.json()["id"]]
     assert (await client.get("/api/engineer", params={"run_id": "other"})).json()["jobs"] == []
+
+
+class PlainEngineer(Engineer):
+    """Says what it does in plain words first, as it is asked to."""
+
+    async def complete(self, model_id, prompt, workspace=None, **kwargs):
+        result = await super().complete(model_id, prompt, workspace, **kwargs)
+        plain = ("HEADLINE: 导出按钮\nPLAIN: 在结果页加一个导出按钮，点一下下载 CSV。\n" if "plan]]" in prompt
+                 else "HEADLINE：结果导出\nPLAIN：结果页现在可以导出 CSV 了。\n")
+        return ProviderResult(plain + result.text, 0, 0, model_id)
+
+
+async def test_the_engineer_says_what_it_does_in_plain_words_for_the_user(setup):
+    build, _, _ = setup
+    providers = PlainEngineer()
+    executor = build(providers)
+    job = executor.engineer_request("给结果页加一个导出按钮，用 papaparse 生成 CSV")
+    await idle(executor)
+    job = executor.db.get_engineer_job(job.id)
+    # It is asked for them, and they are kept apart from the plan.
+    assert "HEADLINE:" in providers.prompts[0][0] and "PLAIN:" in providers.prompts[0][0]
+    assert (job.headline, job.plan_plain) == ("导出按钮", "在结果页加一个导出按钮，点一下下载 CSV。")
+    assert "HEADLINE" not in job.plan and "PLAIN" not in job.plan and "导出按钮" in job.plan
+    executor.engineer_approve(job.id)
+    await idle(executor)
+    job = executor.db.get_engineer_job(job.id)
+    assert (job.headline, job.plain) == ("结果导出", "结果页现在可以导出 CSV 了。")
+    assert "HEADLINE" not in job.report and job.messages[-1].text == "结果页现在可以导出 CSV 了。"
+
+
+def test_a_reply_without_plain_lines_is_kept_whole():
+    from super_partner.engineer import plain_lines
+    assert plain_lines("改了 api.py\nSTATUS: FIXED") == ("", "", "改了 api.py\nSTATUS: FIXED")

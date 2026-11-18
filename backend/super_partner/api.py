@@ -1284,6 +1284,13 @@ class GithubToken(BaseModel):
     token: str = Field(min_length=10, max_length=500)
 
 
+@app.get("/api/skills")
+def list_skills():
+    """What the steps know how to use (skills.py): this machine's skills, then the platform's."""
+    return [{"name": item.name, "description": item.description, "tools": item.tools, "machine": item.machine}
+            for item in skills.library()]
+
+
 # ---- Capabilities: what finished tasks left the platform able to do (capabilities.py) ----
 
 @app.get("/api/capabilities", response_model=list[Capability])

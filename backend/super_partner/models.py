@@ -596,6 +596,11 @@ class EngineerJob(BaseModel):
     kind: str = "component"  # repair | component
     origin: str = "user"  # user | lead | diagnosis
     title: str = ""
+    # For the user, in plain words (engineer.plain_lines): a short name, what its plan will do,
+    # and what the finished work changed. Older jobs have none and are shown from their text.
+    headline: str = ""
+    plan_plain: str = ""
+    plain: str = ""
     request: str
     # queued | planning | plan_ready | editing | validating | ready | needs_input | applying, or
     # one of ENGINEER_DONE; ``phase`` is the work a queued job waits to do (plan | edit).

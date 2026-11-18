@@ -53,6 +53,22 @@ def title_of(request: str) -> str:
     return line[:40] + ("…" if len(line) > 40 else "")
 
 
+PLAIN = re.compile(r"^\s*(HEADLINE|PLAIN)\s*[:：]\s*(.+?)\s*$", re.MULTILINE)
+# A short name and a line or two for the user, before the engineer's own report.
+PLAIN_RULE = (
+    "Begin your reply with two lines for the user, in plain Chinese, without code, file names, line "
+    "numbers or test counts:\nHEADLINE: <what this is, at most 12 characters, such as 步骤结果误判 or 飞书发消息>\n"
+    "PLAIN: <{what}>\nThen write the rest as asked.\n"
+)
+
+
+def plain_lines(text: str) -> tuple[str, str, str]:
+    """(headline, plain words, the rest) of an engineer's reply; "" for lines it did not write."""
+    found = {key.upper(): value.strip() for key, value in PLAIN.findall(text or "")}
+    rest = PLAIN.sub("", text or "").strip()
+    return found.get("HEADLINE", "")[:24], found.get("PLAIN", "")[:300], rest
+
+
 def _conversation(job: EngineerJob) -> str:
     return "\n".join(f"{item.role}: {item.text[:2000]}" for item in job.messages[-20:]) or "(none)"
 
@@ -65,7 +81,8 @@ def plan_prompt(job: EngineerJob, guide: str) -> str:
         "change below; do not edit anything yet. Read docs/ARCHITECTURE.md first, then only the code "
         f"you need.\n{asker}:\n{job.request}\n\nConversation so far:\n{_conversation(job)}\n"
         + (f"\nYour previous plan, which the user wants changed:\n{job.plan}\n" if job.plan else "")
-        + "\nWrite the plan in Chinese, short, for the user to approve:\n"
+        + "\n" + PLAIN_RULE.format(what="in two or three short sentences: what you will make or fix, how it will be used, roughly how big the change is")
+        + "Write the plan in Chinese, short, for the user to approve:\n"
         "- 目标: what will work afterwards.\n"
         "- 改动: each file and what changes in it.\n"
         "- 测试: the tests you will add and what they prove.\n"
@@ -89,7 +106,8 @@ def edit_prompt(job: EngineerJob, guide: str, feedback: str = "") -> str:
         "not touch task data, credentials, Git history, the live source, or running services. The "
         f"controller then runs the backend tests, frontend tests and build independently{after}.\n\n"
         + what + f"\nConversation so far:\n{_conversation(job)}\n" + feedback
-        + "\nWhen done, report in Chinese (改了什么, 测试, 验证) and end with `STATUS: FIXED`. If a real "
+        + "\n" + PLAIN_RULE.format(what="one or two sentences: what was wrong or wanted, and what works now")
+        + "When done, report in Chinese (改了什么, 测试, 验证) and end with `STATUS: FIXED`. If a real "
         "choice belongs to the user, ask with QUESTION, OPTIONS (a JSON array) and `STATUS: NEEDS_INPUT`.\n\n"
         + guide
     )
@@ -296,6 +314,8 @@ class Engineering:
             return
         # Every component change, a retrospective's too, waits for the user's approval of its plan
         # and again before it is applied.
+        headline, plain, report = plain_lines(report)
+        job.headline, job.plan_plain = headline or job.headline, plain
         job.plan, job.status = report, "plan_ready"
         job.messages.append(EngineerMessage(role="engineer", text="方案写好了，请看过后批准，或回复要改的地方。"))
         self._engineer_save(job)
@@ -338,8 +358,10 @@ class Engineering:
                 job.status = "editing"
                 self._engineer_save(job)
         job.files, job.checks = copy["files"], [item["name"] for item in checks]
+        headline, plain, report = plain_lines(report)
+        job.headline, job.plain = headline or job.headline, plain
         job.diff, job.report, job.error = self.platform.diff(copy), report, None
-        job.messages.append(EngineerMessage(role="engineer", text=report or "改好了，检查全部通过。"))
+        job.messages.append(EngineerMessage(role="engineer", text=plain or report or "改好了，检查全部通过。"))
         if job.kind == "component":
             job.status = "ready"
             self._engineer_save(job)

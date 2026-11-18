@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { CapabilityShelf } from "./capabilities";
-import { EngineerChat } from "./engineer-bubble";
+import { PlatformHome, headlineOf } from "./platform";
 import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
@@ -9,6 +9,7 @@ import { Composer, when, type Diagnosis } from "./diagnosis";
 export type EngineerMessage = { role: "user" | "engineer" | "lead" | "system"; text: string; created_at: string };
 export type EngineerJob = {
   id: string; kind: "repair" | "component"; origin: "user" | "lead" | "diagnosis" | "retrospective"; title: string; request: string;
+  headline?: string; plan_plain?: string; plain?: string;
   status: string; plan?: string | null; report?: string | null; question?: string | null; choices?: string[];
   run_id?: string | null; node_id?: string | null; files?: string[]; checks?: string[]; diff?: string | null;
   commit?: string | null; model_id?: string | null; messages?: EngineerMessage[]; budget_usd: number; cost_usd: number;
@@ -90,35 +91,24 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
   const applied = jobs.filter(job => job.status === "applied");
   const others = jobs.filter(job => DONE.has(job.status) && job.status !== "applied");
   // Opening the page shows what the platform can do; work that needs you or is under way shows the records.
-  // The page opens on the conversation with the engineer; a job opened from a task shows its record.
-  type Tab = "chat" | "capabilities" | "records";
-  const [tab, setTab] = useState<Tab>(focusId ? "records" : "chat");
+  // The page opens on the conversation with the engineer (PlatformHome); all records and the
+  // capabilities' management are a click away, and a job opened from a task shows its record.
+  type View = "home" | "capabilities" | "records";
+  const [tab, setTab] = useState<View>(focusId ? "records" : "home");
   useEffect(() => { if (focusId) setTab("records"); }, [focusId]);
-  const pick = (next: Tab) => setTab(next);
+  const pick = (next: View) => setTab(next);
   const open = (id: string) => { setSelectedId(id); pick("records"); };
   const row = (job: EngineerJob) => <button type="button" key={job.id} aria-pressed={selected?.id === job.id} onClick={() => setSelectedId(job.id)}>
-    <span className="engineer-list-title">{plainTitle(job)}</span>
+    <span className="engineer-list-title">{headlineOf(job)}</span>
     <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
   </button>;
+  if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun}
+    onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} />;
   return <div className="engineer-page">
-    <header className="engineer-head">
-      <h2>平台</h2>
-      <p>平台能做什么，以及它的平台工程师：修复平台自身的问题，或给它加能力。改动在隔离的副本里完成，测试通过、你确认后才生效，只在本地提交 git。</p>
-    </header>
+    <button type="button" className="platform-back" onClick={() => pick("home")}>← 平台</button>
+    <header className="engineer-head"><h2>{tab === "records" ? "全部记录" : "能力"}</h2></header>
     {error && <p className="error" role="alert">{error}</p>}
-    {!!waiting.length && <section className="engineer-attention" aria-label="等你处理">
-      <h3>等你处理</h3>
-      {waiting.map(job => <button type="button" key={job.id} onClick={() => open(job.id)}>
-        <StatusChip status={job.status} /><span>{plainTitle(job)}</span><small>{when(job.created_at)}</small>
-      </button>)}
-    </section>}
-    <nav className="engineer-tabs" aria-label="平台">
-      <button type="button" aria-pressed={tab === "chat"} onClick={() => pick("chat")}>对话</button>
-      <button type="button" aria-pressed={tab === "capabilities"} onClick={() => pick("capabilities")}>能力</button>
-      <button type="button" aria-pressed={tab === "records"} onClick={() => pick("records")}>工作记录{!!jobs.length && <small>{jobs.length}</small>}</button>
-    </nav>
-    {tab === "chat" ? <EngineerChat apiBase={apiBase} runs={runs} tick="" onOpenPage={open} />
-      : tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
+    {tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
       <nav className="engineer-list" aria-label="平台工程师的工作">
         {!jobs.length && <p className="empty">还没有记录。</p>}
         {!!(waiting.length + active.length) && <><h4>进行中</h4>{[...waiting, ...active].map(row)}</>}
@@ -126,7 +116,7 @@ export function EngineerPage({ apiBase, runs, focusId, onOpenRun }: {
         {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
       {selected ? <JobDetail job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} />
-        : <section className="engineer-job empty big">提出第一个需求后，这里会显示平台工程师的方案、改动和结果。</section>}
+        : <section className="engineer-job empty big">还没有记录。</section>}
     </div>}
   </div>;
 }
