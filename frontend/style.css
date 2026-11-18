@@ -1542,3 +1542,7 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .sent-files .attachment-chip{background:var(--panel)}
 .platform-me .sent-files .attachment-tray{justify-content:flex-end}
 .engineer-join>.attachment-tray{padding:0 0 8px}
+/* The paperclip keeps its own size whatever box's button rules it sits under. */
+button.clip-button{flex:none!important;width:32px!important;min-width:32px;height:32px!important;padding:0!important;border:0!important;border-radius:999px!important;background:transparent!important;color:var(--muted)!important;display:inline-grid!important;place-items:center}
+button.clip-button:hover{background:var(--panel-2)!important;color:var(--text)!important}
+button.clip-button svg{width:17px;height:17px;flex:none}
