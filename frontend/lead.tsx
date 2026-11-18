@@ -91,6 +91,19 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
       kind: "engineer" as const, at: message.created_at, job, message, first: index === 0, last: index === all.length - 1 }))),
   ].sort((a, b) => a.at.localeCompare(b.at));
   const engineerWaiting = jobs.some(job => ENGINEER_WAITING.has(job.status));
+  const end = useRef<HTMLDivElement>(null), shown = useRef({ run: "", count: -1 }), following = useRef(true);
+  const count = entries.length + (run.lead_thinking ? 1 : 0);
+  // Opening the conversation shows its newest message; new ones keep it there while you have not scrolled up to read.
+  useEffect(() => {
+    const track = () => { following.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160; };
+    window.addEventListener("scroll", track, { passive: true });
+    return () => window.removeEventListener("scroll", track);
+  }, []);
+  useEffect(() => {
+    const opened = shown.current.run !== run.id;
+    if (opened || (count > shown.current.count && following.current)) end.current?.scrollIntoView?.({ block: "end" });
+    shown.current = { run: run.id, count };
+  }, [run.id, count]);
   const send = (text: string) => MENTION.test(text) ? tellEngineer(text, run.id, jobs, act) : onAsk(text);
   const answering = (run.lead_messages ?? []).some(item => item.status === "pending");
   const repairIds = leadRepairIds(run.diagnoses);
@@ -126,6 +139,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
             : <ChatMessage key={entry.item.id} item={entry.item} />)}
       {thinking && <ThinkingMessage thinking={thinking} step={thinking.node_id ? title(thinking.node_id) : undefined} />}
       {!waiting && <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} />}
+      <div ref={end} className="dx-end" aria-hidden="true" />
     </div>
   </section>;
 }

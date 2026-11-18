@@ -265,7 +265,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
   const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id));
   const hasChat=!!run&&(hasLead(run)||diagnoses.length>0);
   const waiting=run&&hasChat?waitingForYou(run):null;
-  const [tab,setTab]=useState<Tab>(defaultTab(run?.status??"",!!waiting)),picked=useRef(false),[now,setNow]=useState(()=>Date.now());
+  const [tab,setTab]=useState<Tab>(defaultTab(run?.status??"",!!waiting)),picked=useRef(false),tabsTop=useRef<HTMLDivElement>(null),[now,setNow]=useState(()=>Date.now());
   useEffect(()=>{setBudget(run?.budget_usd??2);setError("");picked.current=false;setTab(defaultTab(run?.status??"",!!waiting))},[run?.id]);
   // Follow the task's phase (e.g. jump to the result when it finishes) until the user picks a tab.
   // The conversation opens when it starts waiting for you, and is never closed under you.
@@ -280,7 +280,8 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
   const spentRatio=run.budget_usd>0?Math.min(1,run.actual_cost_usd/run.budget_usd):0;
   const overNote=estimateNote(run.status,run.actual_cost_usd,run.plan.estimate);
   const elapsed=elapsedOf(run,now);
-  function pick(next:Tab){picked.current=true;setTab(next)}
+  // The tabs stay at the top of the window; switching while scrolled down starts the new tab from its beginning.
+  function pick(next:Tab){picked.current=true;setTab(next);const top=tabsTop.current;if(top&&top.getBoundingClientRect().top<0)top.scrollIntoView?.({block:"start"})}
   const canPause=run.status==="running"||run.status==="queued"||!!run.maintenance_id;
   const diagnosing=(run.diagnoses??[]).some(item=>item.status==="running");
   const canDiagnose=nodes.some(node=>(node.attempts?.length??0)>0)||run.status==="failed"||run.status==="paused";
@@ -325,7 +326,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
     {error&&<div className="error" role="alert">{error}</div>}
     {run.error&&run.status!=="succeeded"&&<div className="error">{run.error}</div>}
     {waiting&&tab!=="chat"&&<div className="chat-alert" role="status"><span>{waiting}</span><button type="button" className="primary" onClick={()=>pick("chat")}>去回复</button></div>}
-    <nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],["team","员工"],["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
+    <div ref={tabsTop} className="task-tabs-anchor" aria-hidden="true"/><nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],["team","员工"],["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
     {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={(text=>onAsk(run,text)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}
     {/* Diagnoses that run when no lead decides, or that the lead sends to repair something. */}
     {tab==="chat"&&<DiagnosisPanel run={{...run,diagnoses}} models={models} onReply={(id,body)=>onReply(run,id,body)}/>}

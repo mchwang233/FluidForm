@@ -978,3 +978,7 @@ input.choice-own:focus{outline:0;border-color:var(--accent)}
 /* The lead's message box stays at the bottom of the window, however long the conversation is. */
 .lead-panel{overflow:clip}
 .lead-panel .dx-composer.compact{position:sticky;bottom:0;z-index:3;margin:6px 0 -18px;padding:10px 64px 16px 0;background:linear-gradient(to bottom,transparent,var(--panel) 12px)}
+
+/* The task's tabs stay at the top of the window while its content scrolls under them. */
+.task-tabs{position:sticky;top:0;z-index:5;background:var(--panel)}
+.task-tabs-anchor{height:0}

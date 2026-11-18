@@ -1912,3 +1912,20 @@ test("a task that cannot be planned says why, whatever form the reason comes in"
     "budget_usd：Input should be greater than 0");
   assert.doesNotMatch(document.querySelector(".form-error").textContent, /object Object/);
 });
+
+test("opening the conversation shows its newest message, and new ones follow while you are at the bottom", async t => {
+  const run = mission("scroll-task", "paused");
+  run.plan.nodes = [{ id: "a", title: "跑仿真", dependencies: [], status: "pending", estimated_cost_usd: 0, attempts: [] }];
+  run.supervisor = { model_id: "cli:claude", calls: 1 };
+  run.lead_messages = [{ id: "m1", role: "user", text: "第一条", status: "done", created_at: "2026-10-20T06:16:00Z" }];
+  const { state, document, click, act, window } = await setup(t, [run], [], { openComposer: false });
+  const scrolled = [];
+  window.HTMLElement.prototype.scrollIntoView = function (options) { scrolled.push([this.className, options?.block]); };
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
+  assert.deepEqual(scrolled.at(-1), ["dx-end", "end"]);
+  scrolled.length = 0;
+  state.records[0] = { ...state.records[0], updated_at: "2026-10-20T06:17:00Z", lead_messages: [...run.lead_messages,
+    { id: "m2", role: "lead", text: "第二条", status: "done", created_at: "2026-10-20T06:17:00Z" }] };
+  await act(async () => state.poll());
+  assert.deepEqual(scrolled, [["dx-end", "end"]]);
+});
