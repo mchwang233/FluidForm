@@ -14,11 +14,11 @@ import { LeadPanel, hasLead, leadRepairIds, type AskLead, type Decision, type Le
 import { ProjectField, rememberProject } from "./project-picker";
 import { EngineerPage } from "./engineer";
 import { EngineerBubble } from "./engineer-bubble";
-import { canCancelMission, canDeleteMission, CancelMissionDialog, DeleteMissionButton, DeleteMissionDialog, formatUsd, MissionHistory, needsAttention, statusLabel, detailText } from "./mission-history";
+import { canCancelMission, canDeleteMission, CancelMissionDialog, DeleteMissionButton, DeleteMissionDialog, formatUsd, estimateNote, MissionHistory, needsAttention, statusLabel, detailText } from "./mission-history";
 import "./style.css";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-type Run = {id:string;status:string;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate:{low_usd:number;high_usd:number}}};
+type Run = {id:string;status:string;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate:{low_usd:number;high_usd:number;calibrated_usd?:number|null}}};
 type ReplyToDiagnosis = (run:Run, diagnosisId:string, body:{text:string;choice?:string})=>Promise<string|null>;
 type Provider = {id:string;name:string;configured:boolean;keyring_locked?:boolean};
 // The task list polls often; the model catalog is large and changes rarely.
@@ -275,6 +275,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
   const nodes=run.plan.nodes,done=nodes.filter(node=>node.status==="succeeded").length;
   const stopped=nodes.filter(node=>node.status==="failed"||node.status==="cancelled"||node.status==="running");
   const spentRatio=run.budget_usd>0?Math.min(1,run.actual_cost_usd/run.budget_usd):0;
+  const overNote=estimateNote(run.status,run.actual_cost_usd,run.plan.estimate);
   const elapsed=elapsedOf(run,now);
   function pick(next:Tab){picked.current=true;setTab(next)}
   const canPause=run.status==="running"||run.status==="queued"||!!run.maintenance_id;
@@ -303,7 +304,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
       <div><small>进度</small><b>{done} / {nodes.length}</b><span className="spend-bar" aria-hidden="true"><i style={{width:`${nodes.length?done/nodes.length*100:0}%`}}/></span></div>
       <div><small>用时</small><b>{elapsed??"—"}</b></div>
       <div><small>花费 / 预算</small><b>{formatUsd(run.actual_cost_usd)} <span>/ {formatUsd(run.budget_usd)}</span></b><span className="spend-bar" aria-hidden="true"><i style={{width:`${spentRatio*100}%`}}/></span></div>
-      <div><small>预计花费</small><b>{formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</b></div>
+      <div><small>预计花费</small><b>{formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</b>{overNote&&<em className="over-estimate">{overNote}</em>}</div>
     </div>
     {!!run.plan.choices?.length&&run.status!=="draft"&&<PlanChoices choices={run.plan.choices} editable={run.status==="awaiting_confirmation"} onReplan={picks=>onChoose(run,picks)}/>}
     {needsConfirm&&<div className="action-bar">
@@ -320,7 +321,7 @@ function MissionDetail({run,models,deletingId,cancellingId,onConfirm,onChoose,on
       <button className="primary" disabled={busy||diagnosing||deletingId!==null||!(budget>0)} onClick={confirm}>{busy?"提交中…":run.status==="failed"?"从失败处继续":run.status==="incomplete"?"重做未完成的步骤":"继续执行"}</button>
     </div>}
     {error&&<div className="error" role="alert">{error}</div>}
-    {run.error&&<div className="error">{run.error}</div>}
+    {run.error&&run.status!=="succeeded"&&<div className="error">{run.error}</div>}
     {waiting&&tab!=="chat"&&<div className="chat-alert" role="status"><span>{waiting}</span><button type="button" className="primary" onClick={()=>pick("chat")}>去回复</button></div>}
     <nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],["team","员工"],["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
     {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={(text=>onAsk(run,text)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}

@@ -963,6 +963,39 @@ test("a failed task continues from the failed step with the budget entered there
   assert.equal(document.querySelector(".resume-bar"), null);
 });
 
+test("a finished task does not show the message of a pause it already got past", async t => {
+  const run = mission("done-after-pause", "succeeded");
+  run.error = "步骤「Verify」已决策 5 次仍未解决，任务已暂停。";
+  const { document } = await setup(t, [run]);
+  assert.equal(document.querySelector(".detail").textContent.includes("任务已暂停"), false);
+});
+
+test("the estimate card says when the real cost has gone far past it", async t => {
+  const over = mission("over-estimate", "succeeded");
+  over.actual_cost_usd = 113.36;
+  over.plan.estimate = { low_usd: 1.45, high_usd: 1.77 };
+  const near = mission("near-estimate", "succeeded");
+  near.actual_cost_usd = 1.9;
+  near.plan.estimate = { low_usd: 1.45, high_usd: 1.77 };
+  const { document, click } = await setup(t, [over, near]);
+  const card = () => [...document.querySelectorAll(".task-metrics div")].find(d => d.textContent.startsWith("预计花费"));
+  assert.match(card().querySelector(".over-estimate").textContent, /预计上限的 64 倍/);
+  await click([...document.querySelectorAll(".run")].find(r => r.textContent.includes("near-estimate")));
+  assert.equal(card().querySelector(".over-estimate"), null);
+});
+
+test("before a task finishes, the estimate card adds what past tasks suggest it will cost", async t => {
+  const waiting = mission("awaiting", "awaiting_confirmation");
+  waiting.plan.estimate = { low_usd: 1.45, high_usd: 1.77, calibrated_usd: 52.3 };
+  const close = mission("close", "awaiting_confirmation");
+  close.plan.estimate = { low_usd: 1.45, high_usd: 1.77, calibrated_usd: 2.0 };
+  const { document, click } = await setup(t, [waiting, close]);
+  const card = () => [...document.querySelectorAll(".task-metrics div")].find(d => d.textContent.startsWith("预计花费"));
+  assert.match(card().querySelector(".over-estimate").textContent, /按以往任务，可能约 \$52\.30/);
+  await click([...document.querySelectorAll(".run")].find(r => r.textContent.includes("close")));
+  assert.equal(card().querySelector(".over-estimate"), null);
+});
+
 test("retrospective settings persist and manual generation shows its progress", async t => {
   const { state, document, button, click } = await setup(t);
   await click(button("复盘与改进"));

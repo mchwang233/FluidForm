@@ -79,6 +79,27 @@ export function formatUsd(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
+/** A warning once the real cost is at least twice the estimate's upper end (and 10 cents past it). */
+export function overEstimate(actual: number, high: number): string | null {
+  if (actual - high < 0.1) return null;
+  if (high <= 0) return "实际花费超出预计";
+  const ratio = actual / high;
+  if (ratio < 2) return null;
+  return `实际已是预计上限的 ${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)} 倍`;
+}
+
+const FINISHED = new Set(["succeeded", "failed", "cancelled", "incomplete"]);
+
+/** The estimate card's note: past the end, how far the real cost overran; before it, what past
+ * tasks suggest (the backend's calibrated estimate) when that is well above the plan's own. */
+export function estimateNote(status: string, actual: number, estimate: { high_usd: number; calibrated_usd?: number | null }): string | null {
+  const over = overEstimate(actual, estimate.high_usd);
+  if (over || FINISHED.has(status)) return over;
+  const calibrated = estimate.calibrated_usd;
+  return calibrated != null && calibrated >= 1.5 * estimate.high_usd && calibrated - estimate.high_usd >= 0.1
+    ? `按以往任务，可能约 ${formatUsd(calibrated)}` : null;
+}
+
 export function canDeleteMission(status: string): boolean {
   return ["succeeded", "failed", "cancelled", "incomplete"].includes(status);
 }

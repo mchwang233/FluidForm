@@ -18,7 +18,7 @@ from super_partner.models import (
 )
 from super_partner.providers import ProviderRegistry, ProviderResult
 from super_partner.quota import QuotaTracker
-from super_partner.routing import pick_diagnoser
+from super_partner.routing import estimate, pick_diagnoser
 
 ORIGIN = {"origin": "http://localhost:5173"}
 REPORT = "## 问题定位\n第 1 步失败\n## 根本原因\n缺少 node\n## 建议操作\n换模型\nNEXT_STEP: 先确认 node 可用再运行检查"
@@ -399,6 +399,22 @@ async def test_continuing_a_task_paused_by_a_diagnosis_reruns_the_failed_step_wi
     assert stored.plan.nodes[0].feedback == "node missing\n诊断建议：先安装 node"
 
 
+async def test_continuing_after_the_decision_limit_clears_the_pause_message(task_api, monkeypatch):
+    # The decision limit leaves its step pending, not failed; its message must not outlive the pause.
+    api, client = task_api
+    monkeypatch.setattr(api, "models", MODELS)
+    monkeypatch.setattr(api.providers, "configured_models", lambda ids: set(ids))
+    monkeypatch.setattr(api.executor, "start", lambda run_id: None)
+    run = running_run(RunStatus.PAUSED)
+    run.plan.nodes[0].status = NodeStatus.PENDING
+    run.error = "步骤「A」已决策 5 次仍未解决，任务已暂停。看过情况后点“按此预算继续”，负责人会接着处理。"
+    api.db.save_run(run)
+
+    response = await client.post("/api/tasks/r1/confirm", json={"budget_usd": 1}, headers=ORIGIN)
+    assert response.status_code == 200 and response.json()["error"] is None
+    assert api.db.get_run("r1").error is None
+
+
 def test_the_repair_call_budget_outlasts_a_long_regression():
     # The URG probe of task 72e1d53b exited normally after 2143.923 seconds; a 30-minute call
     # limit could not cover that long regression and cut the platform repair short.
@@ -420,3 +436,20 @@ def test_a_diagnosis_is_told_where_the_full_trace_is():
                           trace="/data/traces/r/n-1.jsonl")
     assert "/data/traces/r/n-1.jsonl" in diagnosis._tool_summary(attempt, last=True)
     assert "/data/traces" not in diagnosis._tool_summary(attempt.model_copy(update={"trace": None}), last=True)
+
+
+async def test_a_task_read_through_the_api_carries_its_estimate_calibrated_by_history(task_api):
+    api, client = task_api
+    api.db.save_retrospective("old", {"run_id": "old", "started_at": "2026-01-01", "actual_usd": 3.0, "steps": [
+        {"model_id": "cli:claude", "estimated_usd": 0.1, "actual_usd": 1.0}] * 3})
+    run = running_run(RunStatus.AWAITING_CONFIRMATION)
+    for node in run.plan.nodes:
+        node.status, node.estimated_cost_usd = NodeStatus.PENDING, 0.2
+    run.plan.estimate = estimate(run.plan.nodes, 1)
+    api.db.save_run(run)
+
+    [listed] = (await client.get("/api/tasks")).json()
+    single = (await client.get("/api/tasks/r1")).json()
+    assert listed["plan"]["estimate"]["calibrated_usd"] == single["plan"]["estimate"]["calibrated_usd"] == pytest.approx(4.0)
+    # Only shown, never kept: the stored estimate stays as planned.
+    assert api.db.get_run("r1").plan.estimate.calibrated_usd is None

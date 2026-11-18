@@ -366,6 +366,8 @@ class CostEstimate(BaseModel):
     low_usd: float
     high_usd: float
     hard_limit_usd: float
+    # Shown only, never stored: the estimate scaled by how past tasks overran (retrospect.calibration).
+    calibrated_usd: Optional[float] = None
 
 
 class PlanPart(BaseModel):

@@ -685,9 +685,20 @@ MAX_BACKGROUND_RESULT = 3000
 MAX_EARLIER_BACKGROUND = 1500
 
 
+def _calibrated(runs: list[ExecutionRun]) -> list[ExecutionRun]:
+    """Runs as read by the console, each estimate also given as past tasks suggest it will go.
+    Only for display: these copies are never saved, and budget checks keep the planned estimate."""
+    reviews = db.retrospectives()
+    for run in runs:
+        if run.plan.estimate:
+            run.plan.estimate.calibrated_usd = retrospect.calibrated_cost(
+                run, retrospect.calibration(reviews, exclude=run.id))
+    return runs
+
+
 @app.get("/api/tasks", response_model=list[ExecutionRun])
 def list_tasks():
-    return db.list_runs()
+    return _calibrated(db.list_runs())
 
 
 @app.get("/api/retrospectives/recurring")
@@ -789,12 +800,16 @@ def disable_improvement(item_id: str):
     return item
 
 
-@app.get("/api/tasks/{run_id}", response_model=ExecutionRun)
 def get_task(run_id: str):
     run = db.get_run(run_id)
     if not run:
         raise HTTPException(404, "Task not found")
     return run
+
+
+@app.get("/api/tasks/{run_id}", response_model=ExecutionRun)
+def read_task(run_id: str):
+    return _calibrated([get_task(run_id)])[0]
 
 
 @app.delete("/api/tasks/{run_id}", status_code=204)
@@ -884,7 +899,9 @@ async def confirm_task(run_id: str, body: ConfirmTask):
         if node.id in reopened:
             reopen_node(run, node)
     if reopened:
-        run.rework_rounds, run.error = 0, None
+        run.rework_rounds = 0
+    # Whatever paused the task, the user has now seen it and continued: the message is done.
+    run.error = None
     # The user said go on: the lead gets a fresh allowance of decisions.
     run.decisions_since = datetime.now(timezone.utc)
     # A task paused by the user may still be finishing its running steps; that loop goes on.

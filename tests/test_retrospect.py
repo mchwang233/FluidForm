@@ -23,6 +23,7 @@ from super_partner.models import (
     ToolCall,
 )
 from super_partner.providers import ProviderResult
+from super_partner.routing import estimate
 
 
 def finished(run_id: str, nodes, days_ago: int = 0, **fields) -> ExecutionRun:
@@ -257,3 +258,35 @@ async def test_the_api_lists_problems_by_what_they_are_about(task_api):
     api.db.save_retrospective("a", body)
     [group] = (await client.get("/api/retrospectives/topics")).json()
     assert group["topic"] == "新思 EDA 环境未加载" and group["runs"] == ["a"] and "estimate_low:deepseek:flash" in group["members"]
+
+
+def history(run_id, model_id, estimated, steps_actual, total):
+    """A look back with one step per entry of ``steps_actual``; ``total`` includes the lead's work."""
+    return {"run_id": run_id, "actual_usd": total, "steps": [
+        {"model_id": model_id, "estimated_usd": estimated, "actual_usd": spent} for spent in steps_actual]}
+
+
+def test_the_calibration_learns_each_models_overrun_and_the_work_outside_steps():
+    reviews = [history("a", "cli:codex", 0.1, [1.0, 2.0, 3.0], 12.0),
+               history("b", "x:api", 0.1, [0.2, 0.2], 0.4),
+               history("c", "x:api", 0.1, [0.0], 0.0)]  # never ran: says nothing
+    cal = retrospect.calibration(reviews)
+    assert cal["models"] == {"cli:codex": pytest.approx(20.0)}  # x:api has only two steps that ran
+    assert cal["overall"] == pytest.approx(6.4 / 0.5)
+    assert cal["overhead"] == pytest.approx(12.4 / 6.4)
+
+    run = finished("new", [TaskNode(id="n1", title="t", instructions="i", capability="coding",
+                                    model_id="cli:codex", estimated_cost_usd=0.5),
+                           TaskNode(id="n2", title="t", instructions="i", capability="coding",
+                                    model_id="x:api", estimated_cost_usd=0.1)], status=RunStatus.AWAITING_CONFIRMATION)
+    run.plan.estimate = estimate(run.plan.nodes, 2, 0.2)
+    expected = (0.5 * 20 + 0.1 * 12.8 + 0.2 * 12.8) * (12.4 / 6.4)
+    assert retrospect.calibrated_cost(run, cal) == pytest.approx(expected, rel=1e-4)
+
+
+def test_without_enough_history_there_is_no_calibration_and_a_task_never_calibrates_itself():
+    reviews = [history("a", "cli:codex", 0.1, [1.0, 2.0, 3.0], 6.0)]
+    assert retrospect.calibration(reviews[:0])["overall"] is None
+    assert retrospect.calibration(reviews, exclude="a")["overall"] is None
+    run = finished("a", [], status=RunStatus.SUCCEEDED)
+    assert retrospect.calibrated_cost(run, retrospect.calibration([])) is None

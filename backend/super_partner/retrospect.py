@@ -359,3 +359,46 @@ def topics(db, min_runs: int = 1) -> list[dict]:
             group["last_seen"] = max(group["last_seen"], body["started_at"])
     found = [group for group in groups.values() if len(group["runs"]) >= min_runs]
     return sorted(found, key=lambda group: (-len(group["runs"]), group["topic"]))
+
+
+# A model's overrun counts once this many of its steps have run; fewer say too little.
+CALIBRATION_STEPS = 3
+
+
+def calibration(reviews: list[dict], exclude: Optional[str] = None) -> dict:
+    """How far past tasks went beyond their estimates: per model, the real cost of its steps over
+    their estimate (``models``, with ``overall`` for models seen too rarely), and the whole task's
+    cost over its steps' (``overhead``: the lead, diagnoses, planning). Steps that never ran say
+    nothing and are left out; so is the task ``exclude``, which must not explain itself."""
+    estimated, spent, counted = Counter(), Counter(), Counter()
+    in_steps = in_total = 0.0
+    for review in reviews:
+        if review.get("run_id") == exclude:
+            continue
+        ran = [step for step in review.get("steps", []) if step.get("estimated_usd") and step.get("actual_usd")]
+        for step in ran:
+            estimated[step["model_id"]] += step["estimated_usd"]
+            spent[step["model_id"]] += step["actual_usd"]
+            counted[step["model_id"]] += 1
+        steps_cost = sum(step.get("actual_usd") or 0 for step in review.get("steps", []))
+        if steps_cost > 0:
+            in_steps += steps_cost
+            in_total += max(review.get("actual_usd") or 0, steps_cost)
+    enough = sum(counted.values()) >= CALIBRATION_STEPS
+    return {
+        "models": {model: spent[model] / estimated[model] for model in counted if counted[model] >= CALIBRATION_STEPS},
+        "overall": sum(spent.values()) / sum(estimated.values()) if enough else None,
+        "overhead": in_total / in_steps if in_steps else 1.0,
+    }
+
+
+def calibrated_cost(run: ExecutionRun, cal: dict) -> Optional[float]:
+    """The run's estimate as past tasks suggest it will really go, or None without enough history."""
+    overall, estimate = cal["overall"], run.plan.estimate
+    if overall is None or estimate is None:
+        return None
+    steps = sum(node.estimated_cost_usd for node in run.plan.nodes)
+    scaled = sum(node.estimated_cost_usd * cal["models"].get(node.model_id, overall) for node in run.plan.nodes)
+    # Planning and parts not yet split have no model of their own: the overall overrun.
+    scaled += max(0.0, estimate.base_usd - steps) * overall
+    return round(scaled * cal["overhead"], 6)
