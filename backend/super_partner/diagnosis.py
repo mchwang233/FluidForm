@@ -129,10 +129,10 @@ def _history(run: ExecutionRun, events: list[str]) -> list[str]:
 
 def platform_instructions(context: str) -> str:
     return (
-        "\n# Super Partner itself\n"
-        "Distinguish a task mistake, a shared environment problem, and a defect in Super Partner "
+        "\n# FluidForm itself\n"
+        "Distinguish a task mistake, a shared environment problem, and a defect in FluidForm "
         "itself (scheduler, model fallback, budgets, tools, persistence, API, or web UI). "
-        "The user authorizes fixing Super Partner defects, including common causes affecting "
+        "The user authorizes fixing FluidForm defects, including common causes affecting "
         "other projects. Do not hand an actionable platform bug back to the user. "
         "Read the application source and correlate it with the failing operation and evidence. "
         "If the application needs a code fix, describe the specific defect and a regression check, "

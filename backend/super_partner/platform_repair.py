@@ -131,21 +131,21 @@ class PlatformRepairs:
         if not self.enabled:
             return "Platform self-repair is disabled in the application configuration."
         if not self.root:
-            return "No editable Super Partner source checkout was found in this installation."
-        return (f"Super Partner source checkout (read-only during investigation): {self.root}\n"
+            return "No editable FluidForm source checkout was found in this installation."
+        return (f"FluidForm source checkout (read-only during investigation): {self.root}\n"
                 "Its code is under backend/super_partner and frontend; regression tests are "
                 "under tests and frontend/tests. The repair controller will provide an isolated "
                 "copy, run independent checks, preserve local data, and activate validated fixes "
                 "for all projects. Never modify live source, credentials, task records or Git history.\n"
-                f"Only if Super Partner itself is at fault: find its code with {self.root}/{REPAIR_GUIDES[1]} "
-                f"and diagnose as {self.root}/{REPAIR_GUIDES[0]} says. Both are about Super Partner's "
+                f"Only if FluidForm itself is at fault: find its code with {self.root}/{REPAIR_GUIDES[1]} "
+                f"and diagnose as {self.root}/{REPAIR_GUIDES[0]} says. Both are about FluidForm's "
                 "own code, not the task: never tell the task's steps to read or follow them.")
 
     async def prepare(self, run_id: Optional[str], diagnosis_id: Optional[str], *,
                       allow_network: bool = False) -> dict:
         """A fresh copy of the source to edit. ``run_id``: the task it is for, if any."""
         if not self.enabled or not self.root:
-            raise RepairError("平台自修复未启用，或当前安装没有可编辑的 Super Partner 源码。")
+            raise RepairError("平台自修复未启用，或当前安装没有可编辑的 FluidForm 源码。")
         unit = unit_name(self.root)
         try:
             service = await asyncio.to_thread(service_properties, unit)

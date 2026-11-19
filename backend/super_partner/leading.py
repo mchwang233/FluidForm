@@ -316,7 +316,7 @@ class Leading:
                     made.engineer_job_id = job.id
                     self.emit(run_id, "run.engineer_requested", node_id=node_id, job_id=job.id)
                 else:
-                    self._mark_unable(run, node, f"这一步需要 Super Partner 新增能力，但平台工程师当前不可用：{instructions or reason}",
+                    self._mark_unable(run, node, f"这一步需要 FluidForm 新增能力，但平台工程师当前不可用：{instructions or reason}",
                                       user_action="启用平台自修复后，可以在负责人对话里点“拉平台工程师进来”提出这个需求。")
             elif action == "ask_user":
                 question = Diagnosis(
@@ -341,7 +341,7 @@ class Leading:
                 # A repair session with access to this machine (or a platform source repair) does
                 # the work; its outcome comes back to the lead (_after_repair) before the step runs.
                 node.status = NodeStatus.RUNNING
-                what = ("Super Partner itself is at fault; make a platform repair (STATUS: PLATFORM_REPAIR)"
+                what = ("FluidForm itself is at fault; make a platform repair (STATUS: PLATFORM_REPAIR)"
                         if action == "repair_platform" else "the environment needs a repair")
                 repair = (verdict, f"{what}: {instructions or reason}")
             self._save(run)

@@ -101,7 +101,7 @@ def resolve_project_dir(raw: str) -> Path:
     """Validate a user-supplied project directory and return its canonical path."""
     path = _existing_dir_in_roots(raw)
     if _is_within(path, settings.data_dir.resolve()):
-        raise ProjectDirError("Project directory cannot be inside the Super Partner data directory")
+        raise ProjectDirError("Project directory cannot be inside the FluidForm data directory")
     return path
 
 

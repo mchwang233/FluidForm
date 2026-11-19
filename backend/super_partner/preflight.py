@@ -252,8 +252,8 @@ def repair_prompt(run: ExecutionRun, failed: list[PreflightCheck], workspace: Pa
          f"symlinks in {tools}/bin (first on PATH), Python packages with `pip install --target {tools}/python`, "
          f"environment variables and local TCP ports a sandboxed command must reach in {tools}/sandbox.json "
          '(`{"env": {"NAME": "value"}, "host_ports": [26585]}`; keep what is there). Your commands run on the '
-         "host as the user, with network access, without root. A check of Super Partner's own sandbox (its "
-         "output or exit code) that fails is a defect of Super Partner itself: say so and do not try to fix it."),
+         "host as the user, with network access, without root. A check of FluidForm's own sandbox (its "
+         "output or exit code) that fails is a defect of FluidForm itself: say so and do not try to fix it."),
         "Then run each failed check again the way a step will, and report the result.",
         "",
         ("Answer in Chinese Markdown: what was missing, what you changed (paths), the checks you ran and "

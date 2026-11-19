@@ -159,10 +159,10 @@ def test_every_model_is_told_where_it_runs():
     for model_id in ("cli:codex", "cli:claude"):
         node = TaskNode(id="n", title="t", instructions="i", capability="coding", model_id=model_id)
         prompt, _ = quality.node_prompt(node, run, 4000)
-        assert "Super Partner runs you in your own sandbox" in prompt and "allows the internet" in prompt
+        assert "FluidForm runs you in your own sandbox" in prompt and "allows the internet" in prompt
         assert "find . -name '*.o' -delete" in prompt  # the same note for every CLI (cli_channels.codex_rules)
     api_step = TaskNode(id="n", title="t", instructions="i", capability="coding", model_id="x:flash")
-    assert "Super Partner runs you" not in quality.node_prompt(api_step, run, 4000)[0]
+    assert "FluidForm runs you" not in quality.node_prompt(api_step, run, 4000)[0]
     # The lead splitting a part hears whether the task allows the internet now, not at planning.
     plan = TaskPlan(summary="s", nodes=[], request="写 FIFO\n\n" + outline.INTERNET_NOTE)
     part = PlanPart(id="p", title="RTL")

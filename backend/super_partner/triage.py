@@ -23,7 +23,7 @@ TIMEOUT_SECONDS = 20
 MAX_REQUEST_CHARS = 4000
 
 PROMPT = (
-    "Classify a request a user typed into Super Partner, a tool that either chats with a model or "
+    "Classify a request a user typed into FluidForm, a tool that either chats with a model or "
     "plans and runs a task (models change files, build, test, write documents).\n"
     "task: it asks for work to be done or something to be produced: write, change, fix, build, "
     "implement, generate, refactor, migrate, deploy, test, or research and write up a deliverable.\n"

@@ -37,7 +37,7 @@ MAX_ENGINEERS = 3
 STATUS = re.compile(r"^\s*STATUS:\s*(PLAN|FIXED|NEEDS_INPUT)\b", re.IGNORECASE | re.MULTILINE)
 # A job in one of these states has the engineer at work on it.
 WORKING = {"planning", "editing", "validating"}
-ROLE = ("You are Super Partner's platform engineer: you change Super Partner itself (its backend, web "
+ROLE = ("You are FluidForm's platform engineer: you change FluidForm itself (its backend, web "
         "UI, tools, skills and model channels), never the user's projects. ")
 
 
@@ -96,7 +96,7 @@ def plan_prompt(job: EngineerJob, guide: str) -> str:
     asker = "The lead of a running task asks for it" if job.origin == "lead" else "The user asks for it"
     return (
         "[[super-partner:platform-engineer:plan]]\n" + ROLE
-        + "The working directory is an isolated copy of Super Partner's source. Read it to plan the "
+        + "The working directory is an isolated copy of FluidForm's source. Read it to plan the "
         "change below; do not edit anything yet. Read docs/ARCHITECTURE.md first, then only the code "
         f"you need.\n{asker}:\n{job.request}\n\nConversation so far:\n{_conversation(job)}\n"
         + (f"\nEarlier in this conversation, before this request:\n{job.context}\n" if job.context else "")
@@ -115,12 +115,12 @@ def plan_prompt(job: EngineerJob, guide: str) -> str:
 
 def edit_prompt(job: EngineerJob, guide: str, feedback: str = "") -> str:
     what = (f"Add this component as the approved plan says.\nRequest:\n{job.request}\n\nApproved plan:\n{job.plan}\n"
-            if job.kind == "component" else f"Repair this defect in Super Partner:\n{job.request}\n")
+            if job.kind == "component" else f"Repair this defect in FluidForm:\n{job.request}\n")
     after = (", shows the user the change, and applies it once they approve" if job.kind == "component"
              else ", and applies a passing change")
     return (
         "[[super-partner:platform-engineer:edit]]\n" + ROLE
-        + "The working directory is an isolated copy of Super Partner's source; make the change there "
+        + "The working directory is an isolated copy of FluidForm's source; make the change there "
         "with your file tools. Preserve unrelated existing changes. Add tests that prove the change (for "
         "a repair, a regression test that fails without it); never weaken or delete existing tests. Do "
         "not touch task data, credentials, Git history, the live source, or running services. The "
@@ -202,7 +202,7 @@ class Engineering:
         """A new job: a component is planned first, a repair is made at once. It waits its turn.
         With ``thread_id`` it goes on with that conversation, told what came of it before."""
         if not self.engineer_available():
-            raise EngineerError("平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的 Super Partner 源码。")
+            raise EngineerError("平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的 FluidForm 源码。")
         request = (request or "").strip()
         if not request:
             raise EngineerError("请写明要修复什么，或要添加什么组件。")
@@ -466,7 +466,7 @@ class Engineering:
             raise EngineerError("这份改动还没有通过检查，不能应用。")
         if self.platform.stale(copy):
             job.messages.append(EngineerMessage(role="system", text=(
-                "Super Partner 的源码在这期间有了更新，直接应用会覆盖它。平台工程师会在新的副本上"
+                "FluidForm 的源码在这期间有了更新，直接应用会覆盖它。平台工程师会在新的副本上"
                 "按同样的要求重做，检查通过后" + ("再请你确认。" if job.kind == "component" else "自动生效。"))))
             job.status, job.phase = "queued", "edit"
             self._engineer_save(job)
@@ -494,7 +494,7 @@ class Engineering:
             if settings.engineer_commit and job.files:
                 try:
                     job.commit = commit(Path(record["root"]), job.files,
-                                        f"{job.title or '平台改动'}\n\nMade by Super Partner's platform engineer (job {job.id}).")
+                                        f"{job.title or '平台改动'}\n\nMade by FluidForm's platform engineer (job {job.id}).")
                     note += f"已提交到 git：{job.commit[:8]}（没有推送）。"
                 except (RepairError, OSError, subprocess.SubprocessError) as exc:
                     note += f"没有提交到 git：{exc}"
@@ -583,7 +583,7 @@ class Engineering:
         """A task's platform repair (self_repair._fix_platform), recorded as an engineer job."""
         job = EngineerJob(
             kind="repair", origin="lead" if diagnosis.trigger == "lead_repair" else "diagnosis",
-            request=problem or "任务的诊断发现 Super Partner 自身有缺陷。", status="editing", phase="edit",
+            request=problem or "任务的诊断发现 FluidForm 自身有缺陷。", status="editing", phase="edit",
             run_id=run.id, node_id=node.id if node else None, decision_id=diagnosis.decision_id,
             diagnosis_id=diagnosis.id, repair_id=copy["id"], budget_usd=0.0,
         )

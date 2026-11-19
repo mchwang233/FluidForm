@@ -26,7 +26,7 @@ class SelfRepair:
             return
         run.maintenance_id = self.platform_pending["id"]
         run.status = RunStatus.PAUSED
-        run.error = "Super Partner 的一项改动已通过验证，正在等待在途步骤结束并自动生效，之后继续任务。"
+        run.error = "FluidForm 的一项改动已通过验证，正在等待在途步骤结束并自动生效，之后继续任务。"
         self._save(run)
         self.emit(run.id, "run.platform_waiting", repair_id=run.maintenance_id)
 
@@ -55,7 +55,7 @@ class SelfRepair:
                    for d in replied[-5:]]
         base = (
             "[[super-partner:platform-repair]]\n"
-            "Fix an evidenced defect in Super Partner itself in this isolated source copy. "
+            "Fix an evidenced defect in FluidForm itself in this isolated source copy. "
             "The user authorizes this repair. Preserve unrelated existing changes. Modify "
             "application code and add a regression test reproducing the defect; do not weaken "
             "or delete existing tests. Do not change task data, credentials, Git history, live "
@@ -102,7 +102,7 @@ class SelfRepair:
                     feedback = f"\nThe independent check failed. Fix it and recheck:\n{str(exc)[-6000:]}"
             report = parse_diagnosis(result.text)[0]
             report += "\n\n## 自动验证\n" + "\n".join(f"- {check['name']}: 通过" for check in checks)
-            report += "\n\n## 影响范围\nSuper Partner 公共代码；生效后供所有项目使用。\n修改：" + "、".join(job["files"])
+            report += "\n\n## 影响范围\nFluidForm 公共代码；生效后供所有项目使用。\n修改：" + "、".join(job["files"])
             job.update(report=report, model_id=_model_id)
             record_job.status, record_job.report, record_job.files = "applying", parse_diagnosis(result.text)[0], job["files"]
             record_job.checks, record_job.diff = [check["name"] for check in checks], self.platform.diff(job)

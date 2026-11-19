@@ -224,9 +224,9 @@ def cli_environment(model_id: Optional[str], network: bool) -> str:
     if not model_id or not model_id.startswith("cli:"):
         return ""
     lines = [
-        ("Where you are: Super Partner runs you in your own sandbox. You can write only the working "
+        ("Where you are: FluidForm runs you in your own sandbox. You can write only the working "
          "directory and $TMPDIR (put temporary files there: the shared /tmp may be unavailable); the rest of "
-         "the system is read-only, and your home folder, other tasks' folders and Super Partner's own data "
+         "the system is read-only, and your home folder, other tasks' folders and FluidForm's own data "
          "may not be readable at all: do not look for files there. You are an ordinary user, not root: sudo, "
          "system packages and system files are out of reach. The tools installed on this machine for every "
          "step are on PATH."),

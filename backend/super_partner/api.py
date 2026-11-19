@@ -188,7 +188,7 @@ async def lifespan(_: FastAPI):
         await providers.client.aclose()
 
 
-app = FastAPI(title="Super Partner", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="FluidForm", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=settings.allowed_origins,
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
@@ -213,7 +213,7 @@ async def local_only(request: Request, call_next):
     current_executor = executor
     mutation = request.method not in SAFE_METHODS
     if mutation and current_executor.platform_pending and not request.url.path.endswith(("/cancel", "/pause")):
-        return JSONResponse({"detail": "Super Partner 正在应用已验证的修复，请稍后重试；现有任务会自动继续。"},
+        return JSONResponse({"detail": "FluidForm 正在应用已验证的修复，请稍后重试；现有任务会自动继续。"},
                             status_code=503, headers={"Retry-After": "2"})
     if mutation:
         current_executor.active_requests += 1

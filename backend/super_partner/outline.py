@@ -103,7 +103,7 @@ OUTLINE_PROMPT = (
 )
 
 PART_ROLE = (
-    "You are planning one part of a multi-model task in Super Partner. The task's lead split the "
+    "You are planning one part of a multi-model task in FluidForm. The task's lead split the "
     "request into major parts; other planners split the other parts at the same time, so rely only on "
     "what the outline below says each part provides, and deliver exactly what yours provides. Split "
     "your part level by level, as you are asked, until every piece is a task. You may read files and "

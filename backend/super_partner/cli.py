@@ -10,7 +10,7 @@ import typer
 
 from .config import settings
 
-app = typer.Typer(help="Super Partner multi-model task orchestrator")
+app = typer.Typer(help="FluidForm multi-model task orchestrator")
 
 
 @app.command()

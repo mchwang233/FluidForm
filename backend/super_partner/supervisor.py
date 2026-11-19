@@ -19,7 +19,7 @@ from .models import ExecutionRun, ModelProfile, NodeStatus, SupervisorSession
 from .quota import ModelUnavailable
 
 ROLE = (
-    "You are the lead of a multi-model task in Super Partner. You plan it, and you stay with it "
+    "You are the lead of a multi-model task in FluidForm. You plan it, and you stay with it "
     "until it ends: as its steps run on other models, you will be told what happened and asked "
     "what to do next. Keep the whole task in mind: its goal, the plan and why each step exists, "
     "and what has happened so far. You may read files and run read-only commands to look things "
@@ -27,7 +27,7 @@ ROLE = (
     "asks for.\n\n"
 )
 CHAT_ROLE = (
-    "You are talking with the user in Super Partner. This is a conversation, not a task: nothing is "
+    "You are talking with the user in FluidForm. This is a conversation, not a task: nothing is "
     "planned or run. Answer their questions directly and helpfully, in Chinese unless they write in "
     "another language. You may read files and run read-only commands to look things up; do not edit "
     "anything. If what they want needs real work done (files changed, programs built), say so: they "
@@ -209,12 +209,12 @@ ACTION_RULES = {
     "repair_environment": "- repair_environment: something outside the task blocks it (missing software, sandbox "
                           "or machine limits, configuration). A repair session with access to this machine "
                           "fixes it, then the step runs again.\n",
-    "repair_platform": "- repair_platform: Super Partner itself (its scheduler, tools or sandbox) is at fault; say "
+    "repair_platform": "- repair_platform: FluidForm itself (its scheduler, tools or sandbox) is at fault; say "
                        "what and where. Its platform engineer (平台工程师) makes a source repair, checked and "
                        "applied, then the task continues.\n",
-    "request_component": "- request_component: the task needs a capability Super Partner does not have (a tool for "
+    "request_component": "- request_component: the task needs a capability FluidForm does not have (a tool for "
                          "the steps, a model channel, a kind of step or check) and no repair of a defect would "
-                         "give it. Say in instructions what to add and why. Super Partner's platform engineer "
+                         "give it. Say in instructions what to add and why. FluidForm's platform engineer "
                          "(平台工程师) plans it, the user approves, and it is built, checked and applied; the task waits, "
                          "then you decide again.\n",
     "replan": "- replan: change the plan in \"plan\": add steps, remove steps that have not finished, or rewrite "
@@ -282,7 +282,7 @@ BLOCKED_NOTE = (
     "This step stopped as BLOCKED: something it needs is missing or a target it must meet was not "
     "reached (see why above). Decide what unblocks it: rework the steps it builds on (targets) with "
     "instructions saying exactly what to add or fix, which redoes them and then this step; "
-    "repair_environment or repair_platform when the machine or Super Partner is at fault; retry when "
+    "repair_environment or repair_platform when the machine or FluidForm is at fault; retry when "
     "something has changed; accept when what it delivered is enough for the request; ask_user when "
     "only the user can decide (for example whether a target can be relaxed); unable to stop.")
 
@@ -420,8 +420,8 @@ def chat_message(text: str) -> str:
         "Answer in Chinese, in a few sentences, as yourself: the lead who has followed this task. "
         "No decision JSON is needed here. If they ask for a change (to a step, the plan, or how you "
         "decide), say what you will do; you will act on it at your next decisions.\n"
-        "The platform engineer (平台工程师) changes Super Partner itself: its sandbox, tools, scheduler or "
-        "model channels. If the user asks for it, or you find that Super Partner itself is at fault or lacks "
+        "The platform engineer (平台工程师) changes FluidForm itself: its sandbox, tools, scheduler or "
+        "model channels. If the user asks for it, or you find that FluidForm itself is at fault or lacks "
         "a capability the task needs, bring it into this conversation now, not at a later decision: end your "
         "answer with one line\n"
         'ENGINEER: {"kind": "repair or component", "request": "what to repair or add, why, and the evidence"}\n'
@@ -457,7 +457,7 @@ ENGINEER_STATES = {
     "queued": "queued", "planning": "writing its plan", "plan_ready": "plan written, waiting for the user's approval",
     "needs_input": "waiting for the user's answer", "editing": "making the change in a copy",
     "validating": "checking the change", "ready": "change checked, waiting for the user to apply it",
-    "applying": "being applied (Super Partner restarts)", "applied": "applied", "failed": "failed",
+    "applying": "being applied (FluidForm restarts)", "applied": "applied", "failed": "failed",
     "rejected": "given up by the user", "cancelled": "cancelled",
 }
 
@@ -495,7 +495,7 @@ def repair_message(run: ExecutionRun, node, diagnosis, choices: list[ModelProfil
 
 
 ENGINEER_OUTCOMES = {
-    "applied": "It was built, checked and applied: Super Partner now has it.",
+    "applied": "It was built, checked and applied: FluidForm now has it.",
     "failed": "It could not be built or applied.",
     "rejected": "The user gave it up: it will not be added.",
     "cancelled": "It was cancelled.",
