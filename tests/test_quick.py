@@ -189,3 +189,22 @@ async def test_shapes_are_read_defensively():
     assert (await triage.quick("x", Providers(SOLO), Model(), project=True))[0] is None
     # Without solo, the old question and answer.
     assert (await triage.quick("x", Providers(SOLO), Model()))[0] is None
+
+
+async def test_a_small_program_is_quick_and_the_step_does_only_what_was_asked(task_api, monkeypatch):
+    # Regression: "写一个贪吃蛇的游戏" was judged one model's long work (hard), and the step wrote two
+    # test suites, a headless demo and a README: six minutes instead of one or two.
+    assert "a small game such as snake" in triage.SHAPE_PROMPT.split("- solo:")[0]
+    assert "a small game" in triage.QUICK_PROMPT
+    api, client = task_api
+    monkeypatch.setattr(settings, "quick_tasks", True)
+    monkeypatch.setattr(settings, "solo_tasks", True)
+    judging(api, monkeypatch, '{"shape": "quick", "title": "贪吃蛇", "capability": "coding", "acceptance": "能玩"}')
+    created = await client.post("/api/tasks", json={"prompt": "写一个贪吃蛇的游戏"}, headers=ORIGIN)
+    [node] = created.json()["plan"]["nodes"]
+    assert node["difficulty"] == "easy" and node["instructions"].endswith(api.QUICK_SCOPE)
+    assert "没要求的测试套件、演示脚本、说明文档都不用写" in node["instructions"]
+    # Work one model carries through is held to what was asked too.
+    judging(api, monkeypatch, SOLO)
+    created = await client.post("/api/tasks", json={"prompt": "修一下登录报错"}, headers=ORIGIN)
+    assert created.json()["plan"]["nodes"][0]["instructions"].endswith(api.SOLO_SCOPE)

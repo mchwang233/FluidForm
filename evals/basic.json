@@ -1,16 +1,84 @@
 {
   "cases": [
-    {"name": "换算", "prompt": "把 37 摄氏度换算成华氏度，写出结果和算式。", "budget_usd": 0.5, "timeout_seconds": 300,
-     "expect": {"status": "succeeded", "contains_any": ["98.6"], "max_seconds": 180}},
-    {"name": "短诗", "prompt": "写一首四行的中文短诗，主题是秋天的银杏。", "budget_usd": 0.5, "timeout_seconds": 300,
-     "expect": {"status": "succeeded", "contains_any": ["银杏"], "max_seconds": 180}},
-    {"name": "画头像", "prompt": "画一张海边女孩的方形头像，水彩风格。", "budget_usd": 0.5, "timeout_seconds": 600,
-     "expect": {"status": "succeeded", "max_seconds": 300}},
-    {"name": "查资料", "prompt": "查一下 Python 3.13 正式版的发布日期，并给出信息来源的网址。", "budget_usd": 0.5,
-     "allow_network": true, "timeout_seconds": 600, "expect": {"status": "succeeded", "contains_any": ["2024"], "max_seconds": 300}},
-    {"name": "小程序", "prompt": "写一个 Python 函数判断字符串是不是回文（忽略大小写和空格），附带几个测试，并运行测试确认通过。",
-     "budget_usd": 1.0, "timeout_seconds": 900, "expect": {"status": "succeeded", "max_seconds": 600}},
-    {"name": "小网站", "prompt": "做一个单页的番茄钟网页（开始、暂停、重置，25 分钟倒计时），只用 HTML、CSS 和 JavaScript，放在一个文件里。",
-     "budget_usd": 2.0, "timeout_seconds": 1500, "expect": {"status": "succeeded", "max_seconds": 1200}}
+    {
+      "name": "换算",
+      "prompt": "把 37 摄氏度换算成华氏度，写出结果和算式。",
+      "budget_usd": 0.5,
+      "timeout_seconds": 300,
+      "expect": {
+        "status": "succeeded",
+        "contains_any": [
+          "98.6"
+        ],
+        "max_seconds": 180
+      }
+    },
+    {
+      "name": "短诗",
+      "prompt": "写一首四行的中文短诗，主题是秋天的银杏。",
+      "budget_usd": 0.5,
+      "timeout_seconds": 300,
+      "expect": {
+        "status": "succeeded",
+        "contains_any": [
+          "银杏"
+        ],
+        "max_seconds": 180
+      }
+    },
+    {
+      "name": "画头像",
+      "prompt": "画一张海边女孩的方形头像，水彩风格。",
+      "budget_usd": 0.5,
+      "timeout_seconds": 600,
+      "expect": {
+        "status": "succeeded",
+        "max_seconds": 300
+      }
+    },
+    {
+      "name": "查资料",
+      "prompt": "查一下 Python 3.13 正式版的发布日期，并给出信息来源的网址。",
+      "budget_usd": 0.5,
+      "allow_network": true,
+      "timeout_seconds": 600,
+      "expect": {
+        "status": "succeeded",
+        "contains_any": [
+          "2024"
+        ],
+        "max_seconds": 300
+      }
+    },
+    {
+      "name": "小程序",
+      "prompt": "写一个 Python 函数判断字符串是不是回文（忽略大小写和空格），附带几个测试，并运行测试确认通过。",
+      "budget_usd": 1.0,
+      "timeout_seconds": 900,
+      "expect": {
+        "status": "succeeded",
+        "max_seconds": 600
+      }
+    },
+    {
+      "name": "贪吃蛇",
+      "prompt": "写一个贪吃蛇的游戏",
+      "budget_usd": 1.0,
+      "timeout_seconds": 900,
+      "expect": {
+        "status": "succeeded",
+        "max_seconds": 180
+      }
+    },
+    {
+      "name": "小网站",
+      "prompt": "做一个单页的番茄钟网页（开始、暂停、重置，25 分钟倒计时），只用 HTML、CSS 和 JavaScript，放在一个文件里。",
+      "budget_usd": 2.0,
+      "timeout_seconds": 1500,
+      "expect": {
+        "status": "succeeded",
+        "max_seconds": 1200
+      }
+    }
   ]
 }

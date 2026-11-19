@@ -66,8 +66,9 @@ async def addressed(text: str, context: str, name: str, providers, model: Option
 QUICK_PROMPT = (
     "Is this request work that one capable model can do by itself in one go, in a few minutes, with "
     "a sandbox, the internet and an image tool, without anyone's project files: make one picture, "
-    "write one short document, convert or calculate something, look something up and summarise it? "
-    "Not quick: several deliverables, software to build or change, long research, anything needing "
+    "write one short document, convert or calculate something, look something up and summarise it, or "
+    "write one small program that stands on its own (a small game, a script, one web page)? "
+    "Not quick: several deliverables, larger software to build or change, long research, anything needing "
     "the user's existing files, or anything unclear.\n"
     'Answer with only JSON: {{"quick": true or false, "title": "a short title in the request\'s language", '
     '"capability": "coding | research | chinese | tool_use | structured_output | planning", '
@@ -77,10 +78,11 @@ QUICK_PROMPT = (
 SHAPE_PROMPT = (
     "How should this request be done? It goes to models with a sandbox, the internet, an image tool{project}.\n"
     "- quick: one model in one go, a few minutes, without anyone's project files: one picture, one short "
-    "document, a conversion or calculation, look something up and summarise it.\n"
+    "document, a conversion or calculation, look something up and summarise it, or one small program that "
+    "stands on its own (a small game such as snake, a script, a calculator, one web page).\n"
     "- solo: one capable model carrying it through by itself with its tools, step after step, in up to an "
-    "hour: one coherent piece of work with one result, such as fixing a bug, adding one feature, writing "
-    "one script or one report from research{in_project}.\n"
+    "hour: one coherent piece of work with one result that takes real work, such as fixing a bug, adding "
+    "one feature, a program of several parts, or one report from research{in_project}.\n"
     "- plan: anything else: several separate deliverables, a system with several parts, work needing "
     "several kinds of expertise in turn, or anything unclear. When unsure, plan.\n"
     'Answer with only JSON: {{"shape": "quick | solo | plan", "title": "a short title in the request\'s language", '

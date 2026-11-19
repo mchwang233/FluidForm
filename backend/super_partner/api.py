@@ -753,6 +753,13 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
     return plan, session, attached, project_dir, background, lessons
 
 
+# Said to the one step a task without the lead's plan gets: do what was asked, no more. A small game
+# once came with two test suites, a headless demo and a README, and took six minutes, not one.
+QUICK_SCOPE = ("\n\n（这是一件小事：只做要求的。做完先自己运行或检查一次，能用就交付；"
+               "没要求的测试套件、演示脚本、说明文档都不用写。）")
+SOLO_SCOPE = ("\n\n（做到要求的程度为止：能用、自己检查过就交付；没要求的额外测试、演示和文档不用写。）")
+
+
 async def _quick_plan(body: CreateTask, request: str, background: Optional[str], configured: set[str],
                       project_dir: Optional[str] = None) -> Optional[TaskPlan]:
     """With settings.quick_tasks, a task one model can do in one go (triage.quick) as a one-step
@@ -765,9 +772,10 @@ async def _quick_plan(body: CreateTask, request: str, background: Optional[str],
     if not step or (step["shape"] == "quick" and not settings.quick_tasks):
         return None
     solo = step["shape"] == "solo"
+    asked = f"{background}\n\n新需求：\n{request}" if background else request
     node = TaskNode(id=uuid4().hex[:8], title=step["title"], capability=step["capability"],
                     difficulty="hard" if solo else "easy", needs_workspace=bool(project_dir),
-                    instructions=f"{background}\n\n新需求：\n{request}" if background else request,
+                    instructions=asked + (SOLO_SCOPE if solo else QUICK_SCOPE),
                     needs_images=step["needs_images"], acceptance_criteria=step["acceptance"])
     note = ("一个模型连续做完：没有拆成多步，交给一个强模型带着工具一路做到底" if solo
             else "一步就能做完：没有排详细计划，直接交给一个模型做")
