@@ -27,6 +27,10 @@ from .models import Capability
 
 MANIFEST = "capability.json"
 REQUIREMENTS = "requirements.txt"
+# How to talk where an automation brings people's messages (an IM's manners): given to the model
+# answering in its chats (supervisor.chat_guide). Optional.
+CHAT_GUIDE = "CHAT.md"
+MAX_CHAT_GUIDE_CHARS = 6000
 VENV = ".venv"
 MAX_PACKAGE_FILES = 2000
 ENV_SECONDS = 900
@@ -39,6 +43,17 @@ IGNORED = ("__MACOSX/", ".DS_Store")
 
 class PackageError(ValueError):
     """A package that cannot be installed, and why (shown to the user)."""
+
+
+def chat_guide(capability_id: str) -> str:
+    """Its CHAT.md, if it has one (bounded); "" otherwise."""
+    if not ID.fullmatch(capability_id or ""):
+        return ""
+    path = capabilities.root() / capability_id / CHAT_GUIDE
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[:MAX_CHAT_GUIDE_CHARS].strip() if path.is_file() else ""
+    except OSError:
+        return ""
 
 
 def data_folder(capability_id: str) -> Path:

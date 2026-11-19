@@ -403,6 +403,7 @@ async def test_a_chat_model_is_told_which_model_it_is_and_that_earlier_replies_w
     chat = (await client.post("/api/chats", json={"message": "你是谁？", "model_id": "x:other"}, headers=ORIGIN)).json()
     await api.executor.lead_tasks[chat["id"]]
     assert "X:OTHER (x:other, through its API)" in sent[0][2]
+    assert "How to talk here" not in sent[0][2] and "group chat" not in sent[0][2]
     # Another model takes the conversation over: told who it is, and whose the earlier replies were.
     run = api.db.get_run(chat["id"])
     run.supervisor = supervisor.new_session(BEST, run.supervisor)

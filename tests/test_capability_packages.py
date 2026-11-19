@@ -363,6 +363,20 @@ async def test_only_at_it_answers_what_the_group_said_before(packages, monkeypat
     assert "成员1：周五团建去哪儿好？" in sent[0][2] and capability_runner.CALLED_ONLY in sent[0][2]
 
 
+async def test_its_chats_are_told_how_to_talk_there_and_whether_it_is_a_group(model_bot):
+    api, client, runner, sent, _ = model_bot
+    guide = "话没说完时，只回一句「嗯，你说」。"
+    await upload(client, package(extra={"pkg/CHAT.md": guide}))
+    for conversation, kind in (("g1", "group"), ("p1", "p2p")):
+        await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
+            conversation=conversation, text="我想问下", origin={"chat_type": kind}), runner.get("fake-bot"))
+    group, private = sent[-2][2], sent[-1][2]
+    assert guide in group and "This is a group chat" in group
+    assert guide in private and "This is a private chat" in private and "group chat" not in private
+    # Chats it did not bring, and packages without the file, are told nothing of it.
+    assert capability_packages.chat_guide("other") == "" and capability_packages.chat_guide("../x") == ""
+
+
 def test_what_the_group_said_is_kept_bounded():
     kept = capability_runner.keep_heard([f"成员：{n}" * 100 for n in range(50)])
     assert len(kept) <= capability_runner.MAX_HEARD_LINES and sum(map(len, kept)) <= capability_runner.MAX_HEARD_CHARS

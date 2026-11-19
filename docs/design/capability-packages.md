@@ -16,6 +16,7 @@ A zip of one folder (or of its contents):
 |---|---|
 | `capability.json` | `id` (`a-z0-9-`), `name`, `kind` (tool, automation), `version`, `summary`, `usage`, `check`, `secrets` (environment variables it needs), `domains` (hosts it may reach; `*.example.com` for subdomains), `entry` (an automation: the command that runs it) |
 | `SKILL.md` | its manual; written from the manifest when missing |
+| `CHAT.md` | optional, for an automation: how to talk where it brings people's messages (an IM's manners). The model answering in its chats is told it first (`supervisor.chat_guide`, at most `MAX_CHAT_GUIDE_CHARS`), with whether the chat is private or a group (`origin["chat_type"]`: `p2p`, `group`) |
 | `requirements.txt` | optional: Python packages, installed into its own environment |
 | its code | anything else |
 

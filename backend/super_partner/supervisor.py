@@ -105,16 +105,35 @@ def identity(model: Optional[ModelProfile]) -> str:
             "say so; do not guess another.\n\n")
 
 
+def chat_guide(run: ExecutionRun) -> str:
+    """For a chat an automation brings messages to (a Feishu bot): how to talk there, from its
+    package's CHAT.md, and whether it is a private chat or a group (``origin["chat_type"]``)."""
+    origin = run.origin or {}
+    if not origin.get("capability"):
+        return ""
+    from .capability_packages import chat_guide as package_guide
+
+    guide = package_guide(str(origin["capability"]))
+    where = {"p2p": "This is a private chat with one person.",
+             "group": "This is a group chat: several people, who mostly talk among themselves."}.get(origin.get("chat_type"), "")
+    return "".join(f"{part}\n\n" for part in (where, f"How to talk here:\n{guide}" if guide else "") if part)
+
+
+def chat_role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
+    """What a chat's model is told first: its role, who it is, and how to talk where it is."""
+    return CHAT_ROLE + identity(model) + chat_guide(run)
+
+
 def chat_opening(run: ExecutionRun, text: str, model: Optional[ModelProfile] = None) -> str:
-    """A message in a chat: its first one carries the role, who ``model`` (its own) is, and the
-    folder it may read."""
+    """A message in a chat: its first one carries the role, who ``model`` (its own) is, how to talk
+    there, and the folder it may read."""
     if run.supervisor and run.supervisor.calls:
         return text
     if run.supervisor and run.supervisor.previous:
         # A deliberate model change starts a fresh native/API session, as a lost session does.
-        return CHAT_ROLE + identity(model) + handover(run, model.id if model else None) + text
+        return chat_role(run, model) + handover(run, model.id if model else None) + text
     folder = f"The user's project folder, which you may read: {run.project_dir}\n\n" if run.project_dir else ""
-    return CHAT_ROLE + identity(model) + folder + text
+    return chat_role(run, model) + folder + text
 
 
 def handover(run: ExecutionRun, current: Optional[str] = None) -> str:
@@ -163,7 +182,7 @@ def chat_folder(run: ExecutionRun) -> Optional[str]:
 
 
 def role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
-    return CHAT_ROLE + identity(model) if run.kind == "chat" else ROLE
+    return chat_role(run, model) if run.kind == "chat" else ROLE
 
 
 async def converse(providers, session: SupervisorSession, prompt: str, charged, attachments=()) -> tuple[str, SupervisorSession]:
