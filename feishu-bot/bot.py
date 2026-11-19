@@ -1,4 +1,4 @@
-"""若水的飞书机器人: a capability package (docs/design/capability-packages.md).
+"""FluidForm 的飞书机器人: a capability package (docs/design/capability-packages.md).
 
 Super Partner runs this in the capabilities' sandbox. It holds Feishu's long connection (no public
 address needed), and for each message it answers asks Super Partner over stdin/stdout (JSON lines):
@@ -27,7 +27,7 @@ BACKLOG_SECONDS = 60
 SEEN_KEEP = 500
 # A reply longer than this is cut, with a note that the rest is in Super Partner.
 MAX_REPLY_CHARS = 3500
-CUT_NOTE = "\n\n……（太长了，完整内容在若水里）"
+CUT_NOTE = "\n\n……（太长了，完整内容在 FluidForm 里）"
 # How long a message waits for Super Partner's answer.
 REPLY_WAIT = 1800
 # How a mention appears in a message's text.
