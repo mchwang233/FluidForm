@@ -205,3 +205,23 @@ def test_when_codex_cannot_say_the_last_reading_stands(codex, monkeypatch):
     session(codex, "user.jsonl", codex / "project", [(0, 0, 0, 0, 92.0)])
     cli_quota.apply(models, tracker, now=NOW + timedelta(hours=1))
     assert tracker.exhausted("cli:codex")
+
+
+def test_a_free_cli_keeps_its_quota_guard_but_costs_nothing(codex, monkeypatch):
+    monkeypatch.setattr(settings, "cli_free", True)
+    monkeypatch.setattr(settings, "cli_plans", {"cli:codex": {"monthly_usd": 200, "input_per_million": 0.6,
+                                                              "output_per_million": 2.4}})
+    models, tracker = {"cli:codex": codex_model()}, QuotaTracker()
+    session(codex, "user.jsonl", codex / "project", [(0, 0, 0, 0, 20.0)])
+    cli_quota.apply(models, tracker, now=NOW)  # before calibration: no starting price either
+    model = models["cli:codex"]
+    assert (model.input_per_million, model.output_per_million, model.cached_input_per_million) == (0, 0, 0)
+    session(codex, "user.jsonl", codex / "project", [(0, 0, 0, 0, 20.0), (60, 250_000, 0, 0, 92.0)])
+    cli_quota.apply(models, tracker, now=NOW + timedelta(hours=1))
+    assert token_cost(model, 1_000_000, 200_000, 500_000) == 0
+    assert model.usage_note == f"周额度已用 92%，{RESETS.astimezone():%m-%d %H:%M} 重置；额度紧张，优先给其他模型"
+    assert model.execution_priority == 100 and tracker.exhausted("cli:codex")
+    # Unreadable usage: still free, not the plan's starting price.
+    monkeypatch.setitem(cli_quota.READERS, "cli:codex", cli_quota.CodexReader(home=codex / "nowhere"))
+    cli_quota.apply(models, now=NOW + timedelta(hours=2))
+    assert (model.input_per_million, model.output_per_million) == (0, 0)

@@ -390,10 +390,13 @@ def _price(model, input_usd: float, output_usd: float, cached_usd: float) -> Non
 def note(usage: Usage, price: Optional[float], monthly_usd: float,
          start: Optional[tuple[float, float]] = None, capped: bool = False) -> str:
     parts = []
+    free = settings.cli_free
     for window in sorted(usage.windows, key=lambda item: item.minutes, reverse=True):
         label = "周" if window.minutes >= 7 * 24 * 60 else f"{window.minutes // 60} 小时"
         parts.append(f"{label}额度已用 {window.used_percent:g}%，{window.resets_at.astimezone():%m-%d %H:%M} 重置")
-    if price and capped:
+    if free:
+        priced = ""
+    elif price and capped:
         priced = (f"按月费 ${monthly_usd:g} 折算是 ${price:.3g}/百万 tokens，比 API 还贵：额度里有本机看不到的用量"
                   "（其他设备或网页），按同厂商 API 的最高价计")
     elif price:
@@ -402,12 +405,13 @@ def note(usage: Usage, price: Optional[float], monthly_usd: float,
         priced = f"月费 ${monthly_usd:g}，暂未折算，先按设定价 输入 ${start[0]:g}/输出 ${start[1]:g} 每百万 tokens"
     else:
         priced = f"月费 ${monthly_usd:g}，额度用量太少，暂未折算价格"
-    return "；".join([*parts, priced])
+    return "；".join(filter(None, [*parts, priced]))
 
 
 def apply(models: dict, tracker=None, now: Optional[datetime] = None) -> None:
     """Price each CLI with a plan by its quota, and steer work away from it as the quota runs
-    out. A CLI without a plan, or whose usage cannot be read, keeps the catalog's terms."""
+    out. A CLI without a plan, or whose usage cannot be read, keeps the catalog's terms. With
+    ``cli_free`` its quota is still read and guarded, but it costs nothing."""
     from .catalog import builtin_models
 
     builtin = {model.id: model for model in builtin_models()}
@@ -438,6 +442,8 @@ def apply(models: dict, tracker=None, now: Optional[datetime] = None) -> None:
             if original:
                 model.execution_priority = original.execution_priority
             model.usage_note = None
+            if settings.cli_free:
+                _price(model, 0.0, 0.0, 0.0)
             continue
         window = usage.longest
         resets = int(window.resets_at.timestamp())
@@ -467,6 +473,8 @@ def apply(models: dict, tracker=None, now: Optional[datetime] = None) -> None:
                 _price(model, round(price, 6), round(price, 6), round(price * CACHED_WEIGHT, 6))
         elif set_price:
             _price(model, *set_price, set_price[0] * CACHED_WEIGHT)
+        if settings.cli_free:
+            _price(model, 0.0, 0.0, 0.0)
         fullest = usage.fullest
         tight = fullest is not None and fullest.used_percent >= settings.cli_quota_soft_percent
         # A CLI goes first in routing only while its quota is comfortable.

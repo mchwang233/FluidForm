@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     # Membership CLIs priced by their subscription, e.g. {"cli:codex": {"monthly_usd": 200}}: each call
     # costs its share of the quota (cli_quota.py) and counts against task budgets. Empty: CLIs cost nothing.
     cli_plans: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # Membership CLIs cost nothing against any budget (tasks, the lead, the platform engineer), a
+    # plan in cli_plans still reading and guarding their quota. Off: priced by cli_plans as above.
+    cli_free: bool = False
     # Share of a priced CLI's quota window used from which it no longer goes first in routing, and
     # from which it takes no new work until the window resets.
     cli_quota_soft_percent: float = Field(default=70, ge=0, le=100)
