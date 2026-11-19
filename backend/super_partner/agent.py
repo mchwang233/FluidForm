@@ -55,6 +55,7 @@ MAX_MAPPED_FILES = 300
 MAX_COUNTED_BYTES = 1_000_000
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz", ".tar", ".woff",
                    ".woff2", ".ttf", ".otf", ".mp3", ".mp4", ".wav", ".so", ".pyc", ".db", ".sqlite", ".sqlite3"}
+PICTURE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 MAX_LISTED = 500
 # Where the bridged ports' sockets appear inside the sandbox.
 SANDBOX_PORTS_DIR = "/tmp/.sp-ports"
@@ -196,9 +197,9 @@ IMAGE_TOOL = {
         "Makes a picture from a description with an image model and saves it in the working directory.\n"
         "- Describe what is in it, its style, light and composition; any language works.\n"
         "- shape: square, portrait (9:16) or landscape (16:9).\n"
-        "- It costs money per picture: make the ones asked for. If you can see images, Read the result "
-        "to check it before making another; if you cannot, it is made as described: report it as done, "
-        "not as something you could not do.\n"
+        "- It costs money per picture: make the ones asked for. The picture is made as described: "
+        "Read does not show pictures, and you need not look at it. Report it as done; not being able "
+        "to look at it is not something you could not do.\n"
         "- This is the way to make real pictures; do not draw them with code instead."
     ),
     "parameters": {"type": "object", "properties": {
@@ -332,6 +333,46 @@ def network_prefix(forward: list[int]) -> list[str]:
     local services such as this application's API stay out of reach; only ``forward`` gets in."""
     tcp = ",".join(map(str, forward)) or "none"
     return ["pasta", "--config-net", "--quiet", "--no-map-gw", "-T", tcp, "-U", "none", "-u", "none", "-t", "none", "--"]
+
+
+def picture_size(data: bytes) -> tuple[int, int] | None:
+    """Width and height of a PNG, JPEG, GIF or WebP picture, from its header; None if unknown."""
+    import struct
+
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
+        return struct.unpack(">II", data[16:24])
+    if data[:6] in {b"GIF87a", b"GIF89a"} and len(data) >= 10:
+        return struct.unpack("<HH", data[6:10])
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 30:
+        if data[12:16] == b"VP8X":
+            return (int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1)
+        if data[12:16] == b"VP8 ":
+            width, height = struct.unpack("<HH", data[26:30])
+            return width & 0x3FFF, height & 0x3FFF
+        return None
+    if data[:2] == b"\xff\xd8":
+        index = 2
+        while index + 9 < len(data):
+            if data[index] != 0xFF:
+                index += 1
+                continue
+            marker = data[index + 1]
+            length = int.from_bytes(data[index + 2:index + 4], "big")
+            if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+                height, width = struct.unpack(">HH", data[index + 5:index + 9])
+                return width, height
+            index += 2 + length
+    return None
+
+
+def picture_note(name: str, path: Path) -> str:
+    """What Read says of a picture: what it is, and that it is not shown here."""
+    data = path.read_bytes()
+    size = picture_size(data)
+    shape = f", {size[0]}×{size[1]}" if size else ""
+    return (f"{name} is a picture ({path.suffix.lstrip('.').upper()}{shape}, {len(data) // 1024} KB). Read does not "
+            "show pictures. One made with GenerateImage is what was described; not being able to look at it is "
+            "not a reason to report the work as not done.")
 
 
 def describe_call(name: str, args) -> str:
@@ -618,6 +659,9 @@ class Workspace:
         path = self._path(args.get("file_path") or args.get("path"))
         if not path.is_file():
             raise ToolError(f"{args.get('file_path')} is not a file" + (" (it is a directory: use LS)" if path.is_dir() else ""))
+        if path.suffix.lower() in PICTURE_SUFFIXES:
+            # Not an error: a model checking a picture it made would read one as "could not do it".
+            return picture_note(self._relative(path), path)
         if path.suffix.lower() in BINARY_SUFFIXES:
             raise ToolError(f"{self._relative(path)} is a binary file")
         try:
@@ -672,7 +716,7 @@ class Workspace:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         saved = (f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). It is a real picture "
-                 "of what you described; Read it to look at it if you can see images.")
+                 "of what you described: report it as done.")
         return saved, True
 
     async def web_search(self, args: dict) -> tuple[str, bool]:

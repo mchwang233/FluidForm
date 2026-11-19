@@ -121,3 +121,25 @@ def test_the_plan_says_which_steps_make_pictures():
     assert task_node({**raw, "needs_images": "yes"}, "t1", [], []).needs_images is False
     # Old plans load.
     assert TaskNode.model_validate({"id": "n", "title": "t", "instructions": "i", "capability": "coding"}).needs_images is False
+
+
+def jpeg(width, height):
+    """A JPEG header with a baseline frame of this size."""
+    frame = b"\xff\xc0\x00\x11\x08" + height.to_bytes(2, "big") + width.to_bytes(2, "big") + b"\x03" + b"\0" * 9
+    return b"\xff\xd8" + b"\xff\xe0\x00\x10" + b"JFIF\0" + b"\0" * 9 + frame + b"\0" * 16
+
+
+async def test_reading_a_picture_says_what_it_is_instead_of_failing(tmp_path):
+    # Regression: Read answered "is a binary file" (an error) for a picture GenerateImage had just
+    # made, and a model that tried to look at it reported the finished step as UNABLE.
+    (tmp_path / "avatar.jpg").write_bytes(jpeg(1024, 1024))
+    (tmp_path / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0\0\0\rIHDR" + (64).to_bytes(4, "big") + (32).to_bytes(4, "big") + b"\0" * 8)
+    workspace = agent.Workspace(tmp_path)
+    output, ok = await workspace.run("Read", {"file_path": "avatar.jpg"})
+    assert ok and "is a picture (JPG, 1024×1024" in output and "not a reason to report the work as not done" in output
+    output, ok = await workspace.run("Read", {"file_path": "icon.png"})
+    assert ok and "64×32" in output
+    # Other binary files are still refused, and the image tool no longer sends models to look.
+    (tmp_path / "a.zip").write_bytes(b"PK")
+    assert not (await workspace.run("Read", {"file_path": "a.zip"}))[1]
+    assert "Read does not show pictures" in agent.IMAGE_TOOL["description"]
