@@ -17,6 +17,16 @@ from .models import DiagnosisStatus, NodeStatus, RunStatus
 from .platform_repair import RepairError, repair_guide
 from .recovery import MAX_ENVIRONMENT_FIXES
 
+# How long a checked change waits for steps that can be cut off (APPLY_WAIT): such a step runs
+# again after the restart (resume_after_restart), so its task need not finish first.
+APPLY_WAIT_SECONDS = 300
+
+
+def cut_off_safely(run) -> bool:
+    """Whether a restart may stop this task's steps: it goes on by itself afterwards and touches no
+    project a half-done step could leave half-edited."""
+    return bool(run) and settings.resume_after_restart and not run.project_dir
+
 
 class SelfRepair:
     """Uses the executor's run state, locks and diagnosis model calls (_diagnose_with)."""
@@ -123,9 +133,7 @@ class SelfRepair:
 
     async def _activate_platform(self, job: dict) -> None:
         try:
-            # No active model call is interrupted by our restart; usage and results drain first.
-            while self.active_requests or any(not task.done() for task in set(self.tasks.values()) | set(self.diagnosing.values())):
-                await asyncio.sleep(0.2)
+            await self._wait_to_apply()
             # Retrospectives improve later work, so cancellation of their source is not rejection
             # of the separate, checked engineering job. Deleted sources still block activation.
             initiating = self.db.get_run(job["run_id"]) if job.get("run_id") else None
@@ -145,6 +153,20 @@ class SelfRepair:
             job.update(status="failed", error=str(exc))
             self.platform.save(job)
             self._finish_platform(job)
+
+    async def _wait_to_apply(self) -> None:
+        """Wait for what a restart must not cut off: requests being handled, repairs and the
+        lead's answers, and the steps of tasks in a project (they could leave it half-edited).
+        Steps of other tasks get APPLY_WAIT_SECONDS to finish; after that the restart stops them,
+        and they run again when their task goes on (Executor.execute)."""
+        deadline = time.monotonic() + APPLY_WAIT_SECONDS
+        while True:
+            running = [run_id for run_id, task in list(self.tasks.items()) if not task.done()]
+            waiting = [run_id for run_id in running if not cut_off_safely(self.db.get_run(run_id))]
+            busy = any(not task.done() for task in [*self.diagnosing.values(), *self.lead_tasks.values()])
+            if not self.active_requests and not busy and not waiting and (not running or time.monotonic() >= deadline):
+                return
+            await asyncio.sleep(0.5)
 
     def restore_platform(self) -> None:
         """Called on API startup; ordinary interrupted tasks still require confirmation."""

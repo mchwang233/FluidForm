@@ -280,6 +280,22 @@ def diagnosers(models: list[ModelProfile], configured: set[str]) -> list[ModelPr
     ))
 
 
+# How far below the strongest a model's coding score may be to change FluidForm's own source.
+ENGINEER_SCORE_MARGIN = 5.0
+
+
+def engineers(models: list[ModelProfile], configured: set[str]) -> list[ModelProfile]:
+    """Models that may change FluidForm's own source, best first: every membership CLI, then API
+    models that can act and code within ENGINEER_SCORE_MARGIN of the strongest that can. A weak
+    model editing the platform fails its checks or takes hours, so it is never among them."""
+    acting = [model for model in diagnosers(models, configured) if can_act(model)]
+    if not acting:
+        return []
+    best = max(model.scores.score_for("coding") for model in acting)
+    return [model for model in acting
+            if model.channel == "cli" or model.scores.score_for("coding") >= best - ENGINEER_SCORE_MARGIN]
+
+
 def pick_diagnoser(models: list[ModelProfile], configured: set[str]) -> Optional[ModelProfile]:
     candidates = diagnosers(models, configured)
     return candidates[0] if candidates else None

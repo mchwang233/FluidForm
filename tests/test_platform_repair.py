@@ -12,7 +12,14 @@ from super_partner import platform_repair as platform
 from super_partner.config import settings
 from super_partner.db import Database
 from super_partner.executor import Executor
-from super_partner.models import Diagnosis, EngineerJob, NodeStatus, RunStatus
+from super_partner.models import (
+    Diagnosis,
+    EngineerJob,
+    ExecutionRun,
+    NodeStatus,
+    RunStatus,
+    TaskPlan,
+)
 from super_partner.providers import ProviderResult
 from test_diagnosis import MODELS, Providers, one_node_run
 
@@ -493,3 +500,33 @@ def test_activation_preserves_outcomes_and_requests_evidence_recovery_before_mor
     assert "先核对" in saved.feedback and "不要重复整轮工作" in saved.feedback
     assert ("本次回答已保存" if answer else "本次回答未记录") in saved.feedback
     assert "不代表任务验收通过" in saved.feedback
+
+
+async def test_a_change_waits_only_for_what_a_restart_must_not_cut_off(tmp_path, monkeypatch):
+    # Regression: applying waited until every running task had finished its steps (30 minutes once,
+    # hours behind a long regression), though such a task goes on by itself after the restart.
+    from super_partner import self_repair
+    db = Database(tmp_path / "test.db")
+    executor = Executor(db, Providers(), MODELS)
+    monkeypatch.setattr(self_repair, "APPLY_WAIT_SECONDS", 0.3)
+    monkeypatch.setitem(settings.__dict__, "resume_after_restart", True)
+    for run_id, project in (("free", None), ("project", str(tmp_path))):
+        db.save_run(ExecutionRun(id=run_id, prompt="p", status=RunStatus.PAUSED, budget_usd=1, project_dir=project,
+                                 plan=TaskPlan(summary="s", nodes=[])))
+    forever = asyncio.Event()
+    executor.tasks["free"] = asyncio.create_task(forever.wait())
+    # A step of a task in no project is cut off once its time is up.
+    await asyncio.wait_for(executor._wait_to_apply(), 3)
+    # A step of a task in a project is waited for, as is one when tasks do not go on by themselves.
+    executor.tasks["project"] = asyncio.create_task(forever.wait())
+    waiting = asyncio.create_task(executor._wait_to_apply())
+    await asyncio.sleep(1)
+    assert not waiting.done()
+    executor.tasks["project"].cancel()
+    await asyncio.wait_for(waiting, 3)
+    monkeypatch.setitem(settings.__dict__, "resume_after_restart", False)
+    waiting = asyncio.create_task(executor._wait_to_apply())
+    await asyncio.sleep(1)
+    assert not waiting.done()
+    forever.set()
+    await asyncio.wait_for(waiting, 3)

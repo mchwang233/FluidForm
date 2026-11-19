@@ -28,7 +28,7 @@ from .models import (
 from .platform_repair import RepairError
 from .quota import failure_kind
 from .recovery import after_diagnosis
-from .routing import NoEligibleModelError, can_act, diagnosers, pick_diagnoser
+from .routing import NoEligibleModelError, can_act, diagnosers, engineers, pick_diagnoser
 
 # Models tried in turn for one repair when the previous one fails.
 MAX_DIAGNOSERS = 3
@@ -139,9 +139,16 @@ class Diagnosing:
         the next diagnosers in turn. Returns the result and the model that gave it; switches are
         recorded as events, and the last failure is raised."""
         run_id, diagnosis_id = run.id, diagnosis.id
-        available = diagnosers(list(self.model_lookup.values()), self._configured(run))
         if edit:
-            available = [model for model in available if can_act(model)]
+            # Changing FluidForm's source: only strong models. Membership CLIs too when they cost
+            # nothing, whatever the task allows its own steps (it is not the task's work).
+            configured = self._configured(run)
+            if settings.cli_free:
+                listed = getattr(self.providers, "configured_models", None)
+                configured |= {item for item in (listed(list(self.model_lookup)) if listed else ()) if item.startswith("cli:")}
+            available = engineers(list(self.model_lookup.values()), configured)
+        else:
+            available = diagnosers(list(self.model_lookup.values()), self._configured(run))
         allowed = {model.id for model in available}
         candidates = ([diagnosis.model_id] * (diagnosis.model_id in allowed) + [
             model.id for model in available

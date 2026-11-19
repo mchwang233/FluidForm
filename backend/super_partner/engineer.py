@@ -30,10 +30,13 @@ from .models import (
     RunStatus,
 )
 from .platform_repair import COMPONENT_GUIDES, REPAIR_GUIDES, RepairError, repair_guide
-from .routing import can_act, diagnosers
+from .routing import engineers
 
 # Models tried in turn when one fails (its usage ran out, say).
 MAX_ENGINEERS = 3
+# What the user picks to let a job that spent its budget go on; it gets engineer_budget_usd more.
+MORE_BUDGET = "追加预算，接着做"
+STOP = "到此为止"
 STATUS = re.compile(r"^\s*STATUS:\s*(PLAN|FIXED|NEEDS_INPUT)\b", re.IGNORECASE | re.MULTILINE)
 # A job in one of these states has the engineer at work on it.
 WORKING = {"planning", "editing", "validating"}
@@ -238,6 +241,9 @@ class Engineering:
             raise EngineerError("请写下你的回复。")
         if job.status not in ENGINEER_WAITING:
             raise EngineerError("平台工程师现在不在等你回复。")
+        if choice == MORE_BUDGET:
+            job.budget_usd = round(max(job.budget_usd, job.cost_usd) + settings.engineer_budget_usd, 6)
+            said += f"（预算追加到 ${job.budget_usd:.2f}）"
         job.messages.append(EngineerMessage(role="user", text=said, attachments=list(attachments)))
         known = {item.id for item in job.attachments}
         job.attachments += [item for item in attachments if item.id not in known]
@@ -325,6 +331,14 @@ class Engineering:
         except asyncio.CancelledError:
             stopped = True
             raise
+        except BudgetExceeded as exc:
+            # Out of budget: ask whether to go on, where it stopped, instead of failing.
+            job.cost_usd = round(job.cost_usd + getattr(exc, "accounted_cost_usd", 0.0), 6)
+            job.status, job.choices = "needs_input", [MORE_BUDGET, STOP]
+            job.question = (f"这项工作已经花了 ${job.cost_usd:.2f}，预算 ${job.budget_usd:.2f} 用完了。"
+                            f"要追加 ${settings.engineer_budget_usd:.2f} 接着做吗？")
+            job.messages.append(EngineerMessage(role="engineer", text=job.question))
+            self._engineer_save(job)
         except Exception as exc:
             job.cost_usd = round(job.cost_usd + getattr(exc, "accounted_cost_usd", 0.0), 6)
             job.status, job.error = "failed", str(exc)[:2000] or type(exc).__name__
@@ -425,8 +439,7 @@ class Engineering:
         CLIs first), the next one when it fails; charged to the job's own budget."""
         configured = getattr(self.providers, "configured_models", None)
         configured = configured(list(self.model_lookup)) if configured else set()
-        candidates = [model for model in diagnosers(list(self.model_lookup.values()), configured)
-                      if can_act(model)][:MAX_ENGINEERS]
+        candidates = engineers(list(self.model_lookup.values()), configured)[:MAX_ENGINEERS]
         if not candidates:
             raise RepairError("没有可用、并且能修改文件的模型来做这项工作。")
         last: Optional[Exception] = None
@@ -454,6 +467,11 @@ class Engineering:
         raise RepairError(f"所有可用模型都没能完成：{last}")
 
     async def _engineer_charged(self, job: EngineerJob, model_id: str, call):
+        # A job's budget is checked before each piece of its work, not only within an API model's
+        # turns: a membership CLI's call is charged only once it ends.
+        if job.budget_usd - job.cost_usd <= 0:
+            raise BudgetExceeded(f"已花 ${job.cost_usd:.2f}，预算 ${job.budget_usd:.2f} 用完了")
+
         async def charge(cost):
             if cost:
                 job.cost_usd = round(job.cost_usd + cost, 6)

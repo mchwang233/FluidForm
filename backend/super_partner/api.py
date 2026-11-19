@@ -95,6 +95,7 @@ from .secrets import (
     keyring_unavailable,
     set_provider_key,
 )
+from .self_repair import cut_off_safely
 
 
 class CreateTask(BaseModel):
@@ -156,7 +157,7 @@ catalog_sync = CatalogSync(
 def resumes_by_itself(run: ExecutionRun) -> bool:
     """A task cut off by a restart goes on by itself when resume_after_restart is on and it
     touches nobody's project and waits for nobody; otherwise it waits for the user."""
-    return (settings.resume_after_restart and not run.project_dir and not run.waiting_diagnosis_id
+    return (cut_off_safely(run) and not run.waiting_diagnosis_id
             and not run.maintenance_id and not run.engineer_job_id)
 
 
@@ -406,6 +407,11 @@ def engineer_activity(job_id: str, limit: int = 200):
 
 @app.post("/api/engineer/jobs/{job_id}/reply")
 async def engineer_reply(job_id: str, body: EngineerReply):
+    from .engineer import STOP
+
+    if body.choice == STOP:
+        # Out of budget, and the user says stop: the job ends as given up.
+        return await engineer_reject(job_id)
     attached = _attached(body.attachments)
     return _engineer(lambda: executor.engineer_reply(job_id, body.text, body.choice, attached))
 

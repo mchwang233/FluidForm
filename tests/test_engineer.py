@@ -497,3 +497,48 @@ async def test_while_it_works_its_page_shows_what_it_is_doing(setup, monkeypatch
     assert {entry["detail"] for entry in seen_in_checks[-1]} >= {"Python syntax", "Backend tests"}
     # Kept only while it works.
     assert job.id not in executor.engineer_logs
+
+
+def test_only_strong_models_change_fluidforms_source():
+    # Regression: changes to FluidForm's source fell back to the weakest model that could act
+    # (DeepSeek Flash), which failed its checks or took hours.
+    from super_partner.models import CapabilityScore, ModelProfile
+    from super_partner.routing import engineers
+
+    def one(model_id, channel, coding):
+        return ModelProfile(id=model_id, provider=model_id.split(":")[0], display_name=model_id, channel=channel,
+                            context_window=200000, input_per_million=1, output_per_million=1,
+                            scores=CapabilityScore(coding=coding, planning=coding, reliability=90))
+
+    cli, strong, near, weak = one("cli:codex", "cli", 80), one("x:strong", "api", 92), one("x:near", "api", 88), one("x:flash", "api", 70)
+    everything = [weak, near, strong, cli]
+    assert [m.id for m in engineers(everything, {m.id for m in everything})] == ["cli:codex", "x:strong", "x:near"]
+    # Without a CLI the strongest API models still may; a weak one never.
+    assert [m.id for m in engineers(everything, {"x:flash", "x:strong"})] == ["x:strong"]
+    assert [m.id for m in engineers([weak], {"x:flash"})] == ["x:flash"]  # the only one there is
+
+
+async def test_a_job_that_spent_its_budget_asks_before_going_on(setup):
+    # Regression: a job with a $2 budget ended at $12.81: a membership CLI is charged only when its
+    # call ends, and nothing checked the budget before the next piece of work.
+    build, _, _ = setup
+    providers = Engineer()
+    executor = build(providers)
+    job = executor.engineer_request("加一个导出按钮")
+    await idle(executor)
+    job = executor.db.get_engineer_job(job.id)
+    job.cost_usd = job.budget_usd  # the plan used it all
+    executor.db.save_engineer_job(job)
+    calls = len(providers.prompts)
+    executor.engineer_approve(job.id)
+    await idle(executor)
+    job = executor.db.get_engineer_job(job.id)
+    assert len(providers.prompts) == calls  # no call was made past the budget
+    assert job.status == "needs_input" and job.choices == [engineer.MORE_BUDGET, engineer.STOP]
+    assert "用完了" in job.question
+    spent = job.cost_usd
+    executor.engineer_reply(job.id, "", engineer.MORE_BUDGET)
+    await idle(executor)
+    job = executor.db.get_engineer_job(job.id)
+    assert job.budget_usd == pytest.approx(spent + settings.engineer_budget_usd)
+    assert job.status == "ready" and len(providers.prompts) > calls
