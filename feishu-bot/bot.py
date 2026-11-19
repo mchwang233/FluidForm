@@ -47,10 +47,12 @@ ANSWER = "answer"
 
 @dataclass
 class Incoming:
-    """What a message asks: its words, and the pictures (image keys) and files (key, name) with it."""
+    """What a message asks: its words, and the pictures (image keys) and files (key, name) with it.
+    ``addressed`` False: said in a group without @ it, for FluidForm to decide whether to answer."""
     text: str
     images: list = field(default_factory=list)
     files: list = field(default_factory=list)
+    addressed: bool = True
 
 
 def _post(content: dict) -> Incoming:
@@ -63,19 +65,25 @@ def _post(content: dict) -> Incoming:
             tag = item.get("tag") if isinstance(item, dict) else None
             if tag in {"text", "a", "code_block"}:
                 words.append(str(item.get("text") or ""))
+            elif tag == "at" and item.get("user_id"):
+                words.append(str(item["user_id"]) + " ")  # its mark, named or dropped as in text (wanted)
             elif tag in {"img", "media"} and item.get("image_key"):
                 images.append(item["image_key"])
         lines.append("".join(words))
     return Incoming("\n".join(line for line in lines if line.strip()), images)
 
 
-def wanted(message_type: str, chat_type: str, content: str, mentions: list, create_time_ms: int,
-           started_at: float) -> Optional[Incoming]:
-    """What to answer, or None: text, rich text, a picture or a file, privately or when
-    @-mentioned in a group, and not the backlog from before it started."""
+def wanted(message_type: str, chat_type: str, content: str, mentions: dict, create_time_ms: int,
+           started_at: float, me: Optional[frozenset] = None) -> Optional[Incoming]:
+    """What to pass on, or None: text, rich text, a picture or a file, privately or when @-ed in a
+    group; in a group without @ it, its words only, ``addressed`` False. Never the backlog from
+    before it started. ``mentions`` maps each mark (@_user_1) to a name; ``me`` holds the marks
+    that are this bot (None when it cannot tell: any mention is taken for it)."""
     if message_type not in {"text", "post", "image", "file"} or chat_type not in {"p2p", "group"}:
         return None
-    if chat_type == "group" and not mentions:
+    mine = set(mentions) if me is None else set(me)
+    called = chat_type == "p2p" or bool(set(mentions) & mine)
+    if not called and message_type not in {"text", "post"}:
         return None
     if create_time_ms and create_time_ms / 1000 < started_at - BACKLOG_SECONDS:
         return None
@@ -93,7 +101,11 @@ def wanted(message_type: str, chat_type: str, content: str, mentions: list, crea
         incoming = Incoming("", [body["image_key"]] if body.get("image_key") else [])
     else:
         incoming = Incoming("", [], [(body["file_key"], str(body.get("file_name") or "file"))] if body.get("file_key") else [])
-    incoming.text = MENTION.sub("", incoming.text).strip()
+    # Its own mark goes; anyone else's becomes their name, so what was said keeps its sense.
+    incoming.text = MENTION.sub(lambda m: "" if m.group(0).strip() in mine else f"@{mentions.get(m.group(0).strip(), '')} ",
+                                incoming.text).strip()
+    if not called:
+        incoming.addressed, incoming.images, incoming.files = False, [], []
     incoming.images, incoming.files = incoming.images[:MAX_FILES], incoming.files[:MAX_FILES - len(incoming.images[:MAX_FILES])]
     return incoming if incoming.text or incoming.images or incoming.files else None
 
@@ -214,13 +226,17 @@ class Host:
         self.send({"op": "status", "text": text})
 
     def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
-            heard=None) -> Optional[str]:
+            heard=None, addressed: bool = True, sender: str = "") -> Optional[str]:
         """Super Partner's answer; ``heard`` hears it as it is being written ({"progress": ...})."""
         request, done = uuid.uuid4().hex, threading.Event()
         self.pending[request] = [done, None, heard]
         message = {"op": "message", "id": request, "conversation": conversation, "text": text, "origin": origin}
         if attachments:
             message["attachments"] = list(attachments)
+        if not addressed:
+            message["addressed"] = False
+        if sender:
+            message["sender"] = sender
         self.send(message)
         done.wait(REPLY_WAIT)
         return self.pending.pop(request, [None, None, None])[1]
@@ -292,6 +308,17 @@ def main() -> None:
     data = Path(os.environ.get("SP_DATA_DIR", "."))
     seen = Seen(data)
     warned = set()
+
+    def bot_open_id() -> Optional[str]:
+        """This bot's own id, to tell an @ of it from an @ of someone else; None if unknown."""
+        try:
+            request = (lark.BaseRequest.builder().http_method(lark.HttpMethod.GET).uri("/open-apis/bot/v3/info")
+                       .token_types({lark.AccessTokenType.TENANT}).build())
+            response = client.request(request)
+            return (json.loads(response.raw.content).get("bot") or {}).get("open_id") or None
+        except Exception as exc:
+            print(f"读不到机器人自己的 id：{exc}", file=sys.stderr, flush=True)
+            return None
 
     def send_reply(message_id: str, kind: str, content: dict) -> bool:
         request = (ReplyMessageRequest.builder().message_id(message_id)
@@ -406,7 +433,15 @@ def main() -> None:
         (data / relative).write_bytes(response.file.read())
         return relative
 
-    def answer(message_id: str, chat_id: str, incoming: Incoming) -> None:
+    def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "") -> None:
+        if not incoming.addressed:
+            # Not called on: no "typing" until FluidForm decides it is meant for it.
+            typing = Typing(Cards(message_id))
+            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, (),
+                              typing.heard, addressed=False, sender=sender)
+            if result and not typing.finish(result):
+                reply(message_id, result)
+            return
         reaction = working(message_id)
         try:
             names = [download(message_id, key, "image", "image.png") for key in incoming.images]
@@ -416,7 +451,8 @@ def main() -> None:
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
             typing = Typing(Cards(message_id))
-            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept, typing.heard)
+            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept, typing.heard,
+                              sender=sender)
             if result and not typing.finish(result):
                 reply(message_id, result)
             elif not result:
@@ -424,12 +460,29 @@ def main() -> None:
         finally:
             done(message_id, reaction)
 
+    me_id = bot_open_id()
+    members: dict = {}
+
+    def alias(chat_id: str, open_id: str) -> str:
+        """Who said it, as the group's 成员N (Feishu tells only an id; names need another permission)."""
+        known = members.setdefault(chat_id, {})
+        return known.setdefault(open_id, f"成员{len(known) + 1}") if open_id else ""
+
     def on_message(data) -> None:
-        message = data.event.message
-        incoming = wanted(message.message_type or "", message.chat_type or "", message.content or "",
-                          [item.key for item in (message.mentions or []) if item.key], int(message.create_time or 0), started)
+        message, sender = data.event.message, data.event.sender
+        if sender is not None and sender.sender_type not in (None, "user"):
+            return  # other bots (and itself)
+        mentions = {item.key: item.name or "" for item in (message.mentions or []) if item.key}
+        # Which @ is this bot: by its id, or, not knowing it, by Feishu saying the one @-ed is a bot.
+        known = bool(me_id) or any(item.mentioned_type for item in (message.mentions or []))
+        me = frozenset(item.key for item in (message.mentions or []) if item.key and item.id and (
+            item.id.open_id == me_id if me_id else item.mentioned_type == "bot")) if known else None
+        incoming = wanted(message.message_type or "", message.chat_type or "", message.content or "", mentions,
+                          int(message.create_time or 0), started, me)
+        who = alias(message.chat_id, sender.sender_id.open_id if sender and sender.sender_id else "") \
+            if message.chat_type == "group" else ""
         if incoming is not None and seen.first(message.message_id):
-            threading.Thread(target=answer, args=(message.message_id, message.chat_id, incoming), daemon=True).start()
+            threading.Thread(target=answer, args=(message.message_id, message.chat_id, incoming, who), daemon=True).start()
 
     handler = lark.EventDispatcherHandler.builder("", "").register_p2_im_message_receive_v1(on_message).build()
     host.status("正在连接飞书…")
@@ -442,20 +495,26 @@ def check() -> None:
 
     now, ms = time.time(), int(time.time() * 1000)
     text = json.dumps({"text": "@_user_1 你好"})
-    assert wanted("text", "p2p", json.dumps({"text": "你好"}), [], ms, now) == Incoming("你好")
-    assert wanted("text", "group", text, [], ms, now) is None
-    assert wanted("text", "group", text, ["@_user_1"], ms, now) == Incoming("你好")
-    assert wanted("text", "p2p", text, [], int((now - 3600) * 1000), now) is None
+    assert wanted("text", "p2p", json.dumps({"text": "你好"}), {}, ms, now) == Incoming("你好")
+    # In a group: @ it, it is asked; without @ it, the words go on unaddressed (FluidForm decides).
+    assert wanted("text", "group", text, {"@_user_1": "机器人"}, ms, now) == Incoming("你好")
+    assert wanted("text", "group", text, {"@_user_1": "机器人"}, ms, now, frozenset({"@_user_1"})) == Incoming("你好")
+    said = json.dumps({"text": "@_user_2 明天几点开会？"})
+    alone = frozenset()
+    other = Incoming("@张三 明天几点开会？", addressed=False)
+    assert wanted("text", "group", said, {"@_user_2": "张三"}, ms, now, alone) == other
+    assert wanted("text", "group", json.dumps({"text": "大家好"}), {}, ms, now, alone) == Incoming("大家好", addressed=False)
+    assert wanted("image", "group", json.dumps({"image_key": "img_1"}), {}, ms, now, frozenset()) is None
+    assert wanted("text", "p2p", text, {}, int((now - 3600) * 1000), now) is None
     # A picture, a file, and rich text with words and pictures (in a group, @ it in rich text).
-    assert wanted("image", "p2p", json.dumps({"image_key": "img_1"}), [], ms, now) == Incoming("", ["img_1"])
-    assert wanted("image", "group", json.dumps({"image_key": "img_1"}), [], ms, now) is None
+    assert wanted("image", "p2p", json.dumps({"image_key": "img_1"}), {}, ms, now) == Incoming("", ["img_1"])
     sent_file = json.dumps({"file_key": "f_1", "file_name": "报价.pdf"})
-    assert wanted("file", "p2p", sent_file, [], ms, now) == Incoming("", [], [("f_1", "报价.pdf")])
+    assert wanted("file", "p2p", sent_file, {}, ms, now) == Incoming("", [], [("f_1", "报价.pdf")])
     post = {"title": "", "content": [[{"tag": "at", "user_id": "@_user_1"}, {"tag": "text", "text": " 这张图里是什么？"}],
                                      [{"tag": "img", "image_key": "img_2"}]]}
-    assert wanted("post", "group", json.dumps(post), ["@_user_1"], ms, now) == Incoming("这张图里是什么？", ["img_2"])
-    assert wanted("image", "p2p", json.dumps({}), [], ms, now) is None
-    assert wanted("sticker", "p2p", json.dumps({"file_key": "s"}), [], ms, now) is None
+    assert wanted("post", "group", json.dumps(post), {"@_user_1": "机器人"}, ms, now) == Incoming("这张图里是什么？", ["img_2"])
+    assert wanted("image", "p2p", json.dumps({}), {}, ms, now) is None
+    assert wanted("sticker", "p2p", json.dumps({"file_key": "s"}), {}, ms, now) is None
     assert safe_name("../../etc/passwd") == "passwd" and safe_name("a b/截图.png") == "截图.png"
     # Replies are cards; one being written is written in order, the newest piece each time.
     assert card_json("**WAL** 是预写日志")["config"]["summary"]["content"] == "WAL 是预写日志"
