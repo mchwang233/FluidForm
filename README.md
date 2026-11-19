@@ -91,6 +91,34 @@ before use. Skills and work rules then apply to matching later work, and source 
 platform engineer. Learning has its own budget (default $0.50 per task).
 More: [design](docs/design/continuous-improvement.md)
 
+### Capabilities
+
+A task often builds something worth keeping: a client for a service, a converter, a bot. With
+`SUPER_PARTNER_CAPABILITY_PROPOSALS=true` the lead proposes such things when a task succeeds, and
+you keep one from the result page (固化). Capabilities can also be uploaded as packages and
+uninstalled again, without touching Super Partner's source or restarting it
+(`SUPER_PARTNER_CAPABILITY_PACKAGES=true`, off by default):
+
+- **Packages.** A package is a zip with a `capability.json` (id, kind, the hosts it may reach, the
+  secrets it needs, an `entry` for an automation), its code, and optionally a `SKILL.md` and a
+  `requirements.txt`. Upload it on 平台工程师 → 能力. Super Partner builds its own Python
+  environment and runs its check. It is installed switched off. Uploading the same id again
+  upgrades it and keeps its secrets. Uninstalling removes its files, data, state and secrets.
+- **The sandbox.** Packages run in a sandbox of their own. Their folder is read-only, they write
+  only their own data folder, and they cannot see your home folder or Super Partner's data. They
+  have no network but a proxy that reaches only the hosts they declared. Secrets are kept in the
+  keyring and given only to the package that declared them. Enabling one asks you to confirm what
+  it may reach and get.
+- **Automations.** An automation package keeps running in the background and talks to Super Partner
+  in JSON lines. A question someone sends it is answered in a chat. Work it is asked to do becomes a
+  task that waits for your confirmation, and the result goes back to it when the task ends. It has
+  a daily budget (`SUPER_PARTNER_CAPABILITY_DAILY_BUDGET_USD`, default $2) and is restarted if it
+  crashes.
+
+Packages are kept apart from this source, on the `capabilities` branch. The first one there is the
+Feishu bot (`feishu-bot/`).
+More: [capabilities](docs/design/capabilities.md) · [packages](docs/design/capability-packages.md)
+
 ### You
 
 You describe the task, pick an answer where the plan lists open scope choices, and confirm the plan
