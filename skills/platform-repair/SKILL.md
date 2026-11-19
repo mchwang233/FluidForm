@@ -43,12 +43,9 @@ Super Partner gives it to every model that diagnoses or repairs the platform.
      parameter must cross layers, keep it to the call path that needs it.
    If the proper fix needs more than about three modules, fix the defect now with the smallest
    safe change and describe the larger change in the report.
-4. Check, from the narrowest to the widest:
-   - `python -m pytest -q tests/<area>.py`
-   - `python -m pytest -q` (all backend, about 90 s), once at the end; FluidForm runs every
-     check again itself afterwards
-   - only if the frontend changed: `cd frontend && npm test && npm run build`
-   Fix every failure your change causes. A failure that also happens without your change
+4. Check what you changed: `python -m pytest -q tests/<area>.py`. Do not run the whole
+   backend suite or the frontend build: FluidForm runs every check itself afterwards, in a clean
+   sandbox, and gives you any failure to fix. Fix every failure your change causes. A failure that also happens without your change
    (for example a sandbox limit of your own session) is noted in the report, not hidden.
 5. If you moved a responsibility between modules, update `docs/ARCHITECTURE.md`.
 

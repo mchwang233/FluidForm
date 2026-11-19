@@ -106,6 +106,9 @@ class Reviewing:
             return quality.Verdict(passed, "验证通过。" if passed else f"验证发现问题：{problems or '未说明'}", fix=problems)
         if not settings.review_nodes:
             return quality.Verdict(True, "未开启验收。")
+        if node.difficulty == "easy" and not settings.review_easy_steps:
+            # An easy step stands on its own result; another model's review costs more time than it saves.
+            return quality.Verdict(True, "简单步骤，按它自己的结果验收，不另请模型审。")
         summarize = len(text) > settings.handoff_max_chars
         # Even an attempt with fresh edits can depend on code from earlier attempts. Keep it
         # and the task's explicit references in view, including cited verification logs.

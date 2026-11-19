@@ -63,6 +63,44 @@ async def addressed(text: str, context: str, name: str, providers, model: Option
     return bool(match and match.group(1) == "true"), cost
 
 
+QUICK_PROMPT = (
+    "Is this request work that one capable model can do by itself in one go, in a few minutes, with "
+    "a sandbox, the internet and an image tool, without anyone's project files: make one picture, "
+    "write one short document, convert or calculate something, look something up and summarise it? "
+    "Not quick: several deliverables, software to build or change, long research, anything needing "
+    "the user's existing files, or anything unclear.\n"
+    'Answer with only JSON: {{"quick": true or false, "title": "a short title in the request\'s language", '
+    '"capability": "coding | research | chinese | tool_use | structured_output | planning", '
+    '"needs_images": true or false, "acceptance": "how to tell it is done, one sentence"}}\n\nRequest:\n{text}'
+)
+QUICK_CAPABILITIES = {"coding", "research", "chinese", "tool_use", "structured_output", "planning"}
+
+
+async def quick(text: str, providers, model: Optional[ModelProfile]) -> tuple[Optional[dict], float]:
+    """Whether a task is quick (one step, no plan needed), and the step if so; what deciding cost.
+    Anything unclear, or going wrong, means it is planned as usual (None)."""
+    if model is None:
+        return None, 0.0
+    try:
+        result = await asyncio.wait_for(providers.complete(
+            model.id, QUICK_PROMPT.format(text=text[:MAX_REQUEST_CHARS]), effort="low"), TIMEOUT_SECONDS)
+    except Exception as exc:
+        log.warning("judging whether a task is quick with %s failed: %s", model.id, exc)
+        return None, 0.0
+    cost = token_cost(model, result.input_tokens, result.output_tokens, result.cached_input_tokens)
+    found = re.search(r"\{.*\}", result.text or "", re.DOTALL)
+    try:
+        step = json.loads(found.group(0)) if found else None
+    except ValueError:
+        step = None
+    if not isinstance(step, dict) or step.get("quick") is not True:
+        return None, cost
+    return {"title": str(step.get("title") or text.splitlines()[0])[:80].strip() or "任务",
+            "capability": step.get("capability") if step.get("capability") in QUICK_CAPABILITIES else "tool_use",
+            "needs_images": step.get("needs_images") is True,
+            "acceptance": str(step.get("acceptance") or "")[:500]}, cost
+
+
 def read_kind(text: str) -> str:
     """"chat" only when the answer clearly says so."""
     match = KIND.search(text or "")

@@ -22,6 +22,7 @@ import os
 import re
 import shlex
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -236,6 +237,35 @@ def skill_prompt(run: ExecutionRun, name: str, tools: list[str], general, checks
     ])
 
 
+# Checks that passed, by what they depended on (cache_key): (when, the checks), for
+# settings.preflight_cache_minutes.
+PASSED: dict[tuple, tuple[float, list[PreflightCheck]]] = {}
+
+
+def cache_key(run: ExecutionRun) -> tuple:
+    """What a task's checks depend on: its tools, its network, whether it works in a project, the
+    models of its steps, and this machine's recorded environment (changed by a repair)."""
+    record = environment.tools_dir() / "sandbox.json"
+    try:
+        recorded = record.stat().st_mtime_ns
+    except OSError:
+        recorded = 0
+    return (tuple(tool_commands(run)), run.allow_network, bool(run.project_dir),
+            tuple(sorted({node.model_id for node in run.plan.nodes if node.model_id})), recorded)
+
+
+def passed_before(key: tuple) -> Optional[list[PreflightCheck]]:
+    """The checks that passed for the same key within settings.preflight_cache_minutes, or None."""
+    found = PASSED.get(key)
+    if not settings.preflight_cache_minutes or not found:
+        return None
+    at, checks = found
+    if time.monotonic() - at > settings.preflight_cache_minutes * 60:
+        PASSED.pop(key, None)
+        return None
+    return [check.model_copy() for check in checks]
+
+
 def failures(checks: list[PreflightCheck], blocking: bool = True) -> list[PreflightCheck]:
     return [check for check in checks if not check.ok and check.blocking == blocking]
 
@@ -288,7 +318,9 @@ class Preflighting:
         self.emit(run_id, "run.preflight_started")
         workspace = Path(run.project_dir) if run.project_dir else settings.workspace_root / run.folder_id
         workspace.mkdir(parents=True, exist_ok=True)
-        checks = await self._all_checks(run, workspace)
+        key = cache_key(run)
+        cached = passed_before(key)
+        checks = cached if cached is not None else await self._all_checks(run, workspace)
         repaired = bool(run.preflight and run.preflight.repaired)
         engineer_note = ""
         if failures(checks) and not repaired and not overruled:
@@ -304,14 +336,16 @@ class Preflighting:
         prepared = [] if failed and not overruled else await self._prepare_skills(run_id, workspace, checks)
         run = self.db.get_run(run_id)
         run.preflight = Preflight(passed=not failed, checks=checks, repaired=repaired,
-                                  paused=bool(failed) and not overruled, skills=prepared)
+                                  paused=bool(failed) and not overruled, skills=prepared, cached=cached is not None)
+        if not failed and cached is None:
+            PASSED[key] = (time.monotonic(), [check.model_copy() for check in checks])
         if failed and not overruled:
             run.status = RunStatus.PAUSED
             run.error = ("执行前检查没有通过，任务还没开始执行，没有花在步骤上：\n" + describe(failed)
                          + "\n装好或修好后点“继续”会重新检查；确定不需要这些，也可以直接点“继续”，任务会照常执行。"
                          + (f"\n{engineer_note}" if engineer_note else ""))
         self._save(run)
-        self.emit(run_id, "run.preflight", passed=not failed, overruled=bool(failed) and overruled,
+        self.emit(run_id, "run.preflight", passed=not failed, overruled=bool(failed) and overruled, cached=cached is not None,
                   failed=[check.command or check.name for check in failed],
                   warnings=[check.command or check.name for check in failures(checks, blocking=False)])
         if failed and not overruled:

@@ -419,6 +419,8 @@ class Preflight(BaseModel):
     paused: bool = False
     # This machine's skills the steps will be given: prepared now, or kept from earlier tasks.
     skills: list[str] = Field(default_factory=list)
+    # The checks were not run again: an earlier task's passed checks still stood (preflight cache).
+    cached: bool = False
 
 
 class Employee(BaseModel):

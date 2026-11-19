@@ -49,14 +49,12 @@ Super Partner gives it to the platform engineer for every component it plans or 
    with `state.poll()` (the first) or `state.pollAll()` (all); waiting for time does nothing.
 3. Prefer one place for a decision over the same check in several modules, and an existing helper
    over a new parameter threaded through every layer.
-4. Check, from the narrowest to the widest, each once:
-   - `python -m pytest -q tests/<area>.py` while you work;
-   - `python -m pytest -q` (all backend, about 90 s) once at the end;
-   - only if the frontend changed: `cd frontend && npm test && npm run build`, once.
-   Fix every failure your change causes. After you report, FluidForm runs every check again
-   itself, in a clean sandbox, so do not run the full suites over and over. A failure that also
-   happens without your change (your own sandbox's limits: no network, no bwrap inside it) is
-   named in the report, not chased.
+4. Check only what you changed: `python -m pytest -q tests/<area>.py` (and the frontend test
+   file's matching tests, with `node --test --test-name-pattern=...`, if you changed the UI).
+   Do not run the whole backend suite or the frontend build: after you report, FluidForm runs
+   every check itself in a clean sandbox, and if one fails it gives you the output to fix. A
+   failure that also happens without your change (your own sandbox's limits: no network, no
+   bwrap inside it) is named in the report, not chased.
 5. Write the design note: a new feature gets `docs/design/<name>.md`, a change to one gets a
    section in its existing note (为什么, 改动, 测试, 风险, in the style of the notes there).
    Update `docs/ARCHITECTURE.md` for a new module or a moved responsibility.

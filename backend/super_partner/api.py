@@ -58,6 +58,7 @@ from .models import (
     NodeStatus,
     RunStatus,
     SupervisorSession,
+    TaskNode,
     TaskPlan,
 )
 from .outline import INTERNET_NOTE
@@ -640,11 +641,13 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
     if root and root.is_dir() and any(root.iterdir()):
         writer = brief_writer(list(models.values()), configured) if settings.project_brief else None
         brief, brief_cost = await briefing.planning_brief(root, settings.data_dir, providers, writer)
+    session = SupervisorSession()
+    plan = await _quick_plan(body, request, background, configured) if not (parent or project_dir or decided) else None
     try:
-        plan = await autonomous_plan(
+        plan = plan or await autonomous_plan(
             f"{background}\n\n新需求：\n{request}" if background else request, list(models.values()), configured, providers,
             project_context=await asyncio.to_thread(project_context, project_dir) if project_dir else None,
-            session=(session := SupervisorSession()), brief=brief,
+            session=session, brief=brief,
         )
     except ContractError as exc:
         raise HTTPException(422, {"status": "blocked", "reason": str(exc)}) from exc
@@ -670,6 +673,21 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
         raise HTTPException(422, str(exc)) from exc
     plan.estimate = estimate(plan.nodes, body.budget_usd, plan.planning_cost_usd, plan.unsplit_cost())
     return plan, session, attached, project_dir, background, lessons
+
+
+async def _quick_plan(body: CreateTask, request: str, background: Optional[str], configured: set[str]) -> Optional[TaskPlan]:
+    """With settings.quick_tasks, a task one model can do in one go (triage.quick) as a one-step
+    plan, without the lead's planning (minutes saved); None: plan it as usual."""
+    if not settings.quick_tasks:
+        return None
+    step, judged = await triage.quick(body.prompt, providers, brief_writer(list(models.values()), configured))
+    if not step:
+        return None
+    node = TaskNode(id=uuid4().hex[:8], title=step["title"], capability=step["capability"], difficulty="easy",
+                    instructions=f"{background}\n\n新需求：\n{request}" if background else request,
+                    needs_images=step["needs_images"], acceptance_criteria=step["acceptance"])
+    return TaskPlan(summary=step["title"], title=step["title"], nodes=[node], planning_cost_usd=round(judged, 6),
+                    planning_note="一步就能做完：没有排详细计划，直接交给一个模型做")
 
 
 class ChoiceAnswers(BaseModel):

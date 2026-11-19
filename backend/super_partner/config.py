@@ -217,6 +217,15 @@ class Settings(BaseSettings):
     engineer_commit: bool = True
     # Have another model check each node's result against its acceptance criteria.
     review_nodes: bool = True
+    # Steps marked easy are reviewed by another model too; off: they are accepted on their own
+    # result (verification steps and a step's check command still apply).
+    review_easy_steps: bool = True
+    # A task one model can do in one go (triage.quick) gets a one-step plan, without the lead's
+    # planning; its step is easy (see review_easy_steps). Off: every task is planned.
+    quick_tasks: bool = False
+    # A passed check before a task's first step stands this long for the next task with the same
+    # tools, network, models and recorded environment (preflight.py). 0: every task is checked.
+    preflight_cache_minutes: int = Field(default=0, ge=0, le=1440)
     # Accepting each step's result: off, a step that finishes has passed. No reviewer, no declared
     # check or artifact acceptance command, no verification steps sending work back. The lead's
     # final check of the whole result stays (leading._final_review). A step saying it cannot do
