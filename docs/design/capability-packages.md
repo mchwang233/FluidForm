@@ -63,7 +63,11 @@ unpacked and `MAX_PACKAGE_FILES` files.
       A message with neither words nor files, said where it was called on (an @ and nothing
       else), reads "（只 @ 了你，没有别的话）", with what the group said before.
   - **To the automation** (stdin):
-    - `{"re": id, "reply": …}`;
+    - `{"re": id, "reply": …, "files": […]}`: the answer, and the files to send with it (paths in its
+      data folder, `outbox/`, which it removes once sent). A chat with tools (chat-tools.md) makes a
+      picture or a file in its own folder and names it on a `SEND: <name>` line; FluidForm sends
+      only those, from that folder only, at most `MAX_SENT_FILES`, each within the attachment size
+      (`_send_files`), and the chat keeps "（发了：…）" with the answer;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
     - A message may say `"addressed": false` (said where it was not called on: a group message
       without @ it) and `"sender"`. The cheapest model decides whether it is meant for it

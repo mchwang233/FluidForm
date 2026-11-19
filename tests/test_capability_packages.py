@@ -387,6 +387,36 @@ async def test_its_chats_are_told_how_to_talk_there_and_whether_it_is_a_group(mo
     assert capability_packages.chat_guide("other") == "" and capability_packages.chat_guide("../x") == ""
 
 
+async def test_a_chat_sends_the_pictures_it_made_and_only_from_its_own_folder(packages, monkeypatch, tmp_path):
+    api, client, runner, _ = packages
+    triaging(api, monkeypatch, '{"kind": "chat"}')
+    monkeypatch.setattr(settings, "chat_tools", True)
+    outside = tmp_path / "secret.txt"
+    outside.write_text("not for them")
+    prompts = []
+
+    async def converse(session, prompt, timeout=None, spend_ok=None, attachments=(), tools=None):
+        prompts.append(prompt)
+        (tools["folder"] / "cat.png").write_bytes(PNG)
+        session.calls += 1
+        return ProviderResult(f"画好了，给你。\nSEND: cat.png\nSEND: {outside}\nSEND: ../x", 10, 10)
+
+    monkeypatch.setattr(api.providers, "converse", converse)
+    await upload(client, package([{"conversation": "c1", "text": "画一只猫给我"}]))
+    await enable(client)
+    [reply] = await eventually(lambda: lines("replies.jsonl"))
+    # The answer, without its SEND lines, and the picture, in its data folder for it to send.
+    assert reply["reply"] == "画好了，给你。\n\n（发了：cat.png）"
+    [path] = reply["files"]
+    assert path.startswith("outbox/") and (capability_packages.data_folder("fake-bot") / path).read_bytes() == PNG
+    assert "SEND: <its name in your folder>" in prompts[0]
+    # What is outside the chat's folder is not sent, and the log says so.
+    log = "\n".join(runner.get("fake-bot").log)
+    assert "secret.txt" in log and "没发出" in log and "../x" in log
+    chat = api.db.get_run(runner.get("fake-bot").state["chats"]["c1"])
+    assert chat.lead_messages[-1].text == reply["reply"]
+
+
 def test_what_the_group_said_is_kept_bounded():
     kept = capability_runner.keep_heard([f"成员：{n}" * 100 for n in range(50)])
     assert len(kept) <= capability_runner.MAX_HEARD_LINES and sum(map(len, kept)) <= capability_runner.MAX_HEARD_CHARS
@@ -410,7 +440,7 @@ async def test_an_image_goes_to_a_model_that_can_see_it_when_the_chosen_one_cann
     monkeypatch.setitem(api.models, OTHER.id, blind)
     assert (await choose_model(client, OTHER.id)).status_code == 200
     image = files.save("shot.png", PNG)
-    reply, _ = await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
+    reply, _, _ = await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
         conversation="c1", text="看看这个", attachments=[image]), runner.get("fake-bot"))
     assert sent[-1][0] != OTHER.id and sent.attached[-1] == ["shot.png"]
     assert "本次由" in reply
@@ -459,9 +489,10 @@ async def choose_model(client, model_id, capability_id="fake-bot"):
 
 
 async def bot_message(api, runner, text, conversation="c1", capability_id="fake-bot"):
-    return await api.automation_message(capabilities.load(capability_id),
-                                       capability_runner.Asked(conversation=conversation, text=text),
-                                       runner.get(capability_id))
+    reply, cost, _ = await api.automation_message(capabilities.load(capability_id),
+                                                  capability_runner.Asked(conversation=conversation, text=text),
+                                                  runner.get(capability_id))
+    return reply, cost
 
 
 async def test_automation_model_setting_survives_reload_upgrade_and_is_scoped_to_its_capability(model_bot):

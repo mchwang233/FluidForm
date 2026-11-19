@@ -434,6 +434,9 @@ def test_an_automation_chats_lines_for_fluidform_are_kept_from_the_person():
     # A TASK line that cannot be read asks for nothing.
     assert supervisor.split_task('好\nTASK: {"request": ') == ("好", None)
     assert supervisor.split_task('好\nTASK: {"request": "  "}') == ("好", None)
+    assert supervisor.split_sends("给你。\nSEND: `cat.png`\nSEND: 表格.xlsx") == ("给你。", ["cat.png", "表格.xlsx"])
+    assert supervisor.split_sends("没有文件") == ("没有文件", [])
+    assert supervisor.for_person("给你。\nSEND: cat.png") == "给你。"
 
 
 async def test_with_chat_tools_an_api_chat_does_quick_jobs_in_its_own_folder(task_api, monkeypatch, tmp_path):

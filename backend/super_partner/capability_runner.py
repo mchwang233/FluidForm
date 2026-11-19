@@ -9,7 +9,8 @@ Each automation is its package's ``entry`` command, run in the capabilities' san
   folder, which FluidForm takes (copies into its attachments, then removes); with
   ``"addressed": false`` when it was not called on (a group message without @ it), and
   ``"sender"`` naming who said it;
-- it reads ``{"re": id, "reply": ...}``, the answer, and ``{"event": "task_ended", "origin": {...},
+- it reads ``{"re": id, "reply": ..., "files": [...]}``, the answer and the files to send with it
+  (paths in its data folder, which it may remove once sent), and ``{"event": "task_ended", "origin": {...},
   "text": ...}`` when a task it asked for ends. While a chat's answer is being written (an API
   model streams it), ``{"progress": id, "text": ...}`` carries all of it so far, at most every
   ``PROGRESS_SECONDS``; one that does not know it ignores it.
@@ -328,15 +329,17 @@ class Runner:
                               "也可以请主人在 FluidForm 里调高。")
                 await self._send(item, {"re": request, "reply": notice, "over_budget": True})
                 return
+        sent: list[str] = []
         try:
-            reply, cost = await self.handle(capability, asked, item)
+            reply, cost, *more = await self.handle(capability, asked, item)
+            sent = list(more[0]) if more else []
         except Exception as exc:
             log.exception("a message to %s failed", capability.id)
             reply, cost = f"这条没能处理：{str(exc)[:200]}", 0.0
         item.spend(cost)
         item.state["handled"] = int(item.state.get("handled", 0)) + 1
         item.save()
-        await self._send(item, {"re": request, "reply": reply})
+        await self._send(item, {"re": request, "reply": reply, **({"files": sent} if sent else {})})
 
     @staticmethod
     def _progress(item: Automation, request) -> Callable[[str], None]:

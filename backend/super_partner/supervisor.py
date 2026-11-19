@@ -134,7 +134,15 @@ AUTOMATION_WORK = (
 )
 TASK_LINE = re.compile(r"^\s*TASK:\s*(\{.*\})\s*$", re.MULTILINE)
 # Lines an answer ends with for FluidForm, not the person (TASK, ENGINEER): kept from what they see.
-ACTION_LINE = re.compile(r"^\s*(TASK|ENGINEER):", re.MULTILINE)
+ACTION_LINE = re.compile(r"^\s*(TASK|ENGINEER|SEND):", re.MULTILINE)
+# A file an automation chat's answer sends the person, one per line: its name in the chat's folder.
+SEND_LINE = re.compile(r"^\s*SEND:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def split_sends(text: str) -> tuple[str, list[str]]:
+    """An answer without its SEND lines, and the files they name."""
+    names = [name.strip("`'\" ") for name in SEND_LINE.findall(text or "")]
+    return (SEND_LINE.sub("", text or "").strip() if names else text), [name for name in names if name]
 
 
 def split_task(text: str) -> tuple[str, Optional[str]]:
@@ -186,8 +194,11 @@ def chat_tools_note(run: ExecutionRun, model: Optional[ModelProfile]) -> str:
 
     online = (" Its commands can reach the internet (not this machine's services)." if tools["network"]
               else " Its commands have no internet.")
-    bigger = ("ask for it with the TASK line below" if (run.origin or {}).get("capability")
-              else "say so: they can turn this conversation into a task")
+    automation = bool((run.origin or {}).get("capability"))
+    bigger = "ask for it with the TASK line below" if automation else "say so: they can turn this conversation into a task"
+    send = (" To send them a picture or a file you made, save it in your folder and end your answer with "
+            "one line per file, SEND: <its name in your folder> (at most 5; a picture as png or jpg)."
+            if automation else "")
     built = capabilities.section()
     return ("Quick jobs you do yourself, right away, without asking: this overrides \"nothing is run\" "
             f"above. You have tools (Bash, Read, Write, Edit, Glob, Grep, LS) in this chat's own folder, "
@@ -197,7 +208,7 @@ def chat_tools_note(run: ExecutionRun, model: Optional[ModelProfile]) -> str:
             f"{tools['turns']} tool calls and {tools['seconds']} seconds: keep it small, and answer with "
             "what you found. Anything bigger (a program, a document of several parts, the user's own "
             f"project, long research) is a task: {bigger}. Never say you looked something up when you "
-            "did not.\n\n" + (f"{built}\n\n" if built else ""))
+            f"did not.{send}\n\n" + (f"{built}\n\n" if built else ""))
 
 
 def chat_role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:

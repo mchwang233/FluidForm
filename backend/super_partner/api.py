@@ -1540,9 +1540,52 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         text = f"{text}\n\n{notice}"
         automation.note(notice)
     cost = round(latest.actual_cost_usd - before + extra, 6)
+    sent: list[str] = []
     if answer and answer.status == "done":
+        text, names = supervisor.split_sends(text or "")
+        if names:
+            sent = _send_files(capability, automation, latest, names)
+            listed = "、".join(Path(path).name.split("-", 1)[-1] for path in sent)
+            text = f"{text}\n\n（发了：{listed}）".strip() if sent else text
+            _record_answer(latest.id, answer.id, text)
         text = await _automation_task(capability, asked, automation, latest, answer.id, text, origin)
-    return text, cost
+    return text, cost, sent
+
+
+# Files an automation chat's answer may send (SEND lines): how many, each at most the attachment size.
+MAX_SENT_FILES = 5
+
+
+def _send_files(capability: Capability, automation: capability_runner.Automation, chat: ExecutionRun,
+                names: list[str]) -> list[str]:
+    """The files a chat's answer sends (its SEND lines), from the chat's own folder only: copied into
+    the automation's data folder (outbox/), where it reads them; their paths there."""
+    folder = (Path(settings.workspace_root) / chat.folder_id).resolve()
+    outbox = capability_packages.data_folder(capability.id) / "outbox"
+    sent = []
+    for name in names[:MAX_SENT_FILES]:
+        source = Path(name) if Path(name).is_absolute() else folder / name
+        try:
+            if source.is_symlink() or folder not in source.resolve().parents or not source.is_file():
+                raise files.AttachmentError("不是这段聊天文件夹里的文件")
+            if source.stat().st_size > files.MAX_ATTACHMENT_BYTES:
+                raise files.AttachmentError(f"超过 {files.MAX_ATTACHMENT_BYTES // 1024 // 1024} MB")
+            outbox.mkdir(parents=True, exist_ok=True)
+            target = outbox / f"{uuid4().hex[:8]}-{files._safe_name(source.name)}"
+            shutil.copyfile(source, target)
+            sent.append(str(target.relative_to(outbox.parent)))
+        except (OSError, files.AttachmentError) as exc:
+            automation.note(f"没发出 {name[:80]}：{exc}")
+    return sent
+
+
+def _record_answer(chat_id: str, answer_id: str, text: str) -> None:
+    """A chat keeps an answer as the person got it (without the lines meant for FluidForm)."""
+    record = get_task(chat_id)
+    for item in record.lead_messages:
+        if item.id == answer_id:
+            item.text = text
+    db.save_run(record)
 
 
 async def _automation_task(capability: Capability, asked: capability_runner.Asked, automation: capability_runner.Automation,
@@ -1573,11 +1616,7 @@ async def _automation_task(capability: Capability, asked: capability_runner.Aske
             shown = (f"{shown}\n\n我在 FluidForm 里排好了计划「{_task_name(latest)}」{guess}，"
                      "等主人确认后开工，做完在这里告诉你。").strip()
             automation.note(f"排了任务「{_task_name(latest)}」")
-    record = get_task(chat.id)
-    for item in record.lead_messages:
-        if item.id == answer_id:
-            item.text = shown
-    db.save_run(record)
+    _record_answer(chat.id, answer_id, shown)
     return shown
 
 
