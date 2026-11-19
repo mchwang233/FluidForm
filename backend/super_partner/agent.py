@@ -406,6 +406,16 @@ def project_map(root: Path, summaries: dict[str, str] | None = None) -> str:
     return "Files in the working directory (hidden folders not listed):\n" + "\n".join(lines)
 
 
+def hide_homes() -> list[str]:
+    """bwrap arguments hiding the user's home (keys, tokens, other projects). HOME can be
+    overridden by a launcher or validation environment, so the account's real home is hidden too."""
+    import pwd
+
+    homes = {Path.home().resolve(), Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()}
+    return [arg for home in sorted(homes, key=lambda path: len(path.parts))
+            if home != Path("/") and home.is_dir() for arg in ("--tmpfs", str(home))]
+
+
 class Workspace:
     """Carries out tool calls inside one directory, for one attempt of a step."""
 
@@ -770,13 +780,7 @@ class Workspace:
                 + f'eval "$2"\n__sp_status=$?\npwd > {cwd_file} 2>/dev/null\nexit $__sp_status\n')
 
     def sandbox_args(self, command: str, ports_dir: str | None = None, ports: tuple[int, ...] | list[int] = ()) -> list[str]:
-        import pwd
-
-        # HOME can be overridden by a launcher or validation environment. Always hide
-        # the account's real home too, otherwise its credentials remain readable.
-        homes = {Path.home().resolve(), Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()}
-        hidden = [arg for home in sorted(homes, key=lambda path: len(path.parts))
-                  if home != Path("/") and home.is_dir() for arg in ("--tmpfs", str(home))]
+        hidden = hide_homes()
         env = {"PATH": "/usr/local/bin:/usr/bin:/bin"}
         env.update({name: os.environ[name] for name in settings.sandbox_env if name in os.environ})
         if self.network:

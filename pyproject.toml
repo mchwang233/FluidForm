@@ -22,8 +22,6 @@ Homepage = "https://github.com/mchwang233/super-partner"
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<1", "ruff>=0.8,<1"]
-# The Feishu bot's long connection (feishu.py); without it the bot says to install it.
-feishu = ["lark-oapi>=1.8,<2"]
 
 [project.scripts]
 super-partner = "super_partner.cli:app"

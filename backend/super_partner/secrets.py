@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -98,16 +99,17 @@ def _change_keyring(action: str) -> int:
     return 0
 
 
-# Secrets only Super Partner itself reads (the Feishu bot's app credentials, feishu.py): kept in
-# the keyring and never put in the environment, which the CLIs that steps run inherit.
-PRIVATE_SECRETS = ("feishu_app_id", "feishu_app_secret")
+# Secrets only Super Partner itself reads and hands to one capability (capability_packages.py),
+# named capability/<id>/<VARIABLE>: kept in the keyring and never put in this process's
+# environment, which the CLIs that steps run inherit.
+PRIVATE_SECRET = re.compile(r"capability/[a-z0-9][a-z0-9-]*/[A-Za-z_][A-Za-z0-9_]*")
 # Kept here for this session when the keyring cannot be used.
 _session_secrets: dict[str, str] = {}
 
 
 def set_secret(name: str, value: str) -> str:
-    """Store one of PRIVATE_SECRETS; returns "keyring", or "session" if only kept in memory."""
-    if name not in PRIVATE_SECRETS:
+    """Store a private secret; returns "keyring", or "session" if only kept in memory."""
+    if not PRIVATE_SECRET.fullmatch(name):
         raise ValueError(f"Unsupported secret: {name}")
     _session_secrets[name] = value
     try:
@@ -119,7 +121,7 @@ def set_secret(name: str, value: str) -> str:
 
 
 def delete_secret(name: str) -> None:
-    if name not in PRIVATE_SECRETS:
+    if not PRIVATE_SECRET.fullmatch(name):
         raise ValueError(f"Unsupported secret: {name}")
     _session_secrets.pop(name, None)
     with contextlib.suppress(KeyringUnavailable):
@@ -127,9 +129,9 @@ def delete_secret(name: str) -> None:
 
 
 def get_secret(name: str) -> Optional[str]:
-    """One of PRIVATE_SECRETS, from this session or the keyring (read in a child process, so a
-    locked keyring cannot hang the service); None when it is not stored or cannot be read."""
-    if name not in PRIVATE_SECRETS:
+    """A private secret, from this session or the keyring (read in a child process, so a locked
+    keyring cannot hang the service); None when it is not stored or cannot be read."""
+    if not PRIVATE_SECRET.fullmatch(name):
         raise ValueError(f"Unsupported secret: {name}")
     if name in _session_secrets:
         return _session_secrets[name]

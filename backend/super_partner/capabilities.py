@@ -198,6 +198,8 @@ def section(capabilities: Optional[list[Capability]] = None) -> str:
               "(run it from its folder; it is read-only, copy it to change it):")]
     for item in tools:
         needs = f" Needs environment variables: {', '.join(item.secrets)}." if item.secrets else ""
+        if (root() / item.id / ".venv").is_dir():
+            needs += f" Run its Python code with {root() / item.id / '.venv/bin/python'}, which has its packages."
         lines.append(f"- {item.name} ({root() / item.id}): {item.summary} Usage: {item.usage}{needs} "
                      f"Read its {MANUAL} there first.")
     return "\n".join(lines)

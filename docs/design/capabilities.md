@@ -10,7 +10,7 @@ can keep running.
 | Kind | Example | Used by |
 |---|---|---|
 | tool | send a Feishu message, read a Feishu doc | later steps, told how to run it |
-| automation | auto-reply to Feishu messages, a morning digest | a background runner (step 2) |
+| automation | auto-reply to Feishu messages, a morning digest | the runner (capability-packages.md) |
 
 A capability is **working code and its manual**: the files the task built, and a `SKILL.md` beside
 them in the skills' own format (用法, 说明, 代码, 检查, 需要). A skill alone (`skills/`) is only a manual.
@@ -34,11 +34,10 @@ them in the skills' own format (用法, 说明, 代码, 检查, 需要). A skill
 
 ## Not in this step
 
-- Running automations (a supervised background runner: triggers such as a schedule or a Feishu
-  long connection, its own budget, logs and switch). Automations can be solidified and listed;
-  they say they wait for the runner.
-- Secrets: a capability names the variables it needs; giving them to it (from the keyring, per
-  capability) comes with the runner.
+- Running automations: done by capability packages (docs/design/capability-packages.md). A
+  capability solidified from a task has no entry and does not run; made into a package and
+  uploaded, it can.
+- Secrets for tools that steps run: a tool names the variables it needs; steps are not given them.
 
 ## 风险
 

@@ -723,6 +723,11 @@ class Capability(CapabilityCard):
     check_ok: Optional[bool] = None
     check_output: str = ""
     created_at: datetime = Field(default_factory=utcnow)
+    # "task": solidified from a task; "upload": installed from a package (capability_packages.py).
+    source: str = "task"
+    version: str = ""
+    # An automation package: the command that runs it (capability_runner.py).
+    entry: str = ""
 
 
 class ExecutionRun(BaseModel):
@@ -735,8 +740,8 @@ class ExecutionRun(BaseModel):
     kind: str = "task"
     # Super Partner told chat from task itself (triage.py), rather than the user choosing.
     auto_routed: bool = False
-    # Where the request came from when not this page: {"channel": "feishu", "chat_id", "message_id"}
-    # (feishu.py); its result is sent back there when the task ends.
+    # Where the request came from when not this page: {"capability": id, ...what the automation
+    # needs to answer} (capability_runner.py); its result is sent back there when the task ends.
     origin: Optional[dict] = None
     # What the lead found reusable when the task succeeded (capabilities.py).
     capability_proposals: list[CapabilityProposal] = Field(default_factory=list)

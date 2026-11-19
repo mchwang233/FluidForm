@@ -115,7 +115,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     records, models, providers, actions: [], resumes: [], publishes: [], uploads: [], attachmentDeletes: [], taskBodies: [], diagnosisReplies: [], leadMessages: [], followups: [], network: [],
     deletes: [], cancels: [], confirms: [], taskPosts: 0, quota: [], quotaResets: [], nativePicker: true, pickerStarts: [], nativeConfirms: 0, holdNextRead: false, releaseRead: null,
   };
-  const json = value => new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+  const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
   state.deleteResponse = async id => {
     state.records = state.records.filter(run => run.id !== id);
     return new Response(null, { status: 204 });
@@ -146,11 +146,28 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     if (path === "/api/skills") return json(state.skills ?? []);
     if (path.startsWith("/api/capabilities")) {
       const items = state.capabilities ??= [];
-      const id = decodeURIComponent(path.split("/")[3] ?? "");
-      (state.capabilityCalls ??= []).push([options.method ?? "GET", id]);
+      const [, , , raw, sub] = path.split("/");
+      const id = decodeURIComponent(raw ?? "");
+      const body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
+      (state.capabilityCalls ??= []).push([options.method ?? "GET", id, sub, body]);
+      const runtime = state.capabilityRuntime ??= { available: true, missing: "", capabilities: {} };
+      if (id === "runtime") return json(runtime);
+      if (id === "upload") {
+        if (state.uploadPackage) items.unshift(state.uploadPackage);
+        return json(state.uploadPackage, 201);
+      }
+      if (sub === "secrets") {
+        const entry = runtime.capabilities[id];
+        for (const name of Object.keys(body.values)) entry.secrets[name] = true;
+        return json({ secrets: entry.secrets });
+      }
+      if (sub === "budget") { runtime.capabilities[id].daily_budget_usd = body.daily_budget_usd; return json(runtime.capabilities[id]); }
       if (options.method === "PATCH") {
-        const { enabled } = JSON.parse(options.body);
+        const { enabled, confirmed } = body;
+        const current = items.find(item => item.id === id);
+        if (enabled && current.source === "upload" && !confirmed) return json({ detail: "要先确认" }, 409);
         state.capabilities = items.map(item => item.id === id ? { ...item, status: enabled ? "active" : "disabled" } : item);
+        if (current.source === "upload" && current.kind === "automation") runtime.capabilities[id].status = enabled ? "running" : "off";
         return json(state.capabilities.find(item => item.id === id));
       }
       if (options.method === "DELETE") { state.capabilities = items.filter(item => item.id !== id); return new Response(null, { status: 204 }); }
@@ -378,20 +395,6 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       const body = JSON.parse(options.body);
       (state.modelToggles ??= []).push(body);
       return json({ ...state.models.find(model => model.id === body.model_id), enabled: body.enabled });
-    }
-    if (path.startsWith("/api/feishu")) {
-      const feishu = state.feishu ??= { available: true, installed: true, configured: false, enabled: false, status: "off", error: "",
-        daily_budget_usd: 2, spent_today_usd: 0.12, handled: 3, conversations: 1 };
-      const body = options.body ? JSON.parse(options.body) : {};
-      (state.feishuCalls ??= []).push({ path, method: options.method ?? "GET", body });
-      if (path === "/api/feishu/credentials" && options.method === "PUT") feishu.configured = true;
-      if (path === "/api/feishu/credentials" && options.method === "DELETE") { feishu.configured = false; feishu.enabled = false; return new Response(null, { status: 204 }); }
-      if (path === "/api/feishu" && options.method === "PUT") {
-        if (body.enabled && !feishu.configured) return json({ detail: "先填好 App ID 和 App Secret。" }, 409);
-        if (body.enabled !== undefined) { feishu.enabled = body.enabled; feishu.status = body.enabled ? "connected" : "off"; }
-        if (body.daily_budget_usd !== undefined) feishu.daily_budget_usd = body.daily_budget_usd;
-      }
-      return json({ ...feishu });
     }
     if (path === "/api/models/usage") return json({ days: 30, models: state.modelUsage ?? {} });
     if (path === "/api/models/sync") return json(state.catalogSync ?? { last_checked_at: null, providers: [] });
@@ -825,37 +828,69 @@ test("the 模型 page lists models by what they are doing for you, and the chose
   assert.equal(page.querySelectorAll(".models-row").length, 1);
 });
 
-test("设置 → 飞书机器人 keeps its credentials, switches the bot and sets its daily budget", async t => {
-  const { state, window, document, click, act } = await setup(t, [], [], { openComposer: false });
+test("a capability package is uploaded, given its secrets, enabled after confirming what it reaches, and uninstalled", async t => {
+  const { state, window, document, button, click, act } = await setup(t, [], [], { openComposer: false });
   const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   const type = async (input, value) => act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
-  await click([...document.querySelectorAll(".settings-link")].find(node => node.textContent === "飞书机器人"));
+  const bot = { name: "飞书机器人", kind: "automation", summary: "私聊或 @ 它", usage: "", files: ["bot.py"], check: "", secrets: ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
+    domains: ["*.feishu.cn"], id: "feishu-bot", status: "disabled", source: "upload", version: "1.0.0", entry: "python bot.py", check_output: "", created_at: "2026-11-19T08:00:00Z" };
+  state.uploadPackage = bot;
+  state.capabilityRuntime = { available: true, missing: "", capabilities: { "feishu-bot": { secrets: { FEISHU_APP_ID: false, FEISHU_APP_SECRET: false }, status: "off", text: "", error: "",
+    log: ["08:00:01 启动"], daily_budget_usd: 2, spent_today_usd: 0.12, handled: 3, conversations: 1 } } };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await settle();
-  const panel = () => document.querySelector('[role="dialog"][aria-label="飞书机器人"]');
-  assert.match(panel().textContent, /私聊它，或在群里 @ 它.*没开.*今天花了 \$0\.12 · 已回 3 条/s);
-  // Not set up: it cannot be switched on yet.
-  assert.equal(panel().querySelector('[role="switch"]').disabled, true);
-  const [appId, secret] = panel().querySelectorAll(".feishu-form input");
+  await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head")));
+  const shelf = () => document.querySelector(".capability-shelf");
+  // Upload: the zip goes as the raw body.
+  const picker = shelf().querySelector('input[type="file"]');
+  const zip = new window.File(["PK"], "feishu-bot.zip", { type: "application/zip" });
+  Object.defineProperty(picker, "files", { value: [zip], configurable: true });
+  await act(async () => picker.dispatchEvent(new window.Event("change", { bubbles: true })));
+  await settle();
+  const uploaded = state.capabilityCalls.find(call => call[1] === "upload");
+  assert.equal(uploaded[0], "POST");
+  assert.equal(uploaded[3], zip);
+  const card = () => shelf().querySelector(".capability");
+  assert.match(card().textContent, /飞书机器人.*自动化 · 能力包 v1\.0\.0.*已停用.*没运行.*今天花了 \$0\.12 · 已回 3 条/s);
+  // Enabling waits for its secrets.
+  await click(button("启用", card()));
+  assert.match(card().querySelector('[aria-label="确认启用"]').textContent, /先在下面填好 FEISHU_APP_ID、FEISHU_APP_SECRET/);
+  assert.equal(button("确认启用", card()).disabled, true);
+  await click(button("取消", card()));
+  // Its secrets: password fields, sent only when filled.
+  const [appId, secret] = card().querySelectorAll(".capability-secrets input");
   assert.equal(secret.type, "password");
-  await type(appId, "cli_a1b2c3");
+  assert.equal(appId.placeholder, "还没填");
+  await type(appId, "cli_a1b2");
   await type(secret, "s3cr3t-value");
-  await act(async () => panel().querySelector(".feishu-form").requestSubmit());
+  await act(async () => card().querySelector(".capability-secrets").requestSubmit());
   await settle();
-  assert.deepEqual(state.feishuCalls.find(call => call.path === "/api/feishu/credentials").body, { app_id: "cli_a1b2c3", app_secret: "s3cr3t-value" });
-  assert.equal(panel().querySelector(".feishu-form input").value, "");
-  await click(panel().querySelector('[role="switch"]'));
-  assert.match(panel().textContent, /已连接/);
-  const budget = panel().querySelector('[aria-label="每天最多花（美元）"]');
+  assert.deepEqual(state.capabilityCalls.find(call => call[2] === "secrets")[3], { values: { FEISHU_APP_ID: "cli_a1b2", FEISHU_APP_SECRET: "s3cr3t-value" } });
+  assert.equal(card().querySelector(".capability-secrets input").placeholder, "已保存，要换才填");
+  // Enabling asks first, showing what it may reach and get.
+  await click(button("启用", card()));
+  const confirm = card().querySelector('[aria-label="确认启用"]');
+  assert.match(confirm.textContent, /能访问：\*\.feishu\.cn（只有这些）.*FEISHU_APP_ID、FEISHU_APP_SECRET.*只能写它自己的数据文件夹/s);
+  assert.equal(state.capabilities[0].status, "disabled");
+  await click(button("确认启用", confirm));
+  await settle();
+  assert.deepEqual(state.capabilityCalls.find(call => call[0] === "PATCH")[3], { enabled: true, confirmed: true });
+  assert.match(card().textContent, /可用.*运行中/s);
+  assert.equal(card().querySelector('[aria-label="确认启用"]'), null);
+  // Its daily budget.
+  const budget = card().querySelector('[aria-label="每天最多花（美元）"]');
   await type(budget, "5");
-  await act(async () => budget.dispatchEvent(new window.FocusEvent("blur", { bubbles: false })));
   await act(async () => budget.dispatchEvent(new window.Event("focusout", { bubbles: true })));
   await settle();
-  assert.ok(state.feishuCalls.some(call => call.method === "PUT" && call.body.daily_budget_usd === 5));
-  await click(panel().querySelector('[aria-label="关闭"]'));
-  assert.equal(panel(), null);
+  assert.ok(state.capabilityCalls.some(call => call[2] === "budget" && call[3].daily_budget_usd === 5));
+  // Uninstalled.
+  await click(button("卸载", card()));
+  await click(button("确认卸载", card()));
+  await settle();
+  assert.deepEqual(state.capabilities, []);
 });
 
 test("a plan made in parts shows its major parts as stages; each opens in place, or all at once", async t => {
@@ -2350,7 +2385,7 @@ test("the platform engineer page lists the capabilities on this machine, to swit
   const shelf = document.querySelector(".capability-shelf");
   const [send, reply] = shelf.querySelectorAll(".capability");
   assert.match(send.textContent, /飞书发消息.*工具.*可用.*python send\.py.*代码.*feishu.*FEISHU_APP_ID.*open\.feishu\.cn.*接飞书.*说明书（SKILL\.md）.*群 ID 在飞书群设置里/s);
-  assert.match(reply.textContent, /飞书自动回复.*自动化.*检查未通过.*后台运行器/s);
+  assert.match(reply.textContent, /飞书自动回复.*自动化.*检查未通过.*没有入口.*能力包/s);
   assert.equal(button("启用", reply), undefined);
   const first = () => document.querySelector(".capability-shelf .capability");
   await click(button("停用", send));

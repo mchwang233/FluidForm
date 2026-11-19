@@ -1678,25 +1678,30 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 .event-fold>details>summary:hover{color:var(--text)}
 .event-fold .event-log{margin:7px 0 2px;border-left-style:dashed}
 
-/* 设置 → 飞书机器人 (feishu.tsx). */
-.feishu-panel{width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow-y:auto;box-sizing:border-box;padding:22px 24px;border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:0 30px 100px light-dark(#1114182e,#000)}
-.feishu-head{display:flex;align-items:center;justify-content:space-between}
-.feishu-head h3{margin:0;font:600 18px var(--font);color:var(--text)}
-.feishu-lead{margin:10px 0 0;font-size:13px;line-height:1.6;color:var(--muted)}
-.feishu-state{display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 14px;border:1px solid var(--line-soft);border-radius:12px}
-.feishu-state .feishu-counts{flex:1;min-width:0;font-size:12.5px;color:var(--faint)}
-.feishu-note{margin:12px 0 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
-.feishu-note code{font-size:12px}
-.feishu-form{display:grid;gap:10px;margin-top:16px;padding:0;border:0;border-radius:0;background:none;box-shadow:none}
-.feishu-form:focus-within{border:0;box-shadow:none}
-.feishu-form label,.feishu-budget{display:grid;gap:5px;font-size:12.5px;color:var(--muted)}
-.feishu-form input,.feishu-budget input{height:34px;box-sizing:border-box;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);font-size:13px}
-.feishu-form input:focus,.feishu-budget input:focus,.feishu-form input:focus-visible,.feishu-budget input:focus-visible{outline:none;border-color:light-dark(#cfcfd4,#3a3a40)}
-.feishu-form-bar{display:flex;align-items:center;gap:12px}
-.feishu-form-bar small{flex:1;font-size:12px;color:var(--faint)}
-.feishu-form-bar .primary{padding:7px 16px;border-radius:999px;font-size:12.5px}
-.feishu-budget{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:16px}
-.feishu-budget input{width:90px}
-.feishu-budget small{flex-basis:100%;font-size:12px;color:var(--faint)}
-.feishu-howto ol{margin:4px 0 8px;padding-left:20px;font-size:12.5px;line-height:1.7;color:var(--muted)}
-.feishu-panel .error{margin:10px 0 0}
+/* 能力包 (capabilities.tsx, docs/design/capability-packages.md). */
+.capability-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.capability-toolbar button{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;font-size:12.5px}
+.capability-toolbar small{flex:1;min-width:200px;font-size:12px;color:var(--faint)}
+.capability-toolbar code{font-size:11.5px}
+.capability-confirm{margin:10px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)}
+.capability-confirm p{margin:0!important;color:var(--text)!important}
+.capability-confirm ul{margin:6px 0 10px;padding-left:18px;font-size:12.5px;line-height:1.7;color:var(--muted)}
+.capability-confirm .capability-actions{justify-content:flex-end}
+.capability-package{display:grid;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.capability-run{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.capability-run-text{color:var(--muted)}
+.capability-run-counts{margin-left:auto;color:var(--faint)}
+.capability-package .error{margin:0}
+.capability-secrets{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none}
+.capability-secrets:focus-within{border:0;box-shadow:none}
+.capability-secrets label,.capability-budget{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.capability-secrets input,.capability-budget input{height:32px;box-sizing:border-box;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:13px}
+.capability-secrets input:focus,.capability-secrets input:focus-visible,.capability-budget input:focus,.capability-budget input:focus-visible{outline:none;border-color:light-dark(#cfcfd4,#3a3a40)}
+.capability-secrets-bar{grid-column:1/-1;display:flex;align-items:center;gap:12px}
+.capability-secrets-bar small{flex:1;font-size:12px;color:var(--faint)}
+.capability-secrets-bar .primary{padding:6px 16px;border-radius:999px;font-size:12.5px}
+.capability-budget{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.capability-budget input{width:86px}
+.capability-budget small{flex-basis:100%;font-size:12px;color:var(--faint)}
+.capability-package .capability-check{margin:0}
+.capability-confirm .capability-confirm-missing{margin:0 0 8px!important;font-size:12.5px!important;color:var(--danger)!important}

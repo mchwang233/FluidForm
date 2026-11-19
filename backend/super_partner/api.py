@@ -22,8 +22,10 @@ from . import attachments as files
 from . import (
     briefing,
     capabilities,
+    capability_packages,
+    capability_runner,
+    capability_sandbox,
     cli_quota,
-    feishu,
     folders,
     learning,
     publish,
@@ -167,10 +169,9 @@ async def lifespan(_: FastAPI):
     executor.restore_platform()
     executor.restore_engineer()
     executor.restore_learning()
-    # The Feishu bot, when switched on: tasks asked for there hear how they ended.
-    executor.end_listeners.append(feishu_task_ended)
-    if feishu_bot.state["enabled"]:
-        feishu_bot.start(asyncio.get_running_loop())
+    # Automation packages, when switched on: tasks asked for through them hear how they ended.
+    executor.end_listeners.append(automation_task_ended)
+    start_automations()
     # Keys saved in a keyring that was locked at startup: load them once it is unlocked.
     keys = asyncio.create_task(keep_loading_keys(
         lambda loaded: [providers.quota.clear_provider(item) for item in loaded]))
@@ -181,7 +182,7 @@ async def lifespan(_: FastAPI):
     finally:
         keys.cancel()
         usage.cancel()
-        feishu_bot.stop()
+        await runner.stop_all()
         await executor.shutdown()
         await catalog_sync.close()
         await providers.client.aclose()
@@ -1372,55 +1373,58 @@ def list_skills():
             for item in skills.library()]
 
 
-# ---- The Feishu bot (feishu.py, docs/design/feishu.md) ----
+# ---- Automations: what someone asks an automation package (capability_runner.py) ----
 
-# How a task asked for in Feishu ended, as Feishu is told.
-FEISHU_ENDED = {"run.succeeded": "做完了", "run.incomplete": "只做完了一部分", "run.failed": "没能做完",
-                "run.cancelled": "已取消"}
+# How a task asked for through an automation ended, as the automation is told.
+TASK_ENDED = {"run.succeeded": "做完了", "run.incomplete": "只做完了一部分", "run.failed": "没能做完",
+              "run.cancelled": "已取消"}
 
 
-def _feishu_name(run: ExecutionRun) -> str:
+def _task_name(run: ExecutionRun) -> str:
     return run.plan.title or run.plan.summary[:40]
 
 
-async def feishu_message(message: feishu.Message) -> tuple[Optional[str], float]:
-    """What a Feishu message becomes, decided as 新建's 自动 decides (triage.classify): a question is
-    answered by the Feishu conversation's own chat; work is planned as a task that waits for the
-    owner's confirmation, and Feishu is told. Returns the reply and what it cost."""
+async def automation_message(capability: Capability, asked: capability_runner.Asked,
+                             automation: capability_runner.Automation) -> tuple[Optional[str], float]:
+    """What a message to an automation becomes, decided as 新建's 自动 decides (triage.classify): a
+    question is answered by the conversation's own chat; work is planned as a task that waits for
+    the owner's confirmation. Returns the reply and what it cost."""
     configured = providers.configured_models(list(models))
-    kind, spent = await triage.classify(message.text, providers, brief_writer(list(models.values()), configured))
-    origin = {"channel": "feishu", "chat_id": message.chat_id, "message_id": message.message_id}
-    if kind == "task" and len(message.text) >= 3:
-        task = await _new_task(CreateTask(prompt=message.text))
+    kind, spent = await triage.classify(asked.text, providers, brief_writer(list(models.values()), configured))
+    origin = {**asked.origin, "capability": capability.id}
+    if kind == "task" and len(asked.text) >= 3:
+        task = await _new_task(CreateTask(prompt=asked.text))
         latest = get_task(task.id)
         latest.origin, latest.auto_routed = origin, True
         latest.actual_cost_usd = round(latest.actual_cost_usd + spent, 6)
         db.save_run(latest)
         estimate = latest.plan.estimate
         guess = f"，预计 ${estimate.low_usd:.2f}–${estimate.high_usd:.2f}" if estimate else ""
-        reply = (f"这件事要动手做。我在搭子里排好了计划「{_feishu_name(latest)}」{guess}，"
+        reply = (f"这件事要动手做。我在搭子里排好了计划「{_task_name(latest)}」{guess}，"
                  "等主人确认后开工，做完在这里告诉你。")
         return reply, latest.actual_cost_usd
-    # A question: the Feishu conversation goes on in one chat, which its first message started.
-    known = feishu_bot.state["chats"].get(message.chat_id)
+    # A question: the conversation goes on in one chat, which its first message started.
+    known = automation.state["chats"].get(asked.conversation) if asked.conversation else None
     run = db.get_run(known) if known else None
     if run is None or run.kind != "chat":
-        run = _start_chat(message.text, max(feishu_bot.remaining(), 0.01), True, None, None, auto_routed=True, spent=spent)
+        run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, None, auto_routed=True, spent=spent)
         latest = get_task(run.id)
-        latest.plan.title = "飞书 · " + message.text.splitlines()[0][:CHAT_TITLE_CHARS - 5]
+        prefix = f"{capability.name} · "
+        latest.plan.title = prefix + asked.text.splitlines()[0][:max(CHAT_TITLE_CHARS - len(prefix), 10)]
         latest.origin = origin
         db.save_run(latest)
-        feishu_bot.state["chats"][message.chat_id] = run.id
-        feishu_bot.save()
+        if asked.conversation:
+            automation.state["chats"][asked.conversation] = run.id
+            automation.save()
         before, extra = 0.0, 0.0
     else:
         async with executor.locks.setdefault(run.id, asyncio.Lock()):
             latest = get_task(run.id)
-            # The chat may spend what is left of the bot's day.
-            latest.budget_usd = round(latest.actual_cost_usd + max(feishu_bot.remaining(), 0.01), 6)
+            # The chat may spend what is left of the automation's day.
+            latest.budget_usd = round(latest.actual_cost_usd + max(automation.remaining(), 0.01), 6)
             db.save_run(latest)
         before, extra = latest.actual_cost_usd, spent
-        while not executor.start_lead_chat(run.id, message.text):
+        while not executor.start_lead_chat(run.id, asked.text):
             with contextlib.suppress(Exception):
                 await executor.lead_tasks[run.id]
     with contextlib.suppress(Exception):
@@ -1430,76 +1434,29 @@ async def feishu_message(message: feishu.Message) -> tuple[Optional[str], float]
     return (answer.text if answer else None), round(latest.actual_cost_usd - before + extra, 6)
 
 
-feishu_bot = feishu.Bot(feishu_message)
+runner = capability_runner.Runner(automation_message)
 
 
-def feishu_task_ended(run_id: str, kind: str) -> None:
-    """A task asked for in Feishu has ended: its result goes back to the message that asked."""
+def automation_task_ended(run_id: str, kind: str) -> None:
+    """A task an automation asked for has ended: the automation hears how, with its origin."""
     run = db.get_run(run_id)
-    if not run or run.kind == "chat" or not run.origin or run.origin.get("channel") != "feishu":
+    if not run or run.kind == "chat" or not run.origin or not run.origin.get("capability"):
         return
-    text = f"「{_feishu_name(run)}」{FEISHU_ENDED.get(kind, '结束了')}。"
+    text = f"「{_task_name(run)}」{TASK_ENDED.get(kind, '结束了')}。"
     if body := (run.final_result or run.error or "").strip():
         text += "\n\n" + body
     with contextlib.suppress(RuntimeError):  # no loop: nothing to send from
-        asyncio.get_running_loop().create_task(feishu_bot.reply(run.origin["message_id"], text))
+        runner.notify(run.origin["capability"], {"event": "task_ended", "origin": run.origin, "outcome": kind,
+                                                 "title": _task_name(run), "text": text})
 
 
-class FeishuSettings(BaseModel):
-    enabled: Optional[bool] = None
-    daily_budget_usd: Optional[float] = Field(default=None, ge=0, le=1000)
-
-
-class FeishuCredentials(BaseModel):
-    app_id: str = Field(min_length=4, max_length=200)
-    app_secret: str = Field(min_length=8, max_length=500)
-
-
-@app.get("/api/feishu")
-def feishu_status():
-    return feishu_bot.public()
-
-
-@app.put("/api/feishu")
-async def feishu_settings(body: FeishuSettings):
-    """Switch the bot on or off, or change what it may spend a day."""
-    if body.enabled:
-        if not settings.feishu_bot:
-            raise HTTPException(409, "本机还没开启飞书机器人：在 .env 里设 SUPER_PARTNER_FEISHU_BOT=true 后重启。")
-        if not feishu.installed():
-            raise HTTPException(409, "还没安装飞书 SDK：pip install 'super-partner[feishu]'。")
-        if not feishu.configured():
-            raise HTTPException(409, "先填好 App ID 和 App Secret。")
-    if body.daily_budget_usd is not None:
-        feishu_bot.state["daily_budget_usd"] = body.daily_budget_usd
-    if body.enabled is not None:
-        feishu_bot.state["enabled"] = body.enabled
-    feishu_bot.save()
-    if body.enabled:
-        feishu_bot.start(asyncio.get_running_loop())
-    elif body.enabled is False:
-        feishu_bot.stop()
-    return feishu_bot.public()
-
-
-@app.put("/api/feishu/credentials")
-async def feishu_credentials(body: FeishuCredentials):
-    """Keep the app's ID and secret in the keyring (never in a file); a running bot reconnects with them."""
-    stored = secret_store.set_secret(feishu.APP_ID, body.app_id.strip())
-    secret_store.set_secret(feishu.APP_SECRET, body.app_secret.strip())
-    if feishu_bot.status != "off":
-        feishu_bot.stop()
-        feishu_bot.start(asyncio.get_running_loop())
-    return {**feishu_bot.public(), "stored": stored}
-
-
-@app.delete("/api/feishu/credentials", status_code=204)
-def feishu_forget():
-    feishu_bot.stop()
-    feishu_bot.state["enabled"] = False
-    feishu_bot.save()
-    for name in (feishu.APP_ID, feishu.APP_SECRET):
-        secret_store.delete_secret(name)
+def start_automations() -> None:
+    """The enabled automation packages, when this machine allows them."""
+    if not settings.capability_packages:
+        return
+    for item in capabilities.library():
+        if item.kind == "automation" and item.source == "upload" and item.entry and item.status == "active":
+            runner.start(item)
 
 
 # ---- Capabilities: what finished tasks left the platform able to do (capabilities.py) ----
@@ -1511,25 +1468,130 @@ def list_capabilities():
 
 class CapabilitySwitch(BaseModel):
     enabled: bool
+    # An uploaded package is code from elsewhere: the user confirms what it may reach and gets.
+    confirmed: bool = False
 
 
-@app.patch("/api/capabilities/{capability_id}", response_model=Capability)
-def switch_capability(capability_id: str, body: CapabilitySwitch):
-    """Use it again, or stop telling later work about it. A failed one stays failed until fixed."""
+def _capability(capability_id: str) -> Capability:
     capability = capabilities.load(capability_id)
     if not capability:
         raise HTTPException(404, "没有这个能力。")
+    return capability
+
+
+def _packages_allowed() -> None:
+    if not settings.capability_packages:
+        raise HTTPException(409, "本机还没开启能力包：在 .env 里设 SUPER_PARTNER_CAPABILITY_PACKAGES=true 后重启。")
+
+
+@app.patch("/api/capabilities/{capability_id}", response_model=Capability)
+async def switch_capability(capability_id: str, body: CapabilitySwitch):
+    """Use it again, or stop telling later work about it (an automation: start or stop it). A failed
+    one stays failed until fixed."""
+    capability = _capability(capability_id)
     if capability.status == "failed" and body.enabled:
         raise HTTPException(409, "这个能力的检查没有通过，修好之前不能启用。")
+    runs = capability.kind == "automation" and capability.source == "upload"
+    if body.enabled and capability.source == "upload":
+        _packages_allowed()
+        if not body.confirmed:
+            raise HTTPException(409, "启用上传的能力要先确认它能访问的域名和拿到的密钥。")
+        if lacking := [name for name, stored in capability_packages.secrets_set(capability).items() if not stored]:
+            raise HTTPException(409, f"先填好：{'、'.join(lacking)}")
     capability.status = "active" if body.enabled else "disabled"
     capabilities.save(capability)
+    if runs and body.enabled and capability.entry:
+        runner.start(capability)
+    elif runs:
+        await runner.stop(capability.id)
     return capability
 
 
 @app.delete("/api/capabilities/{capability_id}", status_code=204)
-def delete_capability(capability_id: str):
-    if not capabilities.remove(capability_id):
+async def delete_capability(capability_id: str):
+    """Remove it; a package is uninstalled with its data, state and secrets."""
+    capability = _capability(capability_id)
+    if capability.source == "upload":
+        await runner.stop(capability.id)
+        runner.forget(capability.id)
+        capability_packages.uninstall(capability)
+    elif not capabilities.remove(capability_id):
         raise HTTPException(404, "没有这个能力。")
+
+
+@app.post("/api/capabilities/upload", response_model=Capability, status_code=201)
+async def upload_capability(request: Request):
+    """Install a capability package (raw zip body), switched off until the user enables it. A new
+    version of an installed one replaces it, keeping its secrets and state."""
+    _packages_allowed()
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > capabilities.MAX_CAPABILITY_BYTES:
+            raise HTTPException(413, f"能力包不能超过 {capabilities.MAX_CAPABILITY_BYTES // 1024 // 1024} MB。")
+    try:
+        manifest = capability_packages.read(bytes(data))
+        await runner.stop(manifest.id)
+        return await capability_packages.install(bytes(data))
+    except capability_packages.PackageError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/api/capabilities/runtime")
+def capabilities_runtime():
+    """Each package's secrets stored, and each automation's state, log and budget."""
+    found = {}
+    for item in capabilities.library():
+        if item.source != "upload":
+            continue
+        entry = {"secrets": capability_packages.secrets_set(item)}
+        if item.kind == "automation":
+            entry.update(runner.get(item.id).public())
+        found[item.id] = entry
+    return {"available": settings.capability_packages, "missing": capability_sandbox.missing(), "capabilities": found}
+
+
+class CapabilitySecrets(BaseModel):
+    values: dict[str, str]
+
+
+@app.put("/api/capabilities/{capability_id}/secrets")
+async def capability_secrets(capability_id: str, body: CapabilitySecrets):
+    """Keep its secrets in the keyring (never in a file); a running automation restarts with them."""
+    capability = _capability(capability_id)
+    unknown = set(body.values) - set(capability.secrets)
+    if unknown:
+        raise HTTPException(422, f"它没有声明这些密钥：{'、'.join(sorted(unknown))}")
+    for name, value in body.values.items():
+        if value.strip():
+            secret_store.set_secret(capability_packages.secret_name(capability.id, name), value.strip())
+    await runner.restart(capability)
+    return {"secrets": capability_packages.secrets_set(capability)}
+
+
+@app.delete("/api/capabilities/{capability_id}/secrets", status_code=204)
+async def capability_forget_secrets(capability_id: str):
+    capability = _capability(capability_id)
+    await runner.stop(capability.id)
+    if capability.status == "active" and capability.kind == "automation":
+        capability.status = "disabled"
+        capabilities.save(capability)
+    for name in capability.secrets:
+        secret_store.delete_secret(capability_packages.secret_name(capability.id, name))
+
+
+class CapabilityBudget(BaseModel):
+    daily_budget_usd: float = Field(ge=0, le=1000)
+
+
+@app.put("/api/capabilities/{capability_id}/budget")
+def capability_budget(capability_id: str, body: CapabilityBudget):
+    """What an automation may spend a day deciding and answering."""
+    capability = _capability(capability_id)
+    item = runner.get(capability.id)
+    item.state["daily_budget_usd"] = body.daily_budget_usd
+    item.save()
+    return item.public()
 
 
 def _proposal(run: ExecutionRun, index: int):
