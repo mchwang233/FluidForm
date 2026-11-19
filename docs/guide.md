@@ -57,8 +57,8 @@ not come) is stopped.
 ### Platform engineer
 
 Every repair is the platform engineer's. It is called in when you press **请平台工程师** on a task,
-when the lead asks for it (with `SUPER_PARTNER_ENGINEER_REPAIRS=true` the lead just calls it, without
-choosing between an environment and a platform repair), or when the check before the first step
+when the lead asks for it (it just calls the engineer, without choosing between an environment and a
+platform repair), or when the check before the first step
 fails. It first finds where the fault is, then picks how to repair it:
 
 - **This machine** (missing software, a license, sandbox limits, an unreachable service): it repairs
@@ -231,33 +231,32 @@ isolated task fixtures and cover deletion from the list/detail, cancelling activ
 dismissing confirmations, retries, network errors, and stale polling responses. Native confirmation dialogs are disabled in
 the tests to exercise the embedded-browser case. No live task records are accessed.
 
-## How it works: profiles and speed
+## How it works
 
-**Settings → 工作方式** in the sidebar sets a group of switches at once. A pick applies right away and is kept after a restart. You can also set `SUPER_PARTNER_PROFILE` in `.env`. A switch you set on its own keeps your value.
+With nothing set, FluidForm works like this:
 
-| Profile | What it turns on |
-|---|---|
-| (none) | every switch keeps its own setting (the default) |
-| fast | `QUICK_TASKS`, `SOLO_TASKS`, `PREFLIGHT_CACHE_MINUTES=60`, `RESUME_AFTER_RESTART`, `CHAT_TOOLS`, `CHAT_ACTION_TOOLS`; turns off `REVIEW_EASY_STEPS` |
-| balanced | `QUICK_TASKS`, `PREFLIGHT_CACHE_MINUTES=30`, `RESUME_AFTER_RESTART`, `CHAT_TOOLS`, `CHAT_ACTION_TOOLS` |
-| careful | every task planned (turns off `QUICK_TASKS` and `SOLO_TASKS`), every step reviewed by another model (`ACCEPTANCE`, `REVIEW_EASY_STEPS`), no preflight cache |
+- **Small things done at once**: before planning, the cheapest model looks at the request. Work one model can finish in a few minutes (one picture, a short text, a lookup) gets a single step. So does work one strong model can carry through alone with its tools (fixing a bug, adding a feature, a research report), in a project too. Only what is unclear is planned by the lead.
+- **The check before the first step** is reused for an hour by tasks with the same tools, network and models.
+- **Going on after a restart**: a task cut off by a service restart goes on from its finished steps. A task in a project still waits for you.
+- **Chats do small jobs**: an API model in a chat runs commands and looks things up online in its own folder, at most 5 minutes and 50 tool calls per message. Bigger work becomes a task. Starting a task, sending a file and calling the platform engineer are tool calls.
+- **Remembering**: chats remember lasting preferences people tell them. Your own web chats and each automation conversation (Feishu, say) are kept apart, and a new chat is told them first. **Settings → 记住的事** lists them and deletes them. Anything that looks like a password or key is never kept.
+- **Pictures and search** use whichever providers this machine has keys for, with nothing to configure. Pictures come from MiniMax (no watermark) or Zhipu CogView and are charged per picture. Search uses Zhipu and is charged per search. `WebFetch` reads public pages only. These tools are given only to steps and chats allowed the internet.
+- **Every repair is the platform engineer's**: the lead just calls it, and it finds whether to repair this machine or FluidForm's source.
 
-The switches all start with `SUPER_PARTNER_` and are off by default:
+**Settings → 工作方式** also offers **稳妥** (careful): every task is planned by the lead, and every step is reviewed by another model. You can also set `SUPER_PARTNER_PROFILE=careful` in `.env`.
 
-- **`QUICK_TASKS`**: before planning, the cheapest model looks at the request. Work one model can finish in a few minutes (one picture, a short text, a lookup) gets a one-step plan, without the lead's planning.
-- **`SOLO_TASKS`**: work one strong model can carry through alone with its tools (fixing a bug, adding a feature, a research report) also gets one step, in a project too. When it is unclear, the task is planned as usual.
-- **`PREFLIGHT_CACHE_MINUTES`**: once the check before a task's first step passes, it is reused for this long by tasks with the same tools, network and models.
-- **`REVIEW_EASY_STEPS=false`**: easy steps stand on their own result, without another model reviewing them.
-- **`RESUME_AFTER_RESTART`**: a task cut off by a service restart goes on from its finished steps. A task in a project still waits for you.
-- **`CHAT_TOOLS`** (with `CHAT_TOOLS_NETWORK` for the internet): an API model in a chat does small jobs itself in its own folder. Bigger work becomes a task.
-- **`CHAT_ACTION_TOOLS`**: a chat starts a task, sends a file or calls the platform engineer with tool calls instead of text lines.
-- **`USER_MEMORY`**: chats remember lasting preferences people tell them. Your own web chats and each automation conversation (Feishu, say) are kept apart, and a new chat is told them first. **Settings → 记住的事** lists them and deletes them. Anything that looks like a password or key is never kept.
-- **`WEB_SEARCH_MODELS`** (for example `["glm:search_std"]`, which uses the Zhipu key and is charged per search) and **`WEB_FETCH`** give steps and chats allowed the internet the `WebSearch` and `WebFetch` tools. `WebFetch` reads public addresses only.
-- **`MCP_SERVERS`**: tools from MCP servers go to API models. Each call starts the server in the step's own sandbox. For example:
+Only these depend on the machine (all start with `SUPER_PARTNER_`):
+
+- folders: `WORKSPACE_ROOT`, `DATA_DIR`, `PROJECT_ROOTS`;
+- membership CLI plans and pricing: `CLI_PLANS`, `CLI_FREE`;
+- local ports and variables the sandbox lets through: `SANDBOX_HOST_PORTS`, `SANDBOX_ENV`;
+- MCP servers you want: `MCP_SERVERS`, for example
   ```
   SUPER_PARTNER_MCP_SERVERS='{"github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
   ```
-  The secrets live in the system keyring as `capability/mcp-<server>/<VARIABLE>`.
+  Their secrets live in the system keyring as `capability/mcp-<server>/<VARIABLE>`.
+
+Each default above can still be turned off on its own, for example `SUPER_PARTNER_QUICK_TASKS=false` or `SUPER_PARTNER_IMAGE_MODELS='[]'`.
 
 ### Evals
 

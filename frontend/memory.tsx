@@ -43,11 +43,9 @@ export function MemoryPage({ apiBase }: { apiBase: string }) {
   </section>;
 }
 
-type Profile = "" | "fast" | "balanced" | "careful";
+type Profile = "" | "careful";
 const PROFILES: { id: Profile; label: string; hint: string }[] = [
-  { id: "", label: "不设", hint: "每个开关按各自的设置" },
-  { id: "fast", label: "快", hint: "小事直接做，少审少等" },
-  { id: "balanced", label: "平衡", hint: "小事直接做，其余照常" },
+  { id: "", label: "默认", hint: "小事直接做，大事排计划" },
   { id: "careful", label: "稳妥", hint: "每件都排计划、每步都验收" },
 ];
 

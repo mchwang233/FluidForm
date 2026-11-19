@@ -6,13 +6,13 @@ from super_partner.config import PROFILES, Settings
 def test_a_profile_sets_its_settings_unless_one_is_given(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)  # no .env
     plain = Settings()
-    assert (plain.profile, plain.quick_tasks, plain.resume_after_restart) == ("", False, False)
-    fast = Settings(profile="fast", preflight_cache_minutes=5)
-    assert fast.quick_tasks and fast.solo_tasks and not fast.review_easy_steps and fast.preflight_cache_minutes == 5
+    assert (plain.profile, plain.quick_tasks, plain.acceptance) == ("", True, False)
+    careful = Settings(profile="careful", preflight_cache_minutes=5)
+    assert careful.acceptance and not careful.quick_tasks and careful.preflight_cache_minutes == 5
     monkeypatch.setenv("SUPER_PARTNER_PROFILE", "careful")
     monkeypatch.setenv("SUPER_PARTNER_QUICK_TASKS", "true")
-    careful = Settings()
-    assert careful.acceptance and careful.quick_tasks and not careful.solo_tasks
+    given = Settings()
+    assert given.acceptance and given.quick_tasks and not given.solo_tasks
 
 
 def test_every_profile_names_real_settings():

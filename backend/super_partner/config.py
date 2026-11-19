@@ -6,26 +6,22 @@ from typing import Literal, Optional
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Settings that go together, chosen with one name (SUPER_PARTNER_PROFILE); a setting given on
-# its own still wins. Empty: every setting keeps its own default.
+# Settings that go together, chosen with one name (SUPER_PARTNER_PROFILE, or 设置 → 工作方式); a
+# setting given on its own still wins. Empty: every setting keeps its own default, which already
+# does small things at once.
 PROFILES: dict[str, dict] = {
-    # Small things done at once: one-step and one-model tasks without the lead's planning, easy
-    # steps on their own result, a passed check reused, tasks going on after a restart, chats
-    # doing small jobs themselves.
-    "fast": {"quick_tasks": True, "solo_tasks": True, "review_easy_steps": False, "preflight_cache_minutes": 60,
-             "resume_after_restart": True, "chat_tools": True, "chat_action_tools": True},
-    # Small tasks fast, everything else planned and reviewed as usual.
-    "balanced": {"quick_tasks": True, "preflight_cache_minutes": 30, "resume_after_restart": True,
-                 "chat_tools": True, "chat_action_tools": True},
-    # Every task planned, every step's result accepted by another model.
+    # Every task planned by the lead, every step's result accepted by another model.
     "careful": {"quick_tasks": False, "solo_tasks": False, "acceptance": True, "review_easy_steps": True,
                 "preflight_cache_minutes": 0},
 }
+# Profiles there were before the defaults did what they did: read as no profile.
+FORMER_PROFILES = {"fast", "balanced"}
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SUPER_PARTNER_", env_file=".env")
-    # A set of settings by name (PROFILES): fast, balanced or careful; "" for none.
+    # A set of settings by name (PROFILES): careful, or "" for the defaults. fast and balanced,
+    # from before, read as "".
     profile: Literal["", "fast", "balanced", "careful"] = ""
 
     data_dir: Path = Path(".super-partner")
@@ -106,14 +102,15 @@ class Settings(BaseSettings):
     # Chats do quick jobs themselves (supervisor.chat_tools): an API model answering a chat without a
     # project folder gets the steps' tools in a scratch folder of its own, at most
     # chat_tool_turns tool calls and chat_tool_seconds per message; bigger work is still a task.
-    chat_tools: bool = False
+    chat_tools: bool = True
     # Its commands reach the internet (never this machine's services), as a task allowed to.
-    chat_tools_network: bool = False
-    chat_tool_seconds: int = Field(default=120, ge=10, le=1800)
-    chat_tool_turns: int = Field(default=20, ge=1, le=200)
+    chat_tools_network: bool = True
+    chat_tool_seconds: int = Field(default=300, ge=10, le=1800)
+    chat_tool_turns: int = Field(default=50, ge=1, le=200)
     # Image models API models may make pictures with (images.py, the GenerateImage tool), first choice
-    # first, e.g. ["glm:cogview-4", "minimax:image-01"]; each uses its provider's key. Empty: none.
-    image_models: list[str] = Field(default_factory=list)
+    # first, e.g. ["glm:cogview-4", "minimax:image-01"]; each uses its provider's key. Not set: every
+    # one FluidForm knows whose provider has a key here (images.AUTO). []: none.
+    image_models: Optional[list[str]] = None
     # Share of a priced CLI's quota window used from which it no longer goes first in routing, and
     # from which it takes no new work until the window resets.
     cli_quota_soft_percent: float = Field(default=70, ge=0, le=100)
@@ -125,11 +122,12 @@ class Settings(BaseSettings):
     # MCP servers whose tools the API models' steps and chats get (mcp.py): {name: {"command":
     # [argv], "secrets": [VARIABLE], "timeout": seconds}}. Each runs in the step's sandbox.
     mcp_servers: dict[str, dict] = Field(default_factory=dict)
-    # Search services for the WebSearch tool, first choice first (web.py), e.g. ["glm:search_std"];
-    # empty: no such tool. Offered only to steps and chats allowed the internet.
-    web_search_models: list[str] = Field(default_factory=list)
+    # Search services for the WebSearch tool, first choice first (web.py), e.g. ["glm:search_std"].
+    # Not set: every one FluidForm knows whose provider has a key here (web.AUTO). []: none.
+    # Offered only to steps and chats allowed the internet.
+    web_search_models: Optional[list[str]] = None
     # The WebFetch tool: a public page as text, for steps and chats allowed the internet.
-    web_fetch: bool = False
+    web_fetch: bool = True
     # before_tool / after_tool argv commands receive one JSON event. Empty: no hooks.
     api_tool_hooks: dict[str, list[list[str]]] = Field(default_factory=dict)
 
@@ -137,6 +135,8 @@ class Settings(BaseSettings):
     def apply_profile(self):
         """The profile's settings, except those given on their own. Written past __setattr__, so
         model_fields_set still says which were given."""
+        if self.profile in FORMER_PROFILES:
+            self.__dict__["profile"] = ""
         for name, value in PROFILES.get(self.profile, {}).items():
             if name not in self.model_fields_set:
                 self.__dict__[name] = value
@@ -149,6 +149,7 @@ class Settings(BaseSettings):
     def use_profile(self, profile: str) -> None:
         """Switch to another profile while running (the 设置 menu; api.set_profile): the old one's
         settings go back to their defaults, the new one's apply; those given alone stay."""
+        profile = "" if profile in FORMER_PROFILES else profile
         if profile not in PROFILES and profile != "":
             raise ValueError(f"unknown profile {profile}")
         for name in PROFILES.get(self.profile, {}):
@@ -169,7 +170,7 @@ class Settings(BaseSettings):
             saved = json.loads(self.profile_path.read_text()).get("profile")
         except (OSError, ValueError, AttributeError):
             return
-        if saved in PROFILES or saved == "":
+        if saved in PROFILES or saved in FORMER_PROFILES or saved == "":
             self.use_profile(saved)
 
     @field_validator("provider_limits")
@@ -287,26 +288,26 @@ class Settings(BaseSettings):
     review_easy_steps: bool = True
     # A task one model can do in one go (triage.quick) gets a one-step plan, without the lead's
     # planning; its step is easy (see review_easy_steps). Off: every task is planned.
-    quick_tasks: bool = False
+    quick_tasks: bool = True
     # A task one strong model can carry through alone with its tools (triage.SHAPE_PROMPT "solo"),
     # in a project too, gets a one-step hard plan without the lead's planning. Off: planned.
-    solo_tasks: bool = False
+    solo_tasks: bool = True
     # A passed check before a task's first step stands this long for the next task with the same
     # tools, network, models and recorded environment (preflight.py). 0: every task is checked.
-    preflight_cache_minutes: int = Field(default=0, ge=0, le=1440)
+    preflight_cache_minutes: int = Field(default=60, ge=0, le=1440)
     # A task cut off by a service restart goes on by itself from its finished steps when it works
     # in no project and waits for nobody (api.resumes_by_itself). Off: it waits for the user.
-    resume_after_restart: bool = False
+    resume_after_restart: bool = True
     # The lead asks for any repair or component with one call_engineer decision, and the platform
     # engineer's repair session finds whether the machine or FluidForm is at fault
     # (docs/design/one-engineer.md). Off: repair_environment, repair_platform, request_component.
-    engineer_repairs: bool = False
+    engineer_repairs: bool = True
     # A chat with tools asks FluidForm to start a task, send a file or call the platform engineer
     # through tool calls (chat_actions.py) besides the lines it can write. Off: lines only.
-    chat_action_tools: bool = False
-    # An automation's chat keeps lasting facts people tell it (REMEMBER lines; remembering.py) by
-    # conversation, and a new chat there is told them. Off: nothing is kept.
-    user_memory: bool = False
+    chat_action_tools: bool = True
+    # Chats keep lasting facts people tell them (REMEMBER lines; remembering.py), by where they were
+    # said, and a new chat there is told them. Off: nothing is kept.
+    user_memory: bool = True
     # Accepting each step's result: off, a step that finishes has passed. No reviewer, no declared
     # check or artifact acceptance command, no verification steps sending work back. The lead's
     # final check of the whole result stays (leading._final_review). A step saying it cannot do

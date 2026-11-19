@@ -50,7 +50,7 @@ async def test_a_profile_picked_on_the_page_applies_now_and_after_a_restart(task
         monkeypatch.setitem(settings.__dict__, name, getattr(settings, name))
     # Other tests' monkeypatching counts as given alone; here only chat_tools is.
     given = set(settings.model_fields_set)
-    object.__setattr__(settings, "__pydantic_fields_set__", (given - set(names)) | {"chat_tools"})
+    object.__setattr__(settings, "__pydantic_fields_set__", given - set(names))
     try:
         await profiles_on_the_page(client)
     finally:
@@ -58,21 +58,23 @@ async def test_a_profile_picked_on_the_page_applies_now_and_after_a_restart(task
 
 
 async def profiles_on_the_page(client):
-    settings.__dict__["chat_tools"] = False  # given on its own: the profile leaves it
-    picked = await client.put("/api/settings/profile", json={"profile": "fast"}, headers=ORIGIN)
-    assert picked.status_code == 200 and picked.json()["profile"] == "fast"
-    assert "chat_tools" in picked.json()["given_alone"]["fast"]
-    assert settings.quick_tasks and settings.solo_tasks and not settings.chat_tools
-    # Another profile: the first one's settings go back to their defaults.
-    await client.put("/api/settings/profile", json={"profile": "careful"}, headers=ORIGIN)
-    assert settings.acceptance and not settings.solo_tasks and not settings.resume_after_restart
+    settings.__dict__["chat_tools"] = False
+    object.__setattr__(settings, "__pydantic_fields_set__", settings.model_fields_set | {"solo_tasks"})
+    settings.__dict__["solo_tasks"] = True  # given on its own: the profile leaves it
+    picked = await client.put("/api/settings/profile", json={"profile": "careful"}, headers=ORIGIN)
+    assert picked.status_code == 200 and picked.json()["profile"] == "careful"
+    assert picked.json()["given_alone"]["careful"] == ["solo_tasks"]
+    assert settings.acceptance and not settings.quick_tasks and settings.solo_tasks
+    # Back to the defaults: what careful set goes back to them.
     await client.put("/api/settings/profile", json={"profile": ""}, headers=ORIGIN)
-    assert not settings.acceptance and not settings.quick_tasks
+    assert not settings.acceptance and settings.quick_tasks and settings.preflight_cache_minutes == 60
+    # A former profile is the defaults.
+    assert (await client.put("/api/settings/profile", json={"profile": "fast"}, headers=ORIGIN)).json()["profile"] == ""
     # Saved: a restart picks it up again.
-    await client.put("/api/settings/profile", json={"profile": "balanced"}, headers=ORIGIN)
+    await client.put("/api/settings/profile", json={"profile": "careful"}, headers=ORIGIN)
     settings.use_profile("")
     settings.load_saved_profile()
-    assert settings.profile == "balanced" and settings.quick_tasks
+    assert settings.profile == "careful" and settings.acceptance
     assert (await client.put("/api/settings/profile", json={"profile": "turbo"}, headers=ORIGIN)).status_code == 422
 
 

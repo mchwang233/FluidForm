@@ -111,6 +111,21 @@ def own_codex_home(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "lead_root", tmp_path / "leads")
 
 
+# What these settings default to now (docs/design/fewer-settings.md); a test of something else runs
+# without them, as before, and a test of one turns it on. test_profiles checks the defaults.
+ON_BY_DEFAULT = {"quick_tasks": False, "solo_tasks": False, "resume_after_restart": False, "chat_tools": False,
+                 "chat_tools_network": False, "chat_action_tools": False, "user_memory": False, "web_fetch": False,
+                 "engineer_repairs": False, "preflight_cache_minutes": 0, "chat_tool_seconds": 120, "chat_tool_turns": 20,
+                 # Nothing taken from keys a test machine may have in its environment.
+                 "image_models": [], "web_search_models": []}
+
+
+@pytest.fixture(autouse=True)
+def former_defaults(monkeypatch):
+    for name, value in ON_BY_DEFAULT.items():
+        monkeypatch.setitem(settings.__dict__, name, value)
+
+
 @pytest.fixture(autouse=True)
 def no_preflight(monkeypatch):
     """The check before a task's first step runs real sandboxes and asks the models; tests of

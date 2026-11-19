@@ -186,7 +186,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     if (path === "/api/retrospectives/topics") return json(state.topics ?? []);
     if (path === "/api/settings/profile") {
       if (options.method === "PUT") state.profile = JSON.parse(options.body).profile;
-      return json({ profile: state.profile ?? "", given_alone: { fast: ["chat_tools"], balanced: [], careful: [] } });
+      return json({ profile: state.profile ?? "", given_alone: { careful: [] } });
     }
     if (path === "/api/memory") return json(state.memory ?? { enabled: true, places: [] });
     if (path === "/api/memory/forget") {
@@ -2517,12 +2517,13 @@ test("设置 picks how FluidForm works, saved as it is picked", async t => {
   const settings = document.querySelector(".settings-menu");
   await click(settings.querySelector("summary"));
   const group = settings.querySelector('[aria-label="工作方式"]');
-  assert.equal(button("不设", group).getAttribute("aria-pressed"), "true");
-  await click(button("快", group));
-  assert.equal(state.profile, "fast");
-  assert.equal(button("快", group).getAttribute("aria-pressed"), "true");
+  assert.deepEqual([...group.querySelectorAll("button")].map(node => node.textContent), ["默认", "稳妥"]);
+  assert.equal(button("默认", group).getAttribute("aria-pressed"), "true");
+  await click(button("稳妥", group));
+  assert.equal(state.profile, "careful");
+  assert.equal(button("稳妥", group).getAttribute("aria-pressed"), "true");
   assert.match(settings.textContent, /已保存/);
-  assert.match(settings.querySelector(".settings-hint").textContent, /小事直接做.*1 项单独设过/);
+  assert.match(settings.querySelector(".settings-hint").textContent, /每件都排计划/);
 });
 
 test("记住的事 lists what chats remember, by where, and deletes one", async t => {

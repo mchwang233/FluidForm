@@ -1,6 +1,7 @@
 """Pictures made from a description by an image model, for API models in steps and chats (the
 GenerateImage tool, agent.py). ``settings.image_models`` lists the models to use, first choice
-first (e.g. ``["glm:cogview-4", "minimax:image-01"]``); empty: no such tool. Each provider's key is
+first (e.g. ``["glm:cogview-4", "minimax:image-01"]``); not set, every one in AUTO whose provider has
+a key here; empty: no such tool. Each provider's key is
 the one its chat models use (secrets.PROVIDER_ENV)."""
 from __future__ import annotations
 
@@ -28,9 +29,16 @@ class ImageError(RuntimeError):
     pass
 
 
+# The image models used when settings.image_models is not set, first choice first: MiniMax puts no
+# watermark on its pictures, Zhipu's carry "AI生成".
+AUTO = ["minimax:image-01", "glm:cogview-4"]
+
+
 def available() -> list[str]:
-    """The image models that can be used now: listed, of a known provider, with its key."""
-    return [model_id for model_id in settings.image_models
+    """The image models that can be used now: listed (or, not set, AUTO), of a known provider,
+    with its key."""
+    listed = AUTO if settings.image_models is None else settings.image_models
+    return [model_id for model_id in listed
             if (provider := model_id.split(":", 1)[0]) in API and os.environ.get(PROVIDER_ENV.get(provider, ""))]
 
 

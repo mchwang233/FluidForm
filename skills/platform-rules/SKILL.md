@@ -55,7 +55,13 @@ say in the report what steps can reach now that they could not before.
 - No new dependencies (pip, npm, system packages) unless the user agreed.
 - Stored records (tasks, jobs, settings files) written by the old version must still load: give
   new fields defaults.
-- Keep existing behaviour for anyone who does not set the new setting.
+- Few settings. A feature the user asked for is how FluidForm works from then on: no switch that
+  someone must turn on. A setting that is off by default only for what would otherwise:
+  - widen what steps can reach (rule 3);
+  - spend money nobody asked for;
+  - suit some machines and not others: then a setting that is read from this machine (a key
+    there, a tool installed), not one to fill in.
+- A repair fixes the behaviour itself; it does not add a setting to keep the old one.
 
 ## 6. Do not use git
 

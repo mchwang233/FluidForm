@@ -2,7 +2,8 @@
 (the WebSearch and WebFetch tools, agent.py).
 
 - WebSearch: ``settings.web_search_models`` lists the search services to use, first choice first
-  (e.g. ``["glm:search_std"]``); empty: no such tool. Each provider's key is the one its chat
+  (e.g. ``["glm:search_std"]``); not set, every one in AUTO whose provider has a key here; empty:
+  no such tool. Each provider's key is the one its chat
   models use (secrets.PROVIDER_ENV). Charged by the search.
 - WebFetch (``settings.web_fetch``): a public http(s) page as text. Only public addresses: an
   address of this machine or its network is refused, after every redirect.
@@ -64,9 +65,15 @@ class WebError(RuntimeError):
     pass
 
 
+# The search services used when settings.web_search_models is not set, first choice first.
+AUTO = ["glm:search_std"]
+
+
 def search_services() -> list[str]:
-    """The search services that can be used now: listed, of a known provider, with its key."""
-    return [service for service in settings.web_search_models
+    """The search services that can be used now: listed (or, not set, AUTO), of a known provider,
+    with its key."""
+    listed = AUTO if settings.web_search_models is None else settings.web_search_models
+    return [service for service in listed
             if (provider := service.split(":", 1)[0]) in SEARCH and os.environ.get(PROVIDER_ENV.get(provider, ""))]
 
 
