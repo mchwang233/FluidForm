@@ -148,7 +148,16 @@ function PackageControls({ apiBase, item, state, onChanged, act }: {
       <span className="capability-run-counts">今天花了 ${(state.spent_today_usd ?? 0).toFixed(2)} · 已回 {state.handled ?? 0} 条 · {state.conversations ?? 0} 段对话</span>
     </div>}
     {state.error && <p className="error" role="alert">{state.error}</p>}
-    {item.kind === "automation" && <AutomationModel apiBase={apiBase} url={url} name={item.name} modelId={state.model_id} onChanged={onChanged} />}
+    {item.kind === "automation" && <div className="capability-settings">
+      <AutomationModel apiBase={apiBase} url={url} name={item.name} modelId={state.model_id} onChanged={onChanged} />
+      <div className="capability-field capability-budget">
+        <label htmlFor={`budget-${item.id}`}>每天最多花</label>
+        <span className="capability-money"><span>$</span><input id={`budget-${item.id}`} type="number" min="0" step="any" inputMode="decimal" aria-label="每天最多花（美元）"
+          value={budget || String(state.daily_budget_usd ?? "")} onChange={event => setBudget(event.target.value)}
+          onBlur={() => { const value = Number(budget); if (budget && value >= 0 && value !== state.daily_budget_usd) void act(call(`${url}/budget`, sendJson("PUT", { daily_budget_usd: value }))).then(() => setBudget("")); }} /></span>
+        <small>判断和回答的花费；排好的任务按你确认的预算另算。</small>
+      </div>
+    </div>}
     {!!item.secrets.length && <form className="capability-secrets" onSubmit={save} aria-label={`${item.name}的密钥`}>
       {item.secrets.map(name => <label key={name}>{name}<input type="password" autoComplete="new-password" value={values[name] ?? ""}
         placeholder={state.secrets[name] ? "已保存，要换才填" : "还没填"} onChange={event => setValues(current => ({ ...current, [name]: event.target.value }))} /></label>)}
@@ -157,16 +166,11 @@ function PackageControls({ apiBase, item, state, onChanged, act }: {
         <button type="submit" className="primary" disabled={!filled}>保存</button>
       </div>
     </form>}
-    {item.kind === "automation" && <label className="capability-budget">每天最多花 <span>$</span>
-      <input type="number" min="0" step="any" inputMode="decimal" aria-label="每天最多花（美元）" value={budget || String(state.daily_budget_usd ?? "")}
-        onChange={event => setBudget(event.target.value)}
-        onBlur={() => { const value = Number(budget); if (budget && value >= 0 && value !== state.daily_budget_usd) void act(call(`${url}/budget`, sendJson("PUT", { daily_budget_usd: value }))).then(() => setBudget("")); }} />
-      <small>判断和回答的花费；排好的任务按你确认的预算另算。</small></label>}
     {!!state.log?.length && <details className="capability-check"><summary>运行日志</summary><pre>{state.log.join("\n")}</pre></details>}
   </div>;
 }
 
-/** The same available conversation models as 新建 → 对话, saved separately for each automation. */
+/** The same available conversation models as 新建 → 对话, saved for each automation as soon as one is picked. */
 function AutomationModel({ apiBase, url, name, modelId, onChanged }: {
   apiBase: string; url: string; name: string; modelId?: string | null; onChanged: () => Promise<unknown>;
 }) {
@@ -174,7 +178,7 @@ function AutomationModel({ apiBase, url, name, modelId, onChanged }: {
   const [selected, setSelected] = useState(modelId ?? ""), [saved, setSaved] = useState<string | null>(null);
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
   const [listError, setListError] = useState(""), [error, setError] = useState("");
-  useEffect(() => { setSelected(modelId ?? ""); }, [modelId]);
+  useEffect(() => { if (!saving) setSelected(modelId ?? ""); }, [modelId]);
   async function loadModels() {
     setLoading(true); setListError("");
     try { setModels(await call(`${apiBase}/api/chats/models`)); }
@@ -182,32 +186,35 @@ function AutomationModel({ apiBase, url, name, modelId, onChanged }: {
     finally { setLoading(false); }
   }
   useEffect(() => { void loadModels(); }, [apiBase]);
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (saving || loading || selected === (modelId ?? "")) return;
-    setSaving(true); setSaved(null); setError("");
+  async function choose(next: string) {
+    setSelected(next); setSaved(null); setError("");
+    if (next === (modelId ?? "")) return;
+    setSaving(true);
     try {
-      const result = await call<Runtime>(`${url}/model`, sendJson("PUT", { model_id: selected || null }));
+      const result = await call<Runtime>(`${url}/model`, sendJson("PUT", { model_id: next || null }));
       setSelected(result.model_id ?? ""); setSaved(result.model_id ?? "");
       await onChanged();
-    } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
-    finally { setSaving(false); }
+    } catch (failure) {
+      setSelected(modelId ?? "");
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally { setSaving(false); }
   }
   const label = (id: string) => models?.find(model => model.id === id)?.display_name ?? id;
-  return <form className="capability-model capability-budget" aria-label={`${name}的聊天模型`} onSubmit={save}>
-    <label className="chat-model">聊天模型 <select aria-label={`${name}的聊天模型`} value={selected} disabled={loading || saving}
-      onChange={event => { setSelected(event.target.value); setSaved(null); setError(""); }}>
+  return <div className="capability-field capability-model" role="group" aria-label={`${name}的聊天模型`}>
+    <label htmlFor={`model-${name}`}>回答用的模型
+      {saving ? <span className="capability-field-state" role="status">保存中…</span>
+        : saved !== null ? <span className="capability-field-state ok" role="status">已保存：{saved ? label(saved) : "自动选择"}</span>
+        : loading ? <span className="capability-field-state" role="status">加载中…</span> : null}</label>
+    <select id={`model-${name}`} aria-label={`${name}的聊天模型`} value={selected} disabled={loading || saving}
+      onChange={event => void choose(event.target.value)}>
       <option value="">自动选择</option>
       {!!selected && !models?.some(model => model.id === selected) && <option value={selected} disabled>{selected}{models ? "（当前不可用）" : ""}</option>}
       {(models ?? []).map(model => <option key={model.id} value={model.id}>{model.display_name} · {model.channel === "cli" ? "会员 CLI" : "API"}</option>)}
-    </select></label>
-    <button type="submit" className="primary" disabled={loading || saving || selected === (modelId ?? "")}>{saving ? "保存中…" : "保存模型"}</button>
-    {loading && <span role="status">正在加载模型…</span>}
-    {saved !== null && <span role="status">已保存：{saved ? label(saved) : "自动选择"}</span>}
-    {listError && <p className="error" role="alert">{listError} <button type="button" className="ghost" onClick={() => void loadModels()}>重试</button></p>}
+    </select>
+    {listError && <p className="error" role="alert">{listError} <button type="button" className="link-button" onClick={() => void loadModels()}>重试</button></p>}
     {error && <p className="error" role="alert">{error}</p>}
-    <small>设置重启后保留。当前回复先完成，下一条回复使用新设置并接续最近对话。仅影响聊天，消息分类和任务规划、执行仍自动选模型。</small>
-  </form>;
+    <small>只用来回答问题，下一条起生效；排任务仍自动选。</small>
+  </div>;
 }
 
 /** On a finished task's result page: what its lead found reusable, to solidify or dismiss. */

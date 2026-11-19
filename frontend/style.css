@@ -1694,14 +1694,23 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 .capability-package .error{margin:0}
 .capability-secrets{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none}
 .capability-secrets:focus-within{border:0;box-shadow:none}
-.capability-secrets label,.capability-budget{display:grid;gap:4px;font-size:12px;color:var(--muted)}
-.capability-secrets input,.capability-budget input{height:32px;box-sizing:border-box;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:13px}
-.capability-secrets input:focus,.capability-secrets input:focus-visible,.capability-budget input:focus,.capability-budget input:focus-visible{outline:none;border-color:light-dark(#cfcfd4,#3a3a40)}
+.capability-secrets label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.capability-secrets input,.capability-field input,.capability-field select{height:32px;box-sizing:border-box;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:13px}
+.capability-secrets input:focus,.capability-secrets input:focus-visible,.capability-field input:focus,.capability-field input:focus-visible,.capability-field select:focus,.capability-field select:focus-visible{outline:none;border-color:light-dark(#cfcfd4,#3a3a40)}
 .capability-secrets-bar{grid-column:1/-1;display:flex;align-items:center;gap:12px}
 .capability-secrets-bar small{flex:1;font-size:12px;color:var(--faint)}
 .capability-secrets-bar .primary{padding:6px 16px;border-radius:999px;font-size:12.5px}
-.capability-budget{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.capability-budget input{width:86px}
-.capability-budget small{flex-basis:100%;font-size:12px;color:var(--faint)}
+.capability-settings{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:12px 32px}
+@media (max-width:720px){.capability-settings{grid-template-columns:1fr}}
+.capability-field{display:grid;gap:4px;align-content:start;min-width:0}
+.capability-field>label{display:flex;align-items:baseline;gap:8px;font-size:12px;color:var(--muted)}
+.capability-field select{width:100%;max-width:340px;padding:0 8px;cursor:pointer}
+.capability-field select:disabled{opacity:.6;cursor:default}
+.capability-field small{font-size:12px;color:var(--faint);line-height:1.5}
+.capability-field .error{font-size:12px}
+.capability-field-state{font-size:11.5px;color:var(--faint)}
+.capability-field-state.ok{color:var(--ok,light-dark(#1f9d55,#3ccb7f))}
+.capability-money{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.capability-money input{width:96px}
 .capability-package .capability-check{margin:0}
 .capability-confirm .capability-confirm-missing{margin:0 0 8px!important;font-size:12.5px!important;color:var(--danger)!important}
