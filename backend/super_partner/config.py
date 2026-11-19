@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     # Membership CLIs cost nothing against any budget (tasks, the lead, the platform engineer), a
     # plan in cli_plans still reading and guarding their quota. Off: priced by cli_plans as above.
     cli_free: bool = False
+    # Chats do quick jobs themselves (supervisor.chat_tools): an API model answering a chat without a
+    # project folder gets the steps' tools in a scratch folder of its own, at most
+    # chat_tool_turns tool calls and chat_tool_seconds per message; bigger work is still a task.
+    chat_tools: bool = False
+    # Its commands reach the internet (never this machine's services), as a task allowed to.
+    chat_tools_network: bool = False
+    chat_tool_seconds: int = Field(default=120, ge=10, le=1800)
+    chat_tool_turns: int = Field(default=20, ge=1, le=200)
     # Share of a priced CLI's quota window used from which it no longer goes first in routing, and
     # from which it takes no new work until the window resets.
     cli_quota_soft_percent: float = Field(default=70, ge=0, le=100)

@@ -434,3 +434,72 @@ def test_an_automation_chats_lines_for_fluidform_are_kept_from_the_person():
     # A TASK line that cannot be read asks for nothing.
     assert supervisor.split_task('好\nTASK: {"request": ') == ("好", None)
     assert supervisor.split_task('好\nTASK: {"request": "  "}') == ("好", None)
+
+
+async def test_with_chat_tools_an_api_chat_does_quick_jobs_in_its_own_folder(task_api, monkeypatch, tmp_path):
+    from super_partner.config import settings
+    api, client = task_api
+    monkeypatch.setattr(settings, "chat_tools", True)
+    monkeypatch.setattr(settings, "chat_tools_network", True)
+    monkeypatch.setattr(settings, "workspace_root", tmp_path / "ws")
+    sent = chatting(api, monkeypatch)
+    given = []
+
+    async def converse(session, prompt, timeout=None, spend_ok=None, attachments=(), tools=None):
+        sent.append((session.model_id, session.cwd, prompt))
+        given.append(tools)
+        session.calls += 1
+        return ProviderResult("北京：晴 18°C", 10, 10)
+
+    monkeypatch.setattr(api.providers, "converse", converse)
+    chat = (await client.post("/api/chats", json={"message": "北京天气怎么样？", "model_id": "x:other"}, headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    [tools] = given
+    run = api.db.get_run(chat["id"])
+    assert tools["folder"] == tmp_path / "ws" / run.folder_id and tools["folder"].is_dir()
+    assert (tools["network"], tools["turns"], tools["seconds"]) == (True, settings.chat_tool_turns, settings.chat_tool_seconds)
+    assert "Quick jobs you do yourself" in sent[0][2] and str(tools["folder"]) in sent[0][2]
+    assert "can reach the internet" in sent[0][2] and "turn this conversation into a task" in sent[0][2]
+    # A chat about a project only reads it: no tools.
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(settings, "project_roots", [tmp_path])
+    chat = (await client.post("/api/chats", json={"message": "这个项目是做什么的？", "model_id": "x:other",
+                                                  "project_dir": str(project)}, headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    assert given[-1] is None and "Quick jobs" not in sent[-1][2]
+
+
+def test_a_chat_has_tools_only_when_allowed_and_answered_by_an_api_model(tmp_path, monkeypatch):
+    from super_partner.config import settings
+    from super_partner.models import ExecutionRun, TaskPlan
+    monkeypatch.setattr(settings, "workspace_root", tmp_path)
+    chat = ExecutionRun(id="c", prompt="p", kind="chat", plan=TaskPlan(summary="p", nodes=[]), status=RunStatus.DRAFT,
+                        budget_usd=1, origin={"capability": "feishu-bot"})
+    assert supervisor.chat_tools(chat) is None  # off by default
+    monkeypatch.setattr(settings, "chat_tools", True)
+    assert supervisor.chat_tools(chat)["network"] is False
+    cli = profile("cli:codex", 90).model_copy(update={"channel": "cli"})
+    assert supervisor.chat_tools_note(chat, cli) == ""
+    note = supervisor.chat_tools_note(chat, BEST)
+    assert "TASK line" in note and "no internet" in note
+
+
+async def test_a_quick_job_past_its_time_stops_and_says_so(monkeypatch, tmp_path):
+    import asyncio
+
+    from super_partner.models import SupervisorSession
+    from super_partner.providers import ProviderRegistry
+    registry, called = ProviderRegistry(), []
+
+    async def complete(model_id, prompt, *args, **kwargs):
+        called.append(kwargs)
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(registry, "complete", complete)
+    session = SupervisorSession(model_id="x:best", cwd=str(tmp_path))
+    tools = {"folder": tmp_path, "network": True, "turns": 20, "seconds": 0.05}
+    result = await registry.converse(session, "查一下天气", tools=tools)
+    assert "秒内没做完" in result.text and "排成任务" in result.text
+    assert called[0]["act"] is True and called[0]["max_turns"] == 20 and called[0]["network"] is True
+    assert called[0]["workspace"] == tmp_path and session.history[-1]["content"] == result.text

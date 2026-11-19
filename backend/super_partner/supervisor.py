@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from pathlib import Path
 from typing import Optional
 
 from . import folders
@@ -156,9 +157,53 @@ def for_person(text: str) -> str:
     return text[:found.start()].rstrip() if found else text
 
 
+def chat_tools(run: ExecutionRun) -> Optional[dict]:
+    """What a chat may use for quick jobs (settings.chat_tools): its own scratch folder, the
+    internet if allowed, and its limits per message. None: only talk (the setting is off, or it
+    is about a project, which a chat only reads)."""
+    if run.kind != "chat" or not settings.chat_tools or run.project_dir:
+        return None
+    folder = Path(settings.workspace_root) / run.folder_id
+    folder.mkdir(parents=True, exist_ok=True)
+    return {"folder": folder, "network": settings.chat_tools_network, "turns": settings.chat_tool_turns,
+            "seconds": settings.chat_tool_seconds}
+
+
+def tool_skills(message: str) -> str:
+    """The skills for the tools a message names, for a chat with tools, as a step gets them."""
+    from . import skills
+
+    found = skills.section(skills.for_step(message))
+    return f"\n\n{found}" if found else ""
+
+
+def chat_tools_note(run: ExecutionRun, model: Optional[ModelProfile]) -> str:
+    """A chat with tools is told what they are for: quick jobs now, bigger work as a task."""
+    tools = chat_tools(run) if model is not None and model.channel != "cli" else None
+    if not tools:
+        return ""
+    from . import capabilities
+
+    online = (" Its commands can reach the internet (not this machine's services)." if tools["network"]
+              else " Its commands have no internet.")
+    bigger = ("ask for it with the TASK line below" if (run.origin or {}).get("capability")
+              else "say so: they can turn this conversation into a task")
+    built = capabilities.section()
+    return ("Quick jobs you do yourself, right away, without asking: this overrides \"nothing is run\" "
+            f"above. You have tools (Bash, Read, Write, Edit, Glob, Grep, LS) in this chat's own folder, "
+            f"{tools['folder']}.{online} Use them for what takes a minute: look something up online (the "
+            "weather: curl -s 'wttr.in/Beijing?format=3&lang=zh'; an exchange rate; a page they link), "
+            "calculate, convert, read or make a small file. One message gets at most "
+            f"{tools['turns']} tool calls and {tools['seconds']} seconds: keep it small, and answer with "
+            "what you found. Anything bigger (a program, a document of several parts, the user's own "
+            f"project, long research) is a task: {bigger}. Never say you looked something up when you "
+            "did not.\n\n" + (f"{built}\n\n" if built else ""))
+
+
 def chat_role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
-    """What a chat's model is told first: its role, who it is, and how to talk where it is."""
-    return CHAT_ROLE + identity(model) + chat_guide(run)
+    """What a chat's model is told first: its role, who it is, what it may do itself, and how to
+    talk where it is."""
+    return CHAT_ROLE + identity(model) + chat_tools_note(run, model) + chat_guide(run)
 
 
 def chat_opening(run: ExecutionRun, text: str, model: Optional[ModelProfile] = None) -> str:
@@ -222,10 +267,14 @@ def role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
     return chat_role(run, model) if run.kind == "chat" else ROLE
 
 
-async def converse(providers, session: SupervisorSession, prompt: str, charged, attachments=()) -> tuple[str, SupervisorSession]:
+async def converse(providers, session: SupervisorSession, prompt: str, charged, attachments=(),
+                   tools: Optional[dict] = None) -> tuple[str, SupervisorSession]:
     """Send ``prompt`` to ``session``'s lead through ``charged(model_id, call)``, which bills the
-    call to the task. Returns the reply and the session, now continued."""
+    call to the task. Returns the reply and the session, now continued. ``tools``: a chat's quick
+    jobs (chat_tools)."""
     extra = {"attachments": list(attachments)} if attachments else {}
+    if tools:
+        extra["tools"] = tools
     result = await charged(session.model_id, lambda budget: providers.converse(session, prompt, spend_ok=budget, **extra))
     if session.history:
         trim(session)
@@ -249,7 +298,10 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
             session = new_session(pick, run.supervisor, chat_folder(run))
             message = role(run, pick) + handover(run, pick.id) + prompt
         try:
-            return await converse(providers, session, message, charged, attachments)
+            model = by_id.get(session.model_id)
+            tools = chat_tools(run) if model is not None and model.channel != "cli" else None
+            return await converse(providers, session, message + (tool_skills(message) if tools else ""), charged,
+                                  attachments, tools)
         except SessionLost as exc:
             # The model is fine; only its conversation is gone. Brief a new one.
             last_error = exc

@@ -235,7 +235,7 @@ class ProviderRegistry:
 
     @call_records.observed
     async def converse(self, session: SupervisorSession, prompt: str, timeout: Optional[float] = None,
-                       spend_ok=None, attachments=()) -> ProviderResult:
+                       spend_ok=None, attachments=(), tools: Optional[dict] = None) -> ProviderResult:
         """One message in a conversation that lasts (the task's lead, supervisor.py): a membership
         CLI continues its own conversation; an API model is sent the whole history again, which
         its prompt cache makes cheap. ``session`` is updated in place."""
@@ -269,8 +269,18 @@ class ProviderRegistry:
             result = _cli_result(text, model_id)
         else:
             images = [item for item in attachments if item.kind == "image"]
-            result = await self.complete(model_id, _transcript(session.history, prompt), spend_ok=spend_ok,
-                                         effort=effort, **({"attachments": images} if images else {}))
+            extra = {"attachments": images} if images else {}
+            if tools:
+                # A chat doing a quick job itself (supervisor.chat_tools): the steps' tools in its
+                # folder, bounded in tool calls and in time.
+                extra.update(act=True, workspace=tools["folder"], max_turns=tools["turns"], network=tools["network"],
+                             tool_log=tools.get("log"))
+            call = self.complete(model_id, _transcript(session.history, prompt), spend_ok=spend_ok, effort=effort, **extra)
+            try:
+                result = await (asyncio.wait_for(call, tools["seconds"]) if tools else call)
+            except asyncio.TimeoutError:
+                result = ProviderResult(f"（这件事 {tools['seconds']} 秒内没做完，我先停下了。要继续的话，可以把它排成任务。）",
+                                        0, 0, model_id)
             session.history += [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.text}]
         session.calls += 1
         return result
