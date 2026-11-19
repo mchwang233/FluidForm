@@ -25,6 +25,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import time
 from collections import deque
 from collections.abc import Awaitable
@@ -52,6 +53,12 @@ PROGRESS_SECONDS = 0.5
 FILES_ONLY = "（见附件）"
 # What a message that only calls on it says (an @ and nothing else): answer what came before.
 CALLED_ONLY = "（只 @ 了你，没有别的话）"
+# A question about a picture that comes without one waits this long for that person's picture: in
+# a chat app the picture and the words about it are often sent apart, the picture a little later.
+PICTURE_WAIT_SECONDS = 8.0
+# A picture sent this recently is the one such a question means: no waiting then.
+RECENT_PICTURE_SECONDS = 120.0
+PICTURE_WORDS = re.compile(r"图片|照片|截图|这张|这幅|这个图|这图|图里|图中|图上|看图|picture|photo|image|screenshot", re.IGNORECASE)
 # How long a line from an automation may be.
 LINE_LIMIT = 1 << 20
 
@@ -184,6 +191,10 @@ class Runner:
     def __init__(self, handle: Callable[[Capability, Asked, Automation], Awaitable[tuple[Optional[str], float]]]):
         self.handle = handle
         self.automations: dict[str, Automation] = {}
+        # Questions about a picture waiting for it, by (automation, conversation, sender).
+        self.waiting_pictures: dict[tuple, asyncio.Future] = {}
+        # When each (automation, conversation, sender) last sent a picture or file.
+        self.last_picture: dict[tuple, float] = {}
 
     def get(self, capability_id: str) -> Automation:
         if capability_id not in self.automations:
@@ -311,6 +322,24 @@ class Runner:
         if not text and not attached and not addressed:
             await self._send(item, {"re": request, "reply": None})
             return
+        key = (capability.id, str(payload.get("conversation") or ""), str(payload.get("sender") or ""))
+        waiting = self.waiting_pictures.get(key)
+        sent_before = time.monotonic() - self.last_picture.get(key, float("-inf")) < RECENT_PICTURE_SECONDS
+        if attached:
+            self.last_picture[key] = time.monotonic()
+        if attached and not text and waiting and not waiting.done():
+            # The picture a question just before was about: it goes with that question.
+            waiting.set_result(attached)
+            await self._send(item, {"re": request, "reply": None})
+            return
+        if text and not attached and not sent_before and PICTURE_WORDS.search(text) and key not in self.waiting_pictures:
+            self.waiting_pictures[key] = asyncio.get_running_loop().create_future()
+            try:
+                attached = await asyncio.wait_for(asyncio.shield(self.waiting_pictures[key]), PICTURE_WAIT_SECONDS)
+            except asyncio.TimeoutError:
+                pass  # none came: the question is about a picture sent before, if any
+            finally:
+                self.waiting_pictures.pop(key, None)
         asked = Asked(conversation=str(payload.get("conversation") or "")[:200],
                       text=text or (FILES_ONLY if attached else CALLED_ONLY),
                       origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},

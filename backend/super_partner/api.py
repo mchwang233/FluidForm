@@ -1230,7 +1230,8 @@ async def create_chat(body: CreateChat):
 
 
 def _start_chat(message: str, budget_usd: float, use_cli: bool, project_dir: Optional[str], model_id: Optional[str],
-                attachment_ids: list[str] = (), auto_routed: bool = False, spent: float = 0.0) -> ExecutionRun:
+                attachment_ids: list[str] = (), auto_routed: bool = False, spent: float = 0.0,
+                shown: Optional[str] = None) -> ExecutionRun:
     """Save a new chat and send its first message, with its attachments (create_chat, start)."""
     try:
         attached = files.resolve(list(attachment_ids))
@@ -1257,7 +1258,7 @@ def _start_chat(message: str, budget_usd: float, use_cli: bool, project_dir: Opt
     )
     db.save_run(run)
     db.add_event(Event(run_id=run.id, kind="chat.created", data={"model_id": pick.id, "project_dir": folder, "auto_routed": auto_routed}))
-    executor.start_lead_chat(run.id, message)
+    executor.start_lead_chat(run.id, message, shown=shown)
     return get_task(run.id)
 
 
@@ -1516,7 +1517,8 @@ def _automation_chat_model(automation: capability_runner.Automation, run: Option
     """The saved choice, with the ordinary fallback if it has become unavailable (or cannot see the
     images sent). An unchanged automatic preference keeps its conversation; restoring automatic
     chooses afresh."""
-    available = chat_models(needs_vision=needs_vision)
+    # API models first: people in a chat app wait for each answer (supervisor.chat_order).
+    available = sorted(chat_models(needs_vision=needs_vision), key=lambda model: model.channel == "cli")
     wanted = automation.state["model_id"]
     if not wanted and run and not automation.state["chat_preferences"].get(run.id) and run.supervisor:
         wanted = run.supervisor.model_id
@@ -1545,12 +1547,20 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     earlier = list(heard.get(asked.conversation, [])) if asked.conversation else []
     files_before = [item for item in files.resolve_existing(heard_files.get(asked.conversation, []))] \
         if asked.conversation else []
-    line = f"{asked.sender or '成员'}：{asked.text}"
-    if asked.attachments:
-        line += f"（附 {'、'.join(item.name for item in asked.attachments)}）"
+    line = f"{asked.sender or '成员'}：{asked.text}" + _attached_note(asked.attachments)
     judged = 0.0
+    # Its last answer there, and to whom: a reply to it is meant for it (a group's "西侧", "你继续啊").
+    answered = automation.state.setdefault("answered", {}).get(asked.conversation) if asked.conversation else None
+    recent = answered if answered and time.time() - answered.get("at", 0) < FOLLOW_UP_SECONDS else None
+    if not asked.addressed and recent and recent.get("asked_back") and recent.get("sender") == asked.sender:
+        # It asked them something a moment ago; this is the answer.
+        asked.addressed = True
+        automation.note(f"群里没 @ 它的消息：在回答它刚才的问题，回答（{line[:60]}）")
     if not asked.addressed:
-        meant, judged = await triage.addressed(line, "\n".join(earlier), capability.name, providers, cheapest)
+        context = "\n".join(earlier)
+        if recent:
+            context = f"{capability.name}（你）刚才回答 {recent.get('sender') or '成员'}：{recent.get('said', '')}\n{context}"
+        meant, judged = await triage.addressed(line, context, capability.name, providers, cheapest)
         if not meant:
             if asked.conversation:
                 heard[asked.conversation] = capability_runner.keep_heard([*earlier, line])
@@ -1559,7 +1569,13 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             automation.note(f"群里没 @ 它的消息：不是问它的，记作上下文（{line[:60]}）")
             return None, judged
         automation.note(f"群里没 @ 它的消息：判断是在问它，回答（{line[:60]}）")
+    if asked.text == capability_runner.CALLED_ONLY and not (earlier or files_before or asked.attachments
+                                                             or automation.state.get("notes", {}).get(asked.conversation)):
+        # Only @-mentioned, with nothing new to answer: say so briefly, not go over the past again.
+        return "在呢，要我做什么？", judged
     said = asked.text
+    # What the conversation keeps of it: what was said, plainly; the model is told it with more.
+    shown = "\n".join([*earlier, line]) if earlier else asked.text
     if earlier:
         said = ("群里此前的消息（不是问你的，供参考）：\n" + "\n".join(earlier)
                 + f"\n\n现在问你的：\n{line if asked.sender else asked.text}")
@@ -1596,7 +1612,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             try:
                 run = _start_chat(remembering.told(remembered) + said, max(automation.remaining(), 0.01), True, None,
                                   pick.id, attached,
-                                  auto_routed=True, spent=spent)
+                                  auto_routed=True, spent=spent, shown=shown)
             finally:
                 streaming.listener.reset(listening)
             latest = get_task(run.id)
@@ -1637,10 +1653,10 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             before, extra = latest.actual_cost_usd, spent
             listening = streaming.listener.set(asked.on_text)
             try:
-                executor.start_lead_chat(run.id, said, asked.attachments)
+                executor.start_lead_chat(run.id, said, asked.attachments, shown=shown)
             except files.AttachmentError as exc:
                 automation.note(f"附件没带上：{exc}")
-                executor.start_lead_chat(run.id, said)
+                executor.start_lead_chat(run.id, said, shown=shown)
             finally:
                 streaming.listener.reset(listening)
             break
@@ -1655,10 +1671,9 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     text = answer.text if answer else None
     actual = latest.supervisor.model_id if latest.supervisor else None
     if answer and answer.status == "done" and actual and actual != (requested or pick.id):
+        # For the owner, in the automation's log: the people chatting need not hear of it.
         name = models[actual].display_name if actual in models else actual
-        notice = f"（{'所选' if requested else '原'}模型暂不可用，本次由「{name}」回复。）"
-        text = f"{text}\n\n{notice}"
-        automation.note(notice)
+        automation.note(f"（{'所选' if requested else '原'}模型暂不可用，本次由「{name}」回复。）")
     cost = round(latest.actual_cost_usd - before + extra, 6)
     sent: list[str] = []
     if answer and answer.status == "done":
@@ -1670,6 +1685,11 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             text = f"{text}\n\n（发了：{listed}）".strip() if sent else text
             _record_answer(latest.id, answer.id, text)
         text = await _automation_task(capability, asked, automation, latest, answer.id, text, origin)
+        if asked.conversation and text:
+            automation.state.setdefault("answered", {})[asked.conversation] = {
+                "sender": asked.sender, "at": time.time(), "said": supervisor.for_person(text)[-300:],
+                "asked_back": supervisor.for_person(text).rstrip().endswith(("？", "?"))}
+            automation.save()
     return text, cost, sent
 
 
@@ -1688,6 +1708,19 @@ def _remember(capability: Capability, automation: capability_runner.Automation, 
                 automation.note(f"记下：{fact[:60]}")
     _record_answer(chat.id, answer_id, shown)
     return shown
+
+
+# How long after its answer a reply from the same person is taken as a reply to it.
+FOLLOW_UP_SECONDS = 300
+
+
+def _attached_note(attached: list) -> str:
+    """What came with a message, as the chat is told: how many pictures, and files by their names
+    (pictures are named by message ids nobody should see)."""
+    pictures = sum(item.kind == "image" for item in attached)
+    named = [item.name for item in attached if item.kind != "image"]
+    parts = ([f"{pictures} 张图片"] if pictures else []) + named
+    return f"（附 {'、'.join(parts)}）" if parts else ""
 
 
 # Files an automation chat's answer may send (SEND lines): how many, each at most the attachment size.

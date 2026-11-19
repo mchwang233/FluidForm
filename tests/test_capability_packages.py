@@ -343,7 +343,7 @@ async def test_a_picture_sent_in_a_group_without_at_is_seen_when_it_is_asked_abo
     replies = await eventually(lambda: len(lines("replies.jsonl")) == 2 and lines("replies.jsonl"))
     assert [item["reply"] for item in replies] == [None, "好的。"]
     # The picture came with the question, and the model was told it was sent before.
-    assert sent.attached == [["cat.png"]] and "成员1：（见附件）（附 cat.png）" in sent[0][2]
+    assert sent.attached == [["cat.png"]] and "成员1：（见附件）（附 1 张图片）" in sent[0][2] and "cat.png" not in sent[0][2]
     state = runner.get("fake-bot").state
     assert state["heard_files"] == {} and any("记作上下文" in line for line in runner.get("fake-bot").log)
 
@@ -450,7 +450,8 @@ async def test_an_image_goes_to_a_model_that_can_see_it_when_the_chosen_one_cann
     reply, _, _ = await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
         conversation="c1", text="看看这个", attachments=[image]), runner.get("fake-bot"))
     assert sent[-1][0] != OTHER.id and sent.attached[-1] == ["shot.png"]
-    assert "本次由" in reply
+    # The owner reads of the switch in the log; the people chatting are not told.
+    assert "本次由" not in reply and any("本次由" in line for line in runner.get("fake-bot").log)
     # Words alone go back to the chosen model.
     await bot_message(api, runner, "谢谢")
     assert sent[-1][0] == OTHER.id
@@ -630,7 +631,7 @@ async def test_automation_restoring_auto_after_reload_switches_existing_chats_wi
     runner.automations.clear()
     assert (await choose_model(client, None)).status_code == 200
     await bot_message(api, runner, "项目名是什么？")
-    assert sent[-1][0] == "cli:codex"
+    assert sent[-1][0] == BEST.id  # chosen automatically: an API model first, people wait for answers
     assert "项目名是海棠。" in sent[-1][2] and "好的。" in sent[-1][2] and "旧内容" not in sent[-1][2]
     assert len(sent[-1][2]) < MAX_CHAT_HANDOVER_CHARS
 
@@ -654,12 +655,14 @@ async def test_automation_fallback_reports_the_actual_model_and_retains_the_pref
     else:
         monkeypatch.delitem(api.models, OTHER.id)
     reply, _ = await bot_message(api, runner, "继续聊。")
-    assert sent[-1][0] == "cli:codex" and "先聊一句。" in sent[-1][2]
-    assert "Codex CLI" in reply and "暂不可用" in reply
+    # The next model is an API one (people wait for answers); the switch goes to the log only.
+    assert sent[-1][0] == BEST.id and "先聊一句。" in sent[-1][2]
+    assert "暂不可用" not in reply and any(BEST.display_name in line and "暂不可用" in line
+                                          for line in runner.get("fake-bot").log)
     assert runner.get("fake-bot").public()["model_id"] == OTHER.id
     # A new conversation also falls back if the saved choice is no longer available.
     reply, _ = await bot_message(api, runner, "新话题。", conversation="c2")
-    assert sent[-1][0] == "cli:codex" and "Codex CLI" in reply
+    assert sent[-1][0] == BEST.id and "暂不可用" not in reply
 
 
 async def test_automation_default_auto_keeps_its_existing_fallback_conversation(model_bot, monkeypatch):
@@ -673,7 +676,7 @@ async def test_automation_default_auto_keeps_its_existing_fallback_conversation(
 
     monkeypatch.setattr(api.providers, "converse", failing)
     reply, _ = await bot_message(api, runner, "你好。")
-    assert BEST.display_name in reply
+    assert "暂不可用" not in reply
     await bot_message(api, runner, "接着说。")
     assert [item[0] for item in sent] == [BEST.id, BEST.id]
     assert sent[-1][2] == "接着说。"
@@ -968,3 +971,85 @@ def test_memory_lines_are_read_and_kept_within_bounds():
     facts = remembering.apply([f"f{i}" for i in range(remembering.MAX_FACTS)], ["new", "f3", "我的 API key 是 x"], ["f0"])
     assert len(facts) == remembering.MAX_FACTS and facts[-1] == "new" and "f0" not in facts and facts.count("f3") == 1
     assert remembering.told([]) == ""
+
+
+async def test_in_a_group_a_reply_to_its_own_question_is_answered_without_an_at(packages, monkeypatch):
+    # Regression: it asked "在广场哪一侧？", and "西侧" (no @) was taken as not meant for it; so were
+    # other follow-ups, and the person had to @ it each time.
+    api, client, runner, _ = packages
+    sent, asked = triaging(api, monkeypatch, '{"kind": "chat"}', ["应该是国博。在广场哪一侧？", "那就是人民大会堂。", "好。"])
+    await upload(client, package())
+    bot, state = capabilities.load("fake-bot"), runner.get("fake-bot")
+    group = {"chat_type": "group"}
+
+    def say(text, sender="成员1", addressed=False):
+        return api.automation_message(bot, capability_runner.Asked(conversation="g1", text=text, origin=group,
+                                                                   addressed=addressed, sender=sender), state)
+
+    await say("这是哪栋楼？", addressed=True)
+    reply = (await say("西侧"))[0]
+    assert reply == "那就是人民大会堂。" and "西侧" in sent[-1][2]
+    # Someone else's aside is still judged, now knowing what it last said.
+    reply = (await say("哈哈", sender="成员2"))[0]
+    assert reply is None and "刚才回答 成员1：那就是人民大会堂。" in asked[-1][1]
+    # What the chat keeps is what was said, not what the model was told around it.
+    await say("继续说", addressed=True)
+    chat = api.db.get_run(state.state["chats"]["g1"])
+    assert chat.lead_messages[-2].text == "成员2：哈哈\n成员1：继续说"
+    assert not any("群里此前的消息" in m.text for m in chat.lead_messages if m.role == "user")
+
+
+async def test_only_an_at_with_nothing_new_gets_a_short_answer(packages, monkeypatch):
+    # Regression: an @ alone made it describe every picture of the conversation again.
+    api, client, runner, _ = packages
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}')
+    await upload(client, package())
+    reply, cost = (await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
+        conversation="g2", text=capability_runner.CALLED_ONLY, sender="成员1"), runner.get("fake-bot")))[:2]
+    assert (reply, cost) == ("在呢，要我做什么？", 0.0) and not sent
+
+
+def test_chats_in_chat_apps_are_short_and_answered_by_api_models_first():
+    from super_partner.models import ExecutionRun, RunStatus, TaskPlan
+    group = ExecutionRun(id="c", prompt="p", kind="chat", status=RunStatus.DRAFT, budget_usd=1, plan=TaskPlan(summary="s", nodes=[]),
+                         origin={"capability": "fake-bot", "chat_type": "group"})
+    assert "two or three sentences" in supervisor.chat_guide(group)
+    cli = BEST.model_copy(update={"id": "cli:codex", "channel": "cli"})
+    assert [m.id for m in supervisor.chat_order(group, [cli, BEST])] == [BEST.id, "cli:codex"]
+    web = group.model_copy(update={"origin": {}})
+    assert [m.id for m in supervisor.chat_order(web, [cli, BEST])] == ["cli:codex", BEST.id]
+
+
+async def test_a_question_about_a_picture_waits_for_the_picture_sent_just_after(monkeypatch):
+    # Regression: "这个图片的背景在哪里" came a moment before its picture: "我这边还没看到图片".
+    import asyncio
+
+    from super_partner import attachments as files
+    monkeypatch.setattr(capability_runner, "PICTURE_WAIT_SECONDS", 2.0)
+    seen, replies = [], []
+
+    async def handle(capability, asked, automation):
+        seen.append((asked.text, [item.name for item in asked.attachments]))
+        return "答", 0.0
+
+    runner = capability_runner.Runner(handle)
+    item = runner.get("fake-bot")
+    picture = files.save("bg.png", PNG)
+
+    async def send(automation, payload):
+        replies.append(payload)
+
+    monkeypatch.setattr(runner, "_send", send)
+    monkeypatch.setattr(capability_runner, "take_files", lambda item, cid, names: [picture] if names else [])
+    bot = Capability(id="fake-bot", name="假机器人", kind="automation", summary="s")
+    base = {"op": "message", "conversation": "g", "sender": "成员1"}
+    question = asyncio.create_task(runner._ask(item, bot, {**base, "id": "1", "text": "这个图片的背景在哪里"}))
+    await asyncio.sleep(0.2)
+    await runner._ask(item, bot, {**base, "id": "2", "text": "", "attachments": ["bg.png"]})
+    await asyncio.wait_for(question, 5)
+    assert seen == [("这个图片的背景在哪里", ["bg.png"])]
+    assert {"re": "2", "reply": None} in replies
+    # A picture sent a moment before is the one meant: no waiting then.
+    started = asyncio.get_running_loop().time()
+    await runner._ask(item, bot, {**base, "id": "3", "text": "这张图里是谁"})
+    assert asyncio.get_running_loop().time() - started < 1.0

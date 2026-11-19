@@ -406,9 +406,12 @@ class Leading:
             self._save(run)
         self.emit(run_id, "run.capabilities_proposed", names=[card.name for card in cards])
 
-    def start_lead_chat(self, run_id: str, text: str, attachments: list[Attachment] = ()) -> bool:
+    def start_lead_chat(self, run_id: str, text: str, attachments: list[Attachment] = (),
+                        shown: Optional[str] = None) -> bool:
         """The user writes to the lead: the message and a pending reply are saved at once, and the
-        lead answers in the background. False if it is still answering an earlier message."""
+        lead answers in the background. False if it is still answering an earlier message.
+        ``shown``: what the conversation keeps of the message, when the model is told more (what
+        an automation's group said before it, for instance)."""
         task = self.lead_tasks.get(run_id)
         if task and not task.done():
             return False
@@ -418,10 +421,11 @@ class Leading:
                 # Its answer was lost (a restart while the lead was answering, say).
                 message.status, message.text = "failed", "这条回复被中断了，请重新提问。"
         attach(run, attachments)
-        run.lead_messages += [LeadMessage(role="user", text=text, attachments=list(attachments)), LeadMessage(role="lead", status="pending")]
+        run.lead_messages += [LeadMessage(role="user", text=shown or text, attachments=list(attachments)),
+                              LeadMessage(role="lead", status="pending")]
         reply_id = run.lead_messages[-1].id
         self._save(run)
-        self.emit(run_id, "run.lead_message", role="user", text=text)
+        self.emit(run_id, "run.lead_message", role="user", text=shown or text)
         self.lead_tasks[run_id] = asyncio.create_task(self._lead_chat(run_id, text, reply_id))
         return True
 

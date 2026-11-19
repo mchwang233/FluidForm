@@ -45,6 +45,14 @@ MAX_LEADS = 3
 MAX_RESULT_CHARS = 600
 
 
+def chat_order(run: ExecutionRun, found: list[ModelProfile]) -> list[ModelProfile]:
+    """Models for a chat an automation brings (a Feishu bot), API models first: people there wait
+    for each answer, and a membership CLI takes tens of seconds to start one. Others as found."""
+    if not (run.origin or {}).get("capability"):
+        return found
+    return sorted(found, key=lambda model: model.channel == "cli")
+
+
 def candidates(models: list[ModelProfile], configured: set[str], exclude=()) -> list[ModelProfile]:
     """Possible leads, best first: membership CLIs that keep conversations (no extra cost, and they
     can look at the files), then API models; the best planners first."""
@@ -116,8 +124,11 @@ def chat_guide(run: ExecutionRun) -> str:
     from .capability_packages import chat_guide as package_guide
 
     guide = package_guide(str(origin["capability"]))
-    where = {"p2p": "This is a private chat with one person.",
-             "group": "This is a group chat: several people, who mostly talk among themselves."}.get(origin.get("chat_type"), "")
+    where = {"p2p": "This is a private chat with one person. Answer as in a chat: a few sentences, more only "
+                    "when they ask for detail or the question needs it.",
+             "group": "This is a group chat: several people, who mostly talk among themselves. Keep each answer "
+                      "short, two or three sentences, without headings or long lists, unless someone asks for "
+                      "detail. Do not go over what you said before unless asked."}.get(origin.get("chat_type"), "")
     from .remembering import GUIDE as remembering
 
     return ("".join(f"{part}\n\n" for part in (where, f"How to talk here:\n{guide}" if guide else "") if part)
@@ -302,7 +313,8 @@ def handover(run: ExecutionRun, current: Optional[str] = None) -> str:
                                                   *([session.model_id] if session and session.model_id != current else [])]) if item]
         who = f" ({', '.join(others)})" if others else ""
         return (f"This conversation continues one the user had with another model{who}; the 助手 replies below "
-                "are that model's, not yours, and what it said about itself is not about you. The messages so far:\n"
+                "are that model's, not yours, and what it said about itself is not about you. Do not bring the "
+                "change up with them unless they ask who you are. The messages so far:\n"
                 f"{earlier or '（none）'}\n\n" + (f"Project folder you may read: {run.project_dir}\n\n" if run.project_dir else ""))
     lines = [
         "You are taking over as the lead of a task that is already under way.",
@@ -364,7 +376,7 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
     last_error: Optional[Exception] = None
     for _ in range(MAX_LEADS):
         if session is None:
-            pick = next(iter(candidates(models, configured, tried)), None)
+            pick = next(iter(chat_order(run, candidates(models, configured, tried))), None)
             if pick is None:
                 break
             session = new_session(pick, run.supervisor, chat_folder(run))
