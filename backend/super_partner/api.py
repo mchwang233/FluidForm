@@ -31,6 +31,7 @@ from . import (
     publish,
     retrospect,
     skills,
+    streaming,
     supervisor,
     team,
     triage,
@@ -1442,8 +1443,13 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         run = db.get_run(known) if known else None
         if run is None or run.kind != "chat":
             requested, pick = automation.state["model_id"], _automation_chat_model(automation, needs_vision=needs_vision)
-            run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, pick.id, attached,
-                              auto_routed=True, spent=spent)
+            # The answer's lead runs in a task started here, which takes this context along.
+            heard = streaming.listener.set(asked.on_text)
+            try:
+                run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, pick.id, attached,
+                                  auto_routed=True, spent=spent)
+            finally:
+                streaming.listener.reset(heard)
             latest = get_task(run.id)
             prefix = f"{capability.name} · "
             latest.plan.title = prefix + asked.text.splitlines()[0][:max(CHAT_TITLE_CHARS - len(prefix), 10)]
@@ -1477,11 +1483,14 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             if previous != pick.id:
                 executor.emit(run.id, "run.lead_changed", model_id=pick.id, previous_model_id=previous)
             before, extra = latest.actual_cost_usd, spent
+            heard = streaming.listener.set(asked.on_text)
             try:
                 executor.start_lead_chat(run.id, asked.text, asked.attachments)
             except files.AttachmentError as exc:
                 automation.note(f"附件没带上：{exc}")
                 executor.start_lead_chat(run.id, asked.text)
+            finally:
+                streaming.listener.reset(heard)
             break
     # Remember the preference actually used for this turn, not a later change saved mid-reply.
     automation.state["chat_preferences"][run.id] = requested

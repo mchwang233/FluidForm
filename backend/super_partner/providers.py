@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import json
 import os
@@ -473,6 +474,8 @@ class ProviderRegistry:
                 await asyncio.wait_for(response.aread(), deadline)
                 return response
             lines, pieces = [], response.aiter_lines()
+            # Someone waiting to show the reply as it is written (an automation's chat) hears it.
+            hear, heard = streaming.listener.get(), ""
             while True:
                 try:
                     lines.append(await asyncio.wait_for(pieces.__anext__(), deadline))
@@ -480,6 +483,12 @@ class ProviderRegistry:
                     break
                 except asyncio.TimeoutError as exc:
                     raise StreamSilent() from exc
+                if hear and lines[-1].startswith("data:"):
+                    piece = "".join(streaming.text_piece(event) for event in streaming.events(lines[-1:]))
+                    if piece:
+                        heard += piece
+                        with contextlib.suppress(Exception):  # only a courtesy to the listener
+                            hear(heard)
             return httpx.Response(200, json=assemble(streaming.events(lines)), request=request)
         finally:
             await response.aclose()

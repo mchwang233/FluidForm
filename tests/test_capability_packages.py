@@ -246,6 +246,31 @@ async def test_a_picture_sent_alone_is_answered_in_the_chat_not_planned_as_work(
     assert sent.attached == [["shot.png"]]
 
 
+async def test_an_answer_being_written_reaches_the_automation_before_it_is_done(packages, monkeypatch):
+    from super_partner import streaming
+    api, client, _, _ = packages
+    triaging(api, monkeypatch, '{"kind": "chat"}')
+    monkeypatch.setattr(capability_runner, "PROGRESS_SECONDS", 0)
+
+    async def converse(session, prompt, **_kwargs):
+        hear = streaming.listener.get()
+        for text in ("**WAL**", "**WAL** 是预写日志。"):
+            hear(text)
+            await asyncio.sleep(0.05)
+        session.calls += 1
+        return ProviderResult("**WAL** 是预写日志。", 10, 10)
+
+    monkeypatch.setattr(api.providers, "converse", converse)
+    await upload(client, package([{"conversation": "c1", "text": "WAL 是什么？"}]))
+    await enable(client)
+    [reply] = await eventually(lambda: lines("replies.jsonl"))
+    assert reply["reply"] == "**WAL** 是预写日志。"
+    # Heard as it was written, before the answer itself.
+    progress = [line for line in lines("events.jsonl") if "progress" in line]
+    assert progress == [{"progress": "0", "text": "**WAL**"}, {"progress": "0", "text": "**WAL** 是预写日志。"}]
+    assert streaming.listener.get() is None
+
+
 async def test_work_sent_with_an_image_is_planned_with_it(packages, monkeypatch):
     api, client, _, _ = packages
     triaging(api, monkeypatch, '{"kind": "task"}')

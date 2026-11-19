@@ -62,6 +62,11 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - **To the automation** (stdin):
     - `{"re": id, "reply": …}`;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
+    - `{"progress": id, "text": …}`: a chat's answer while it is being written, all of it so far,
+      at most every `PROGRESS_SECONDS`, before its `re`. An API model's streamed text
+      (`streaming.listener`, heard in `providers._stream`, set only around the chat's lead, so
+      planning and other calls are not passed on); a membership CLI answers at once. An
+      automation that does not know it ignores it.
   - **Restarts:** a crash is restarted after a pause, at most `MAX_RESTARTS` times in a row; then
     it stays stopped with its log.
   - **Daily budget:** each automation has one (`capability_daily_budget_usd`, changeable). Past
@@ -107,7 +112,8 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - Its own `lark-oapi` in its `requirements.txt`.
   - Reaches `*.feishu.cn` and `*.larksuite.com`.
   - Answers private messages and @ in groups, once each, never the backlog.
-  - Replies under the message, and sends a task's result back.
+  - Replies under the message as a card (Markdown shown as it is meant), written word by word as the
+    answer comes (CardKit streaming, 1.0.5), and sends a task's result back.
   - Pictures, rich text with pictures, and files are downloaded into its data folder and sent
     along (1.0.3). In a group only rich text can @ it, so a picture there goes in a rich-text message.
 - **`settings.capability_packages`** (`SUPER_PARTNER_CAPABILITY_PACKAGES`, off by default): without

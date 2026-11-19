@@ -7,7 +7,28 @@ keeps sending data, a provider that hangs sends nothing (``providers.ProviderReg
 from __future__ import annotations
 
 import json
-from typing import Callable
+from contextvars import ContextVar
+from typing import Callable, Optional
+
+# Who hears a reply's text as it comes, in this context: called with all of it so far, once per
+# piece (a new call starts again from its first piece). None: nobody (most calls).
+listener: ContextVar[Optional[Callable[[str], None]]] = ContextVar("reply_listener", default=None)
+
+
+def text_piece(payload: dict) -> str:
+    """The reply text one streamed event adds, in any of the three formats; "" for anything else
+    (reasoning, tool calls, usage)."""
+    for choice in payload.get("choices") or []:  # OpenAI and those compatible with it
+        delta = choice.get("delta") or {}
+        if isinstance(delta.get("content"), str):
+            return delta["content"]
+    if payload.get("type") == "content_block_delta":  # Anthropic
+        delta = payload.get("delta") or {}
+        return delta.get("text") or "" if delta.get("type") == "text_delta" else ""
+    for candidate in (payload.get("candidates") or [])[:1]:  # Gemini
+        return "".join(part["text"] for part in (candidate.get("content") or {}).get("parts") or []
+                       if isinstance(part.get("text"), str) and not part.get("thought"))
+    return ""
 
 
 class StreamError(RuntimeError):

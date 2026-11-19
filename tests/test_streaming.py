@@ -149,3 +149,29 @@ async def test_a_gemini_stream_is_put_back_together(tmp_path, monkeypatch):
     assert (result.text, result.input_tokens, result.output_tokens) == ("Found it", 7, 3)
     assert sent[0].url.path.endswith(":streamGenerateContent") and sent[0].url.params["alt"] == "sse"
     assert json.loads(sent[1].content)["contents"][1]["parts"][0]["thoughtSignature"] == "s"
+
+
+async def test_who_waits_for_a_reply_hears_its_text_as_it_comes_not_its_reasoning(tmp_path, monkeypatch):
+    from super_partner import streaming
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test")
+    body = sse({"choices": [{"delta": {"reasoning_content": "想一想"}}]}, {"choices": [{"delta": {"content": "**WAL** 是"}}]},
+               {"choices": [{"delta": {"content": "预写日志。"}, "finish_reason": "stop"}]},
+               {"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}, "[DONE]")
+    registry, heard = registry_with([streamed(body)], []), []
+    token = streaming.listener.set(heard.append)
+    try:
+        result = await registry.complete("deepseek:deepseek-flash", "WAL 是什么", tmp_path)
+    finally:
+        streaming.listener.reset(token)
+        await registry.client.aclose()
+    assert heard == ["**WAL** 是", "**WAL** 是预写日志。"] and result.text == "**WAL** 是预写日志。"
+
+
+def test_the_reply_text_of_each_providers_stream_events():
+    from super_partner.streaming import text_piece
+    assert text_piece({"choices": [{"delta": {"content": "a"}}]}) == "a"
+    assert text_piece({"choices": [{"delta": {"reasoning_content": "r"}}]}) == ""
+    assert text_piece({"type": "content_block_delta", "delta": {"type": "text_delta", "text": "b"}}) == "b"
+    assert text_piece({"type": "content_block_delta", "delta": {"type": "thinking_delta", "thinking": "t"}}) == ""
+    assert text_piece({"candidates": [{"content": {"parts": [{"text": "c"}, {"text": "x", "thought": True}]}}]}) == "c"
+    assert text_piece({"usage": {}}) == ""

@@ -8,7 +8,9 @@ Each automation is its package's ``entry`` command, run in the capabilities' san
   asks it something, with ``"attachments": [path, ...]`` for files sent along: paths in its data
   folder, which FluidForm takes (copies into its attachments, then removes);
 - it reads ``{"re": id, "reply": ...}``, the answer, and ``{"event": "task_ended", "origin": {...},
-  "text": ...}`` when a task it asked for ends.
+  "text": ...}`` when a task it asked for ends. While a chat's answer is being written (an API
+  model streams it), ``{"progress": id, "text": ...}`` carries all of it so far, at most every
+  ``PROGRESS_SECONDS``; one that does not know it ignores it.
 
 What a message becomes (a chat's answer, or a task waiting for the owner's confirmation) is decided
 by ``handle`` (api.py). This module keeps each automation running (a crash is restarted, a few times),
@@ -41,6 +43,8 @@ RESTART_PAUSE = 10.0
 STABLE_SECONDS = 120.0
 LOG_LINES = 200
 MAX_TEXT = 20_000
+# How often an answer being written is passed on (``{"progress": ...}``).
+PROGRESS_SECONDS = 0.5
 # What a message of files alone says.
 FILES_ONLY = "（见附件）"
 # How long a line from an automation may be.
@@ -63,6 +67,8 @@ class Asked:
     text: str
     origin: dict = field(default_factory=dict)
     attachments: list[Attachment] = field(default_factory=list)
+    # Hears a chat's answer as it is written: all of it so far (streaming.listener).
+    on_text: Optional[Callable[[str], None]] = None
 
 
 def take_files(item: Automation, capability_id: str, names) -> list[Attachment]:
@@ -278,7 +284,7 @@ class Runner:
             return
         asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text or FILES_ONLY,
                       origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},
-                      attachments=attached)
+                      attachments=attached, on_text=self._progress(item, request))
         async with item.lock:
             if item.remaining() <= 0:
                 notice = None
@@ -298,6 +304,25 @@ class Runner:
         item.state["handled"] = int(item.state.get("handled", 0)) + 1
         item.save()
         await self._send(item, {"re": request, "reply": reply})
+
+    @staticmethod
+    def _progress(item: Automation, request) -> Callable[[str], None]:
+        """Passes an answer being written on to the automation, at most every PROGRESS_SECONDS.
+        Written without waiting (it is called from inside the model's stream); a lost one is
+        made good by the next, and by the answer itself."""
+        last = {"at": 0.0, "text": ""}
+
+        def heard(text: str) -> None:
+            now, process = time.monotonic(), item.process
+            if now - last["at"] < PROGRESS_SECONDS or text == last["text"]:
+                return
+            if not process or not process.stdin or process.returncode is not None:
+                return
+            last.update(at=now, text=text)
+            with contextlib.suppress(OSError, RuntimeError):
+                process.stdin.write((json.dumps({"progress": request, "text": text[:MAX_TEXT]}, ensure_ascii=False)
+                                     + "\n").encode())
+        return heard
 
     @staticmethod
     async def _send(item: Automation, payload: dict) -> None:
