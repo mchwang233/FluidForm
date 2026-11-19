@@ -203,6 +203,9 @@ async def test_uninstalled_it_leaves_nothing_behind(packages, monkeypatch):
     assert keyring == {} and capabilities.library() == []
 
 
+# A chat's answer asking for work (supervisor.AUTOMATION_WORK).
+ASK_FOR_WORK = '好，我让 FluidForm 排个计划。\nTASK: {"request": "给商品接口加 Redis 缓存：缓存商品详情 5 分钟，改价时清掉"}'
+
 # ---- running ----
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
@@ -392,7 +395,7 @@ def test_what_the_group_said_is_kept_bounded():
 
 async def test_work_sent_with_an_image_is_planned_with_it(packages, monkeypatch):
     api, client, _, _ = packages
-    triaging(api, monkeypatch, '{"kind": "task"}')
+    triaging(api, monkeypatch, '{"kind": "chat"}', ['好的。\nTASK: {"request": "照附件里的设计图改首页"}'])
     await upload(client, package([{"conversation": "c1", "text": "照这张图改首页", "files": {"design.png": b64(PNG)}}]))
     await enable(client)
     await eventually(lambda: lines("replies.jsonl"))
@@ -527,7 +530,7 @@ async def test_automation_uses_the_selected_api_or_cli_model_and_keeps_triage_in
     second, _ = await bot_message(api, runner, "检查点呢？")
     assert [item[0] for item in sent] == [model_id, model_id]
     assert first == "好的。" and second == "嗯。" and cost > 0
-    assert [item[0] for item in classified] == ["x:cheap", "x:cheap"]
+    assert classified == []  # every message goes to the chat; its model asks for work itself
     assert sent[0][2].startswith(CHAT_ROLE) and sent[1][2] == "检查点呢？"
     chat = api.db.get_run(runner.get("fake-bot").state["chats"]["c1"])
     assert chat.kind == "chat" and chat.plan.nodes == [] and chat.supervisor.model_id == model_id
@@ -642,12 +645,11 @@ async def test_automation_default_auto_keeps_its_existing_fallback_conversation(
 async def test_automation_model_selection_does_not_change_task_planning(model_bot, monkeypatch):
     api, client, runner, _, _ = model_bot
     assert (await choose_model(client, OTHER.id)).status_code == 200
-    sent, classified = triaging(api, monkeypatch, '{"kind": "task"}')
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}', [ASK_FOR_WORK])
     reply, _ = await bot_message(api, runner, "给商品接口加 Redis 缓存")
-    assert "等主人确认后开工" in reply and not sent
-    assert [item[0] for item in classified] == ["x:cheap"]
-    [task] = api.db.list_runs()
-    assert task.kind == "task" and task.status == RunStatus.AWAITING_CONFIRMATION
+    assert "等主人确认后开工" in reply and [item[0] for item in sent] == [OTHER.id]
+    [task] = [run for run in api.db.list_runs() if run.kind == "task"]
+    assert task.status == RunStatus.AWAITING_CONFIRMATION
 
 
 async def test_an_automation_asks_super_partner_and_a_conversation_goes_on_in_one_chat(packages, monkeypatch):
@@ -675,21 +677,39 @@ async def test_an_automation_asks_super_partner_and_a_conversation_goes_on_in_on
     assert not runner.running("fake-bot")
 
 
-async def test_work_waits_for_confirmation_and_the_automation_hears_how_it_ended(packages, monkeypatch):
-    api, client, _, _ = packages
-    triaging(api, monkeypatch, '{"kind": "task"}')
-    await upload(client, package([{"conversation": "c1", "text": "给商品接口加 Redis 缓存"}]))
+async def test_work_is_asked_for_by_the_chat_with_the_whole_conversation_and_its_end_is_told_there(packages, monkeypatch):
+    # Regression: a fragment ("关于戏剧的") was classified alone and planned as a task without what
+    # was said before; the chat never knew of the task, nor of how it ended.
+    api, client, runner, _ = packages
+    sent, classified = triaging(api, monkeypatch, '{"kind": "task"}', ["哪类接口？", ASK_FOR_WORK, "好的。"])
+    await upload(client, package([{"conversation": "c1", "text": "商品接口太慢了"},
+                                  {"conversation": "c1", "text": "详情页那个，加个缓存"}]))
     await enable(client)
-    [reply] = await eventually(lambda: lines("replies.jsonl"))
-    assert "等主人确认后开工" in reply["reply"] and "加缓存" in reply["reply"]
+    replies = await eventually(lambda: len(lines("replies.jsonl")) == 2 and lines("replies.jsonl"))
+    # A fragment is answered in the chat; work is asked for by the chat's model, said plainly.
+    assert replies[0]["reply"] == "哪类接口？" and not classified
+    assert replies[1]["reply"].startswith("好，我让 FluidForm 排个计划。") and "等主人确认后开工" in replies[1]["reply"]
+    assert "TASK" not in replies[1]["reply"]
     [task] = [run for run in api.db.list_runs() if run.kind == "task"]
-    assert task.status == RunStatus.AWAITING_CONFIRMATION and task.origin == {"message_id": "om_0", "capability": "fake-bot"}
+    assert task.prompt == "给商品接口加 Redis 缓存：缓存商品详情 5 分钟，改价时清掉"
+    # The planner saw the conversation, not only the request.
+    assert "商品接口太慢了" in sent.planned[0] and "新需求" in sent.planned[0]
+    chat_id = runner.get("fake-bot").state["chats"]["c1"]
+    assert task.origin == {"message_id": "om_1", "capability": "fake-bot", "conversation": "c1", "chat_run": chat_id}
+    chat = api.db.get_run(chat_id)
+    assert "排好了计划「加缓存」" in chat.lead_messages[-1].text and "TASK" not in chat.lead_messages[-1].text
+    # Its end: the automation hears it, the chat shows it, its model is told with the next message.
     task.status, task.final_result = RunStatus.SUCCEEDED, "缓存加好了，命中率 92%。"
     api.db.save_run(task)
     api.executor.emit(task.id, "run.succeeded")
     [event] = await eventually(lambda: lines("events.jsonl"))
-    assert event["event"] == "task_ended" and event["origin"]["message_id"] == "om_0"
+    assert event["event"] == "task_ended" and event["origin"]["message_id"] == "om_1"
     assert event["text"] == "「加缓存」做完了。\n\n缓存加好了，命中率 92%。"
+    assert api.db.get_run(chat_id).lead_messages[-1].text == event["text"]
+    assert runner.get("fake-bot").state["notes"] == {"c1": [event["text"]]}
+    await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
+        conversation="c1", text="命中率怎么样？"), runner.get("fake-bot"))
+    assert "这之后发生了" in sent[-1][2] and "命中率 92%" in sent[-1][2] and runner.get("fake-bot").state["notes"] == {}
 
 
 async def test_past_its_days_budget_it_is_told_once_then_nothing(packages, monkeypatch):

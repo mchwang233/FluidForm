@@ -145,9 +145,11 @@ CHEAP = ModelProfile(id="x:cheap", provider="x", display_name="Cheap", channel="
                      scores=CapabilityScore(coding=50, planning=50, reliability=80))
 
 
-def triaging(api, monkeypatch, verdict):
-    """``chatting``, plus the cheap model that tells a chat from a task and a stub planner."""
-    sent = chatting(api, monkeypatch)
+def triaging(api, monkeypatch, verdict, answers=("好的。",)):
+    """``chatting``, plus the cheap model that tells a chat from a task and a stub planner, whose
+    prompts are ``sent.planned``."""
+    sent = chatting(api, monkeypatch, answers)
+    sent.planned = []
     models = {**api.models, CHEAP.id: CHEAP}
     monkeypatch.setattr(api, "models", models)
     monkeypatch.setattr(api.executor, "model_lookup", models)
@@ -161,6 +163,7 @@ def triaging(api, monkeypatch, verdict):
         return ProviderResult(verdict, 1000, 10)
 
     async def plan(prompt, *_args, **_kwargs):
+        sent.planned.append(prompt)
         return TaskPlan(summary="加缓存", nodes=[TaskNode(id="a", title="加缓存", instructions="i", capability="coding")])
 
     monkeypatch.setattr(api.providers, "complete", complete)
@@ -420,3 +423,14 @@ async def test_a_chat_model_is_told_which_model_it_is_and_that_earlier_replies_w
     assert (await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "再说一次？"}, headers=ORIGIN)).status_code == 202
     await api.executor.lead_tasks[chat["id"]]
     assert "another model (x:other, x:best)" in sent[2][2]
+
+
+def test_an_automation_chats_lines_for_fluidform_are_kept_from_the_person():
+    text = '好，我让它排个计划。\nTASK: {"request": "做一张海边女孩的头像"}'
+    assert supervisor.for_person(text) == "好，我让它排个计划。"
+    assert supervisor.for_person("好，我让它排个计划。\nTAS") == "好，我让它排个计划。\nTAS"
+    assert supervisor.split_task(text) == ("好，我让它排个计划。", "做一张海边女孩的头像")
+    assert supervisor.split_task("没有任务") == ("没有任务", None)
+    # A TASK line that cannot be read asks for nothing.
+    assert supervisor.split_task('好\nTASK: {"request": ') == ("好", None)
+    assert supervisor.split_task('好\nTASK: {"request": "  "}') == ("好", None)

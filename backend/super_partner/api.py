@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -51,6 +52,7 @@ from .models import (
     DiagnosisMessage,
     Event,
     ExecutionRun,
+    LeadMessage,
     LearningSettings,
     ModelProfile,
     NodeStatus,
@@ -190,6 +192,7 @@ async def lifespan(_: FastAPI):
         await providers.client.aclose()
 
 
+log = logging.getLogger(__name__)
 app = FastAPI(title="FluidForm", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=settings.allowed_origins,
@@ -566,10 +569,11 @@ async def create_task(body: CreateTask):
     return await _new_task(body)
 
 
-async def _new_task(body: CreateTask, parent: Optional[ExecutionRun] = None) -> ExecutionRun:
+async def _new_task(body: CreateTask, parent: Optional[ExecutionRun] = None, context: str = "") -> ExecutionRun:
     """Plan, route and save a task awaiting confirmation. With ``parent`` it is a requirement
-    change that continues that task in its folder (see follow_up_task)."""
-    plan, session, attached, project_dir, background, lessons = await _make_plan(body, parent)
+    change that continues that task in its folder (see follow_up_task); ``context`` is what it
+    grew out of (a conversation), for the planner."""
+    plan, session, attached, project_dir, background, lessons = await _make_plan(body, parent, context=context)
     run = ExecutionRun(
         id=str(uuid4()), prompt=body.prompt, status=RunStatus.AWAITING_CONFIRMATION,
         plan=plan, budget_usd=body.budget_usd, use_cli=body.use_cli, allow_network=body.allow_network,
@@ -1444,45 +1448,37 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         said = ("群里此前的消息（不是问你的，供参考）：\n" + "\n".join(earlier)
                 + f"\n\n现在问你的：\n{line if asked.sender else asked.text}")
         heard.pop(asked.conversation, None)
+    # What happened since in FluidForm (a task it had planned ended), told before the message.
+    notes = automation.state.setdefault("notes", {}).pop(asked.conversation, []) if asked.conversation else []
+    if notes:
+        said = "FluidForm 告诉你，这之后发生了：\n" + "\n".join(f"- {note}" for note in notes) + "\n\n" + said
     if files_before:
         # The pictures and files sent there before, the group's, come with this message.
         asked.attachments = [*files_before, *[item for item in asked.attachments if item.id not in
                                               {before.id for before in files_before}]][-files.MAX_ATTACHMENTS:]
         heard_files.pop(asked.conversation, None)
-    if (asked.attachments and asked.text == capability_runner.FILES_ONLY) or asked.text == capability_runner.CALLED_ONLY:
-        # Files with no words (a picture sent alone), or only an @: there is nothing to tell work
-        # from; it is answered in the chat, as a person called on would answer.
-        kind, spent = "chat", judged
-    else:
-        kind, spent = await triage.classify(asked.text, providers, cheapest)
-        spent += judged
+    # Every message goes to the conversation's chat, whose model sees all of it and asks for a
+    # task itself (supervisor.AUTOMATION_WORK) once it knows what the work is.
+    spent = judged
     origin = {**asked.origin, "capability": capability.id}
     attached = [item.id for item in asked.attachments]
     needs_vision = any(item.kind == "image" for item in asked.attachments)
-    if kind == "task" and len(asked.text) >= 3:
-        task = await _new_task(CreateTask(prompt=asked.text, attachments=attached))
-        latest = get_task(task.id)
-        latest.origin, latest.auto_routed = origin, True
-        latest.actual_cost_usd = round(latest.actual_cost_usd + spent, 6)
-        db.save_run(latest)
-        estimate = latest.plan.estimate
-        guess = f"，预计 ${estimate.low_usd:.2f}–${estimate.high_usd:.2f}" if estimate else ""
-        reply = (f"这件事要动手做。我在 FluidForm 里排好了计划「{_task_name(latest)}」{guess}，"
-                 "等主人确认后开工，做完在这里告诉你。")
-        return reply, latest.actual_cost_usd
-    # A question: the conversation goes on in one chat, which its first message started.
+    if asked.on_text:
+        # The person sees the answer as it is written, never its lines for FluidForm.
+        show = asked.on_text
+        asked.on_text = lambda text: show(supervisor.for_person(text))
     while True:
         known = automation.state["chats"].get(asked.conversation) if asked.conversation else None
         run = db.get_run(known) if known else None
         if run is None or run.kind != "chat":
             requested, pick = automation.state["model_id"], _automation_chat_model(automation, needs_vision=needs_vision)
             # The answer's lead runs in a task started here, which takes this context along.
-            heard = streaming.listener.set(asked.on_text)
+            listening = streaming.listener.set(asked.on_text)
             try:
                 run = _start_chat(said, max(automation.remaining(), 0.01), True, None, pick.id, attached,
                                   auto_routed=True, spent=spent)
             finally:
-                streaming.listener.reset(heard)
+                streaming.listener.reset(listening)
             latest = get_task(run.id)
             prefix = f"{capability.name} · "
             latest.plan.title = prefix + asked.text.splitlines()[0][:max(CHAT_TITLE_CHARS - len(prefix), 10)]
@@ -1519,14 +1515,14 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             if previous != pick.id:
                 executor.emit(run.id, "run.lead_changed", model_id=pick.id, previous_model_id=previous)
             before, extra = latest.actual_cost_usd, spent
-            heard = streaming.listener.set(asked.on_text)
+            listening = streaming.listener.set(asked.on_text)
             try:
                 executor.start_lead_chat(run.id, said, asked.attachments)
             except files.AttachmentError as exc:
                 automation.note(f"附件没带上：{exc}")
                 executor.start_lead_chat(run.id, said)
             finally:
-                streaming.listener.reset(heard)
+                streaming.listener.reset(listening)
             break
     # Remember the preference actually used for this turn, not a later change saved mid-reply.
     automation.state["chat_preferences"][run.id] = requested
@@ -1543,7 +1539,46 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         notice = f"（{'所选' if requested else '原'}模型暂不可用，本次由「{name}」回复。）"
         text = f"{text}\n\n{notice}"
         automation.note(notice)
-    return text, round(latest.actual_cost_usd - before + extra, 6)
+    cost = round(latest.actual_cost_usd - before + extra, 6)
+    if answer and answer.status == "done":
+        text = await _automation_task(capability, asked, automation, latest, answer.id, text, origin)
+    return text, cost
+
+
+async def _automation_task(capability: Capability, asked: capability_runner.Asked, automation: capability_runner.Automation,
+                           chat: ExecutionRun, answer_id: str, text: Optional[str], origin: dict) -> Optional[str]:
+    """When the chat's answer asks for a task (its TASK line), plan it, with the conversation as its
+    background and the chat's files as its own; the answer, without that line, says so. The chat
+    keeps the answer as the person saw it."""
+    shown, request = supervisor.split_task(text or "")
+    if request is None:
+        return text
+    if len(request) < 3:
+        shown = shown or "这件事我没能写清楚，请再说具体一点。"
+    else:
+        context = "这个任务来自一段对话，对话内容如下（供参考，以需求为准）：\n" + supervisor.chat_transcript(chat)
+        try:
+            task = await _new_task(CreateTask(prompt=request, attachments=[item.id for item in chat.attachments]),
+                                   context=context)
+        except Exception as exc:  # the answer still goes out, saying planning failed
+            log.exception("planning a task for %s failed", capability.id)
+            shown = f"{shown}\n\n（排计划没成功：{str(exc)[:200]}）".strip()
+        else:
+            latest = get_task(task.id)
+            latest.origin = {**origin, "conversation": asked.conversation, "chat_run": chat.id}
+            latest.auto_routed = True
+            db.save_run(latest)
+            estimate = latest.plan.estimate
+            guess = f"，预计 ${estimate.low_usd:.2f}–${estimate.high_usd:.2f}" if estimate else ""
+            shown = (f"{shown}\n\n我在 FluidForm 里排好了计划「{_task_name(latest)}」{guess}，"
+                     "等主人确认后开工，做完在这里告诉你。").strip()
+            automation.note(f"排了任务「{_task_name(latest)}」")
+    record = get_task(chat.id)
+    for item in record.lead_messages:
+        if item.id == answer_id:
+            item.text = shown
+    db.save_run(record)
+    return shown
 
 
 runner = capability_runner.Runner(automation_message)
@@ -1557,6 +1592,16 @@ def automation_task_ended(run_id: str, kind: str) -> None:
     text = f"「{_task_name(run)}」{TASK_ENDED.get(kind, '结束了')}。"
     if body := (run.final_result or run.error or "").strip():
         text += "\n\n" + body
+    # Its conversation hears it too: the chat shows it, and its model is told with the next message.
+    if conversation := run.origin.get("conversation"):
+        automation = runner.get(run.origin["capability"])
+        notes = automation.state.setdefault("notes", {})
+        notes[conversation] = [*notes.get(conversation, []), text[:2000]][-5:]
+        automation.save()
+    chat = db.get_run(run.origin["chat_run"]) if run.origin.get("chat_run") else None
+    if chat and chat.kind == "chat":
+        chat.lead_messages.append(LeadMessage(role="lead", text=text))
+        db.save_run(chat)
     with contextlib.suppress(RuntimeError):  # no loop: nothing to send from
         runner.notify(run.origin["capability"], {"event": "task_ended", "origin": run.origin, "outcome": kind,
                                                  "title": _task_name(run), "text": text})

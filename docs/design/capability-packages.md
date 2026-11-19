@@ -59,10 +59,9 @@ unpacked and `MAX_PACKAGE_FILES` files.
       outside that folder, a link, or a file over `MAX_ATTACHMENT_BYTES` is refused with a log
       line. The chat or task gets them as files the user attached; a chat whose chosen model
       cannot see images is answered by one that can, saying so. A message of files alone reads
-      "（见附件）" and goes to the chat without being classified: there are no words to tell work by.
+      "（见附件）".
       A message with neither words nor files, said where it was called on (an @ and nothing
-      else), reads "（只 @ 了你，没有别的话）" and goes to the chat the same way, with what the
-      group said before.
+      else), reads "（只 @ 了你，没有别的话）", with what the group said before.
   - **To the automation** (stdin):
     - `{"re": id, "reply": …}`;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
@@ -90,9 +89,18 @@ unpacked and `MAX_PACKAGE_FILES` files.
     (`chat_preferences`). Old state defaults to automatic; these settings survive restart and
     package upgrades and stay independent for each capability.
 - **`api.py`:**
-  - A message from an automation is decided as 新建's 自动 decides (`triage.classify`):
-    - a question is answered by the conversation's own chat (no project folder);
-    - work is planned as a task waiting for the owner's confirmation.
+  - Every message from an automation goes to the conversation's own chat (no project folder), whose
+    model sees the whole conversation. It is not classified on its own: a fragment of a sentence
+    ("关于戏剧的") was taken for work, without what was said before.
+    - Work is asked for by that model (`supervisor.AUTOMATION_WORK`): once it knows what is
+      wanted, it ends its answer with `TASK: {"request": …}`, a self-contained request. FluidForm
+      plans the task (`_automation_task`), with the chat's transcript as its background and the
+      chat's files as its own, waiting for the owner's confirmation. The answer, without the line,
+      says the plan is ready; the chat keeps it as sent. The line is never shown, not even while
+      the answer is being written (`supervisor.for_person`).
+    - The task's origin remembers the conversation and the chat (`conversation`, `chat_run`).
+      When it ends, the chat shows how, and its model is told with the next message
+      (`state["notes"]`).
   - `ExecutionRun.origin` remembers `{"capability": id, …the package's origin}`. When the task
     ends (`Executor.end_listeners`), its result is sent to that automation.
   - Endpoints:

@@ -116,7 +116,44 @@ def chat_guide(run: ExecutionRun) -> str:
     guide = package_guide(str(origin["capability"]))
     where = {"p2p": "This is a private chat with one person.",
              "group": "This is a group chat: several people, who mostly talk among themselves."}.get(origin.get("chat_type"), "")
-    return "".join(f"{part}\n\n" for part in (where, f"How to talk here:\n{guide}" if guide else "") if part)
+    return "".join(f"{part}\n\n" for part in (where, f"How to talk here:\n{guide}" if guide else "") if part) + AUTOMATION_WORK
+
+
+# What a chat an automation brings messages to is told about work (automation_message reads it).
+AUTOMATION_WORK = (
+    "Work: when they want real work done (files changed, a program built, an image or a document "
+    "made, research written up), FluidForm plans it as a task that waits for its owner's "
+    "confirmation, then reports here how it went. When you know enough to describe it, end your "
+    "answer with one line:\n"
+    'TASK: {"request": "the work, complete and self-contained"}\n'
+    "The request is all the planner sees besides this conversation: write in it everything it "
+    "depends on that was said or sent here (what, for whom, style, constraints, which pictures). In "
+    "your answer, say in a sentence what you are having planned. If it is unclear what they want, "
+    "ask first and write no TASK line; never write one for what you can answer yourself.\n\n"
+)
+TASK_LINE = re.compile(r"^\s*TASK:\s*(\{.*\})\s*$", re.MULTILINE)
+# Lines an answer ends with for FluidForm, not the person (TASK, ENGINEER): kept from what they see.
+ACTION_LINE = re.compile(r"^\s*(TASK|ENGINEER):", re.MULTILINE)
+
+
+def split_task(text: str) -> tuple[str, Optional[str]]:
+    """An automation chat's answer without its TASK line, and the work that line asks for."""
+    found = TASK_LINE.search(text or "")
+    if not found:
+        # A TASK line that cannot be read asks for nothing, and is not shown either.
+        return re.sub(r"^\s*TASK:.*$", "", text or "", flags=re.MULTILINE).strip() if "TASK:" in (text or "") else text, None
+    try:
+        request = json.loads(found.group(1)).get("request")
+    except (json.JSONDecodeError, AttributeError):
+        request = None
+    request = request.strip() if isinstance(request, str) else ""
+    return (text[:found.start()] + text[found.end():]).strip(), request or None
+
+
+def for_person(text: str) -> str:
+    """What of an answer being written the person sees: up to a line meant for FluidForm."""
+    found = ACTION_LINE.search(text or "")
+    return text[:found.start()].rstrip() if found else text
 
 
 def chat_role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
