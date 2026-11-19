@@ -43,6 +43,9 @@ MAX_FILES = 10
 WORKING_EMOJI = "Typing"
 # The card element an answer is written into.
 ANSWER = "answer"
+# People send one thought as several messages: wait this long after someone's last one before
+# passing them on, together (Gather).
+GATHER_SECONDS = 4.0
 
 
 @dataclass
@@ -126,6 +129,40 @@ def card_json(text: str, streaming: bool = False) -> dict:
                       streaming_config={"print_frequency_ms": {"default": 40}, "print_step": {"default": 2}})
     return {"schema": "2.0", "config": config,
             "body": {"elements": [{"tag": "markdown", "content": text, "element_id": ANSWER}]}}
+
+
+def merged(items: list) -> Incoming:
+    """Several messages one person sent in a row, as one: their words line by line, their pictures
+    and files together; called on if any of them was."""
+    texts = [item.text for item in items if item.text]
+    images = [key for item in items for key in item.images][:MAX_FILES]
+    files = [entry for item in items for entry in item.files][:MAX_FILES - len(images)]
+    return Incoming("\n".join(texts), images, files, any(item.addressed for item in items))
+
+
+class Gather:
+    """Holds what one person sends in one chat until they stop for ``seconds``, then hands it on
+    once: ``ready(key, messages)``, oldest first. Each new message starts the wait again."""
+
+    def __init__(self, ready, seconds: float = GATHER_SECONDS):
+        self.ready, self.seconds, self.lock = ready, seconds, threading.Lock()
+        self.waiting: dict = {}
+
+    def add(self, key, message) -> None:
+        with self.lock:
+            items, timer = self.waiting.get(key, ([], None))
+            if timer:
+                timer.cancel()
+            timer = threading.Timer(self.seconds, self._done, args=(key,))
+            timer.daemon = True
+            self.waiting[key] = ([*items, message], timer)
+            timer.start()
+
+    def _done(self, key) -> None:
+        with self.lock:
+            items, _ = self.waiting.pop(key, ([], None))
+        if items:
+            self.ready(key, items)
 
 
 class Typing:
@@ -434,7 +471,8 @@ def main() -> None:
         (data / relative).write_bytes(response.file.read())
         return relative
 
-    def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "") -> None:
+    def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "", chat_type: str = "") -> None:
+        origin = {"message_id": message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
         if not incoming.addressed:
             # Not called on: no "typing" until FluidForm decides it is meant for it.
             names = [download(message_id, key, "image", "image.png") for key in incoming.images]
@@ -443,8 +481,7 @@ def main() -> None:
             if not incoming.text and not kept:
                 return
             typing = Typing(Cards(message_id))
-            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept,
-                              typing.heard, addressed=False, sender=sender)
+            result = host.ask(chat_id, incoming.text, origin, kept, typing.heard, addressed=False, sender=sender)
             if result and not typing.finish(result):
                 reply(message_id, result)
             return
@@ -457,8 +494,7 @@ def main() -> None:
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
             typing = Typing(Cards(message_id))
-            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept, typing.heard,
-                              sender=sender)
+            result = host.ask(chat_id, incoming.text, origin, kept, typing.heard, sender=sender)
             if result and not typing.finish(result):
                 reply(message_id, result)
             elif not result:
@@ -488,7 +524,16 @@ def main() -> None:
         who = alias(message.chat_id, sender.sender_id.open_id if sender and sender.sender_id else "") \
             if message.chat_type == "group" else ""
         if incoming is not None and seen.first(message.message_id):
-            threading.Thread(target=answer, args=(message.message_id, message.chat_id, incoming, who), daemon=True).start()
+            person = sender.sender_id.open_id if sender and sender.sender_id else ""
+            gather.add((message.chat_id, person), (message.message_id, message.chat_type or "", incoming, who))
+
+    def gathered(key, items) -> None:
+        """Someone's messages in a row, answered once, under the last of them."""
+        chat_id, _ = key
+        message_id, chat_type, _, who = items[-1]
+        answer(message_id, chat_id, merged([incoming for _, _, incoming, _ in items]), who, chat_type)
+
+    gather = Gather(gathered)
 
     handler = lark.EventDispatcherHandler.builder("", "").register_p2_im_message_receive_v1(on_message).build()
     host.status("正在连接飞书…")
@@ -564,6 +609,17 @@ def check() -> None:
     failed.heard("W")
     time.sleep(0.1)
     assert failed.finish("WAL") is False and Typing(Fake()).finish("x") is False
+    # Messages sent in a row are passed on once, together, after the sender stops.
+    assert merged([Incoming("我想问下"), Incoming("", ["img_1"], addressed=False), Incoming("这是什么猫")]) == \
+        Incoming("我想问下\n这是什么猫", ["img_1"], [], True)
+    handed = []
+    gather = Gather(lambda key, items: handed.append((key, [item for item in items])), seconds=0.1)
+    for word in ("那个", "我想问下", "这是什么猫"):
+        gather.add(("chat", "u1"), word)
+        time.sleep(0.03)
+    gather.add(("chat", "u2"), "你好")
+    time.sleep(0.3)
+    assert sorted(handed) == [(("chat", "u1"), ["那个", "我想问下", "这是什么猫"]), (("chat", "u2"), ["你好"])]
     print("ok")
 
 
