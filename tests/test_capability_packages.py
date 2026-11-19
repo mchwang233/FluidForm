@@ -314,6 +314,30 @@ async def test_past_its_budget_it_stays_quiet_where_it_was_not_called_on(package
     assert reply["reply"] is None and runner.get("fake-bot").state.get("notified") != capability_runner.today()
 
 
+async def test_a_picture_sent_in_a_group_without_at_is_seen_when_it_is_asked_about(packages, monkeypatch):
+    # Regression: a picture cannot @ the bot, and the question about it, asked next, came without it.
+    api, client, runner, _ = packages
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}')
+
+    async def complete(model_id, prompt, *_args, **_kwargs):
+        if prompt.startswith("You are 假机器人, an assistant in a group chat"):
+            return ProviderResult('{"reply": false}', 100, 5)
+        return ProviderResult('{"kind": "chat"}', 100, 5)
+
+    monkeypatch.setattr(api.providers, "complete", complete)
+    await upload(client, package([
+        {"conversation": "g1", "text": "", "files": {"cat.png": b64(PNG)}, "addressed": False, "sender": "成员1"},
+        {"conversation": "g1", "text": "这是什么猫？", "sender": "成员1"},
+    ]))
+    await enable(client)
+    replies = await eventually(lambda: len(lines("replies.jsonl")) == 2 and lines("replies.jsonl"))
+    assert [item["reply"] for item in replies] == [None, "好的。"]
+    # The picture came with the question, and the model was told it was sent before.
+    assert sent.attached == [["cat.png"]] and "成员1：（见附件）（附 cat.png）" in sent[0][2]
+    state = runner.get("fake-bot").state
+    assert state["heard_files"] == {} and any("记作上下文" in line for line in runner.get("fake-bot").log)
+
+
 def test_what_the_group_said_is_kept_bounded():
     kept = capability_runner.keep_heard([f"成员：{n}" * 100 for n in range(50)])
     assert len(kept) <= capability_runner.MAX_HEARD_LINES and sum(map(len, kept)) <= capability_runner.MAX_HEARD_CHARS

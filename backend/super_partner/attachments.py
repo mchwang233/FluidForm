@@ -118,6 +118,11 @@ def resolve(ids: list[str]) -> list[Attachment]:
     return found
 
 
+def resolve_existing(ids: list[str]) -> list[Attachment]:
+    """Those of ``ids`` still stored, in order; the gone are left out."""
+    return [attachment for attachment in map(get, dict.fromkeys(ids)) if attachment]
+
+
 # A task gathers files as the user sends them along the way (attach); at most this many in all.
 MAX_TASK_ATTACHMENTS = 50
 

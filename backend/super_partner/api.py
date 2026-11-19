@@ -1421,20 +1421,34 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     # What was said where it was not called on (a group chat): kept, and told with the next
     # message it answers, so it knows what the group was talking about.
     heard = automation.state.setdefault("heard", {})
+    heard_files = automation.state.setdefault("heard_files", {})
     earlier = list(heard.get(asked.conversation, [])) if asked.conversation else []
+    files_before = [item for item in files.resolve_existing(heard_files.get(asked.conversation, []))] \
+        if asked.conversation else []
     line = f"{asked.sender or '成员'}：{asked.text}"
+    if asked.attachments:
+        line += f"（附 {'、'.join(item.name for item in asked.attachments)}）"
     judged = 0.0
     if not asked.addressed:
-        meant, judged = await triage.addressed(asked.text, "\n".join(earlier), capability.name, providers, cheapest)
+        meant, judged = await triage.addressed(line, "\n".join(earlier), capability.name, providers, cheapest)
         if not meant:
             if asked.conversation:
                 heard[asked.conversation] = capability_runner.keep_heard([*earlier, line])
+                kept = [item.id for item in [*files_before, *asked.attachments]]
+                heard_files[asked.conversation] = kept[-capability_runner.MAX_HEARD_FILES:]
+            automation.note(f"群里没 @ 它的消息：不是问它的，记作上下文（{line[:60]}）")
             return None, judged
+        automation.note(f"群里没 @ 它的消息：判断是在问它，回答（{line[:60]}）")
     said = asked.text
     if earlier:
         said = ("群里此前的消息（不是问你的，供参考）：\n" + "\n".join(earlier)
                 + f"\n\n现在问你的：\n{line if asked.sender else asked.text}")
         heard.pop(asked.conversation, None)
+    if files_before:
+        # The pictures and files sent there before, the group's, come with this message.
+        asked.attachments = [*files_before, *[item for item in asked.attachments if item.id not in
+                                              {before.id for before in files_before}]][-files.MAX_ATTACHMENTS:]
+        heard_files.pop(asked.conversation, None)
     if asked.attachments and asked.text == capability_runner.FILES_ONLY:
         # Files with no words (a picture sent alone): there is nothing to tell work from; it is
         # asked about in the chat, as a picture sent to a person would be.

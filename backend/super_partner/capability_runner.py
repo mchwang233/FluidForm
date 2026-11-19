@@ -80,6 +80,8 @@ class Asked:
 # What is kept of a group's talk the automation was not called on, per conversation (keep_heard).
 MAX_HEARD_LINES = 30
 MAX_HEARD_CHARS = 4000
+# And of the pictures and files sent there (a picture in a group cannot @ it): the latest ones.
+MAX_HEARD_FILES = 10
 
 
 def keep_heard(lines: list[str]) -> list[str]:

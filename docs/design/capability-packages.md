@@ -66,7 +66,10 @@ unpacked and `MAX_PACKAGE_FILES` files.
       without @ it) and `"sender"`. The cheapest model decides whether it is meant for it
       (`triage.addressed`; failure or doubt: no). If not, it is not answered (`reply` null) but
       kept, per conversation (`state["heard"]`, bounded by `keep_heard`), and the next message it
-      answers there is told what the group said before. Past its day's budget it stays quiet
+      answers there is told what the group said before. Pictures and files
+      sent there are kept too (`state["heard_files"]`, the latest `MAX_HEARD_FILES`) and come with
+      that next message: a picture cannot @ the bot, so the question about it comes after it.
+      Each such message leaves a line in the automation's log (kept, or answered). Past its day's budget it stays quiet
       there, with no notice.
     - `{"progress": id, "text": …}`: a chat's answer while it is being written, all of it so far,
       at most every `PROGRESS_SECONDS`, before its `re`. An API model's streamed text
