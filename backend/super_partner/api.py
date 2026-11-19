@@ -1510,6 +1510,9 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             if previous != pick.id:
                 latest.supervisor = supervisor.new_session(pick, latest.supervisor, supervisor.chat_folder(latest))
                 latest.lead_seen_attachments = []
+            # Where it is (private or a group), for a chat started before automations said so.
+            if asked.origin.get("chat_type") and not (latest.origin or {}).get("chat_type"):
+                latest.origin = {**(latest.origin or {}), "chat_type": asked.origin["chat_type"]}
             # The chat may spend what is left of the automation's day.
             latest.budget_usd = round(latest.actual_cost_usd + max(automation.remaining(), 0.01), 6)
             db.save_run(latest)

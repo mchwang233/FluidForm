@@ -373,6 +373,13 @@ async def test_its_chats_are_told_how_to_talk_there_and_whether_it_is_a_group(mo
     group, private = sent[-2][2], sent[-1][2]
     assert guide in group and "This is a group chat" in group
     assert guide in private and "This is a private chat" in private and "group chat" not in private
+    # A chat started before it said where it is learns it with its next message.
+    chat = api.db.get_run(runner.get("fake-bot").state["chats"]["g1"])
+    chat.origin = {"capability": "fake-bot"}
+    api.db.save_run(chat)
+    await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
+        conversation="g1", text="在吗", origin={"chat_type": "group"}), runner.get("fake-bot"))
+    assert api.db.get_run(chat.id).origin == {"capability": "fake-bot", "chat_type": "group"}
     # Chats it did not bring, and packages without the file, are told nothing of it.
     assert capability_packages.chat_guide("other") == "" and capability_packages.chat_guide("../x") == ""
 
