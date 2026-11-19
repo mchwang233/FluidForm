@@ -51,6 +51,7 @@ from .models import (
     Event,
     ExecutionRun,
     LearningSettings,
+    ModelProfile,
     NodeStatus,
     RunStatus,
     SupervisorSession,
@@ -1384,6 +1385,19 @@ def _task_name(run: ExecutionRun) -> str:
     return run.plan.title or run.plan.summary[:40]
 
 
+def _automation_chat_model(automation: capability_runner.Automation, run: Optional[ExecutionRun] = None) -> ModelProfile:
+    """The saved choice, with the ordinary fallback if it has become unavailable. An unchanged
+    automatic preference keeps its conversation; restoring automatic chooses afresh."""
+    available = chat_models()
+    wanted = automation.state["model_id"]
+    if not wanted and run and not automation.state["chat_preferences"].get(run.id) and run.supervisor:
+        wanted = run.supervisor.model_id
+    pick = next((model for model in available if model.id == wanted), None) or next(iter(available), None)
+    if pick is None:
+        raise HTTPException(422, "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。")
+    return pick
+
+
 async def automation_message(capability: Capability, asked: capability_runner.Asked,
                              automation: capability_runner.Automation) -> tuple[Optional[str], float]:
     """What a message to an automation becomes, decided as 新建's 自动 decides (triage.classify): a
@@ -1404,34 +1418,63 @@ async def automation_message(capability: Capability, asked: capability_runner.As
                  "等主人确认后开工，做完在这里告诉你。")
         return reply, latest.actual_cost_usd
     # A question: the conversation goes on in one chat, which its first message started.
-    known = automation.state["chats"].get(asked.conversation) if asked.conversation else None
-    run = db.get_run(known) if known else None
-    if run is None or run.kind != "chat":
-        run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, None, auto_routed=True, spent=spent)
-        latest = get_task(run.id)
-        prefix = f"{capability.name} · "
-        latest.plan.title = prefix + asked.text.splitlines()[0][:max(CHAT_TITLE_CHARS - len(prefix), 10)]
-        latest.origin = origin
-        db.save_run(latest)
-        if asked.conversation:
-            automation.state["chats"][asked.conversation] = run.id
-            automation.save()
-        before, extra = 0.0, 0.0
-    else:
-        async with executor.locks.setdefault(run.id, asyncio.Lock()):
+    while True:
+        known = automation.state["chats"].get(asked.conversation) if asked.conversation else None
+        run = db.get_run(known) if known else None
+        if run is None or run.kind != "chat":
+            requested, pick = automation.state["model_id"], _automation_chat_model(automation)
+            run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, pick.id, auto_routed=True, spent=spent)
             latest = get_task(run.id)
+            prefix = f"{capability.name} · "
+            latest.plan.title = prefix + asked.text.splitlines()[0][:max(CHAT_TITLE_CHARS - len(prefix), 10)]
+            latest.origin = origin
+            db.save_run(latest)
+            if asked.conversation:
+                automation.state["chats"][asked.conversation] = run.id
+            before, extra = 0.0, 0.0
+            break
+        active = executor.lead_tasks.get(run.id)
+        if active and not active.done():
+            with contextlib.suppress(Exception):
+                await asyncio.shield(active)
+            continue
+        async with executor.locks.setdefault(run.id, asyncio.Lock()):
+            # Someone may have started a reply while we were waiting for the run lock.
+            active = executor.lead_tasks.get(run.id)
+            if active and not active.done():
+                continue
+            latest = get_task(run.id)
+            if latest.kind != "chat":
+                continue
+            requested, pick = automation.state["model_id"], _automation_chat_model(automation, latest)
+            previous = latest.supervisor.model_id if latest.supervisor else None
+            if previous != pick.id:
+                latest.supervisor = supervisor.new_session(pick, latest.supervisor, supervisor.chat_folder(latest))
+                latest.lead_seen_attachments = []
             # The chat may spend what is left of the automation's day.
             latest.budget_usd = round(latest.actual_cost_usd + max(automation.remaining(), 0.01), 6)
             db.save_run(latest)
-        before, extra = latest.actual_cost_usd, spent
-        while not executor.start_lead_chat(run.id, asked.text):
-            with contextlib.suppress(Exception):
-                await executor.lead_tasks[run.id]
+            if previous != pick.id:
+                executor.emit(run.id, "run.lead_changed", model_id=pick.id, previous_model_id=previous)
+            before, extra = latest.actual_cost_usd, spent
+            executor.start_lead_chat(run.id, asked.text)
+            break
+    # Remember the preference actually used for this turn, not a later change saved mid-reply.
+    automation.state["chat_preferences"][run.id] = requested
+    automation.save()
+    reply_id = get_task(run.id).lead_messages[-1].id
     with contextlib.suppress(Exception):
-        await executor.lead_tasks[run.id]
+        await asyncio.shield(executor.lead_tasks[run.id])
     latest = get_task(run.id)
-    answer = next((item for item in reversed(latest.lead_messages) if item.role == "lead"), None)
-    return (answer.text if answer else None), round(latest.actual_cost_usd - before + extra, 6)
+    answer = next((item for item in latest.lead_messages if item.id == reply_id), None)
+    text = answer.text if answer else None
+    actual = latest.supervisor.model_id if latest.supervisor else None
+    if answer and answer.status == "done" and actual and actual != (requested or pick.id):
+        name = models[actual].display_name if actual in models else actual
+        notice = f"（{'所选' if requested else '原'}模型暂不可用，本次由「{name}」回复。）"
+        text = f"{text}\n\n{notice}"
+        automation.note(notice)
+    return text, round(latest.actual_cost_usd - before + extra, 6)
 
 
 runner = capability_runner.Runner(automation_message)
@@ -1591,6 +1634,31 @@ def capability_budget(capability_id: str, body: CapabilityBudget):
     item = runner.get(capability.id)
     item.state["daily_budget_usd"] = body.daily_budget_usd
     item.save()
+    return item.public()
+
+
+class CapabilityModel(BaseModel):
+    model_id: Optional[str] = Field(default=None, max_length=200)
+
+
+@app.put("/api/capabilities/{capability_id}/model")
+async def capability_model(capability_id: str, body: CapabilityModel):
+    """Save an automation's chat model. Each chat adopts it before its next reply, after any
+    active reply finishes; classification and task planning retain their own model policies."""
+    capability = _capability(capability_id)
+    if capability.source != "upload" or capability.kind != "automation":
+        raise HTTPException(422, "只有上传的自动化能力可以设置聊天模型。")
+    model_id = body.model_id or None
+    if model_id and model_id not in {model.id for model in chat_models()}:
+        raise HTTPException(422, "这个模型暂不可用或不能用来对话，请重新选择。")
+    item = runner.get(capability.id)
+    previous = item.state["model_id"]
+    item.state["model_id"] = model_id
+    try:
+        item.save()
+    except OSError:
+        item.state["model_id"] = previous
+        raise
     return item.public()
 
 

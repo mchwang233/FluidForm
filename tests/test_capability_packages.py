@@ -15,8 +15,10 @@ import pytest
 from super_partner import capabilities, capability_packages, capability_runner, capability_sandbox
 from super_partner import secrets as secret_store
 from super_partner.config import settings
-from super_partner.models import Capability, RunStatus
-from test_chat import ORIGIN, triaging
+from super_partner.models import Capability, LeadMessage, RunStatus
+from super_partner.providers import ProviderError, ProviderResult
+from super_partner.supervisor import CHAT_ROLE, MAX_CHAT_HANDOVER_CHARS
+from test_chat import BEST, ORIGIN, OTHER, triaging
 
 # A fake automation: asks what asks.json lists, one at a time, and writes what it hears.
 FAKE = r'''
@@ -190,6 +192,216 @@ async def test_uninstalled_it_leaves_nothing_behind(packages, monkeypatch):
 
 
 # ---- running ----
+
+@pytest.fixture
+async def model_bot(packages, monkeypatch):
+    """Real routing and chat lifecycle, with fake API and membership conversations."""
+    api, client, runner, _ = packages
+    sent, classified = triaging(api, monkeypatch, '{"kind": "chat"}')
+    cli = BEST.model_copy(update={"id": "cli:codex", "display_name": "Codex CLI", "channel": "cli"})
+    monkeypatch.setitem(api.models, cli.id, cli)
+    await upload(client, package())
+    return api, client, runner, sent, classified
+
+
+async def choose_model(client, model_id, capability_id="fake-bot"):
+    return await client.put(f"/api/capabilities/{capability_id}/model", json={"model_id": model_id}, headers=ORIGIN)
+
+
+async def bot_message(api, runner, text, conversation="c1", capability_id="fake-bot"):
+    return await api.automation_message(capabilities.load(capability_id),
+                                       capability_runner.Asked(conversation=conversation, text=text),
+                                       runner.get(capability_id))
+
+
+async def test_automation_model_setting_survives_reload_upgrade_and_is_scoped_to_its_capability(model_bot):
+    api, client, runner, _, _ = model_bot
+    await upload(client, package(manifest={"id": "other-bot"}))
+    # A host state from before model settings existed still loads, with its budget and chats.
+    path = capability_runner.state_path("fake-bot")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"daily_budget_usd": 3, "chats": {"old": "old-chat"}, "handled": 7}))
+    old = runner.get("fake-bot")
+    assert old.public()["model_id"] is None
+    saved = await choose_model(client, OTHER.id)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["model_id"] == OTHER.id
+    runtime = (await client.get("/api/capabilities/runtime")).json()["capabilities"]
+    assert runtime["fake-bot"]["model_id"] == OTHER.id and runtime["other-bot"]["model_id"] is None
+    await upload(client, package(manifest={"version": "2.0"}))
+    reloaded = capability_runner.Runner(api.automation_message).get("fake-bot")
+    assert reloaded.public()["model_id"] == OTHER.id
+    assert reloaded.state["chats"] == {"old": "old-chat"}
+    assert reloaded.public()["daily_budget_usd"] == 3 and reloaded.public()["handled"] == 7
+    assert (await choose_model(client, None)).json()["model_id"] is None
+    assert capability_runner.Automation("fake-bot").public()["model_id"] is None
+
+
+@pytest.mark.parametrize("unavailable", ["unknown", "disabled", "unconfigured", "unscored", "helper", "no_session"])
+async def test_automation_model_setting_rejects_unusable_models_without_losing_the_saved_choice(model_bot, monkeypatch, unavailable):
+    api, client, runner, _, _ = model_bot
+    assert (await choose_model(client, OTHER.id)).status_code == 200
+    model = BEST.model_copy(update={"id": "x:invalid"})
+    if unavailable == "disabled":
+        model.enabled = False
+    elif unavailable == "unscored":
+        model.scores = None
+    elif unavailable == "helper":
+        monkeypatch.setattr(settings, "helper_only_models", [model.id])
+    elif unavailable == "no_session":
+        model.id, model.channel = "cli:no-session", "cli"
+    if unavailable != "unknown":
+        monkeypatch.setitem(api.models, model.id, model)
+    if unavailable == "unconfigured":
+        monkeypatch.setattr(api.providers, "configured_models", lambda _ids: set(api.models) - {model.id})
+    response = await choose_model(client, model.id)
+    assert response.status_code == 422 and "模型" in response.json()["detail"]
+    assert runner.get("fake-bot").public()["model_id"] == OTHER.id
+    assert capability_runner.Automation("fake-bot").public()["model_id"] == OTHER.id
+
+
+async def test_automation_model_setting_requires_an_uploaded_automation(model_bot):
+    _, client, runner, _, _ = model_bot
+    assert (await choose_model(client, OTHER.id, "missing")).status_code == 404
+    await upload(client, package(manifest={"id": "tool", "kind": "tool", "entry": ""}))
+    assert (await choose_model(client, OTHER.id, "tool")).status_code == 422
+    capability = capabilities.load("fake-bot")
+    capability.source = "task"
+    capabilities.save(capability)
+    assert (await choose_model(client, OTHER.id)).status_code == 422
+    assert not runner.automations
+
+
+@pytest.mark.parametrize("model_id", [OTHER.id, "cli:codex"])
+async def test_automation_uses_the_selected_api_or_cli_model_and_keeps_triage_independent(model_bot, model_id):
+    api, client, runner, sent, classified = model_bot
+    assert (await choose_model(client, model_id)).status_code == 200
+    first, cost = await bot_message(api, runner, "WAL 是什么？")
+    second, _ = await bot_message(api, runner, "检查点呢？")
+    assert [item[0] for item in sent] == [model_id, model_id]
+    assert first == "好的。" and second == "嗯。" and cost > 0
+    assert [item[0] for item in classified] == ["x:cheap", "x:cheap"]
+    assert sent[0][2].startswith(CHAT_ROLE) and sent[1][2] == "检查点呢？"
+    chat = api.db.get_run(runner.get("fake-bot").state["chats"]["c1"])
+    assert chat.kind == "chat" and chat.plan.nodes == [] and chat.supervisor.model_id == model_id
+
+
+@pytest.mark.parametrize(("first_model", "next_model"), [(OTHER.id, "cli:codex"), ("cli:codex", OTHER.id)])
+async def test_automation_model_switch_waits_for_the_reply_and_hands_recent_context_to_a_fresh_session(model_bot, monkeypatch, first_model, next_model):
+    api, client, runner, _, _ = model_bot
+    assert (await choose_model(client, first_model)).status_code == 200
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def converse(session, prompt, **_kwargs):
+        calls.append((session.model_copy(deep=True), prompt))
+        if len(calls) == 1:
+            entered.set()
+            await release.wait()
+        answer = "记住了，项目名是海棠。" if len(calls) == 1 else "接着聊海棠。"
+        session.calls += 1
+        session.session_id = f"native-{session.model_id}"
+        session.history += [{"role": "user", "content": prompt}, {"role": "assistant", "content": answer}]
+        return ProviderResult(answer, 10, 10)
+
+    monkeypatch.setattr(api.providers, "converse", converse)
+    first = asyncio.create_task(bot_message(api, runner, "项目名是海棠，请记住。"))
+    second = None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        # The next message is already queued when the owner saves a different model.
+        second = asyncio.create_task(bot_message(api, runner, "它叫什么？"))
+        await asyncio.sleep(0)
+        saved = await asyncio.wait_for(choose_model(client, next_model), 2)
+        assert saved.status_code == 200
+        run_id = runner.get("fake-bot").state["chats"]["c1"]
+        assert api.db.get_run(run_id).supervisor.model_id == first_model
+        assert len(calls) == 1 and not first.done() and not second.done()
+    finally:
+        release.set()
+        await asyncio.gather(first, *([second] if second else []))
+    assert (await first)[0] == "记住了，项目名是海棠。"
+    session, prompt = calls[1]
+    assert session.model_id == next_model and session.session_id is None and session.calls == 0 and session.history == []
+    assert session.previous == [first_model]
+    assert prompt.startswith(CHAT_ROLE) and "项目名是海棠，请记住。" in prompt
+    assert "记住了，项目名是海棠。" in prompt and "它叫什么？" in prompt
+    await bot_message(api, runner, "再确认一次。")
+    assert calls[2][0].session_id == f"native-{next_model}" and calls[2][1] == "再确认一次。"
+
+
+async def test_automation_restoring_auto_after_reload_switches_existing_chats_with_bounded_history(model_bot):
+    api, client, runner, sent, _ = model_bot
+    assert (await choose_model(client, OTHER.id)).status_code == 200
+    await bot_message(api, runner, "项目名是海棠。")
+    run_id = runner.get("fake-bot").state["chats"]["c1"]
+    chat = api.db.get_run(run_id)
+    chat.lead_messages.insert(0, LeadMessage(role="user", text="旧内容" * MAX_CHAT_HANDOVER_CHARS))
+    api.db.save_run(chat)
+    # Applied preferences survive a restart too; restoring automatic must not stay pinned.
+    runner.automations.clear()
+    assert (await choose_model(client, None)).status_code == 200
+    await bot_message(api, runner, "项目名是什么？")
+    assert sent[-1][0] == "cli:codex"
+    assert "项目名是海棠。" in sent[-1][2] and "好的。" in sent[-1][2] and "旧内容" not in sent[-1][2]
+    assert len(sent[-1][2]) < MAX_CHAT_HANDOVER_CHARS
+
+
+@pytest.mark.parametrize("failure", ["call", "disabled", "removed"])
+async def test_automation_fallback_reports_the_actual_model_and_retains_the_preference(model_bot, monkeypatch, failure):
+    api, client, runner, sent, _ = model_bot
+    assert (await choose_model(client, OTHER.id)).status_code == 200
+    await bot_message(api, runner, "先聊一句。")
+    converse = api.providers.converse
+
+    async def failing(session, prompt, **kwargs):
+        if session.model_id == OTHER.id:
+            raise ProviderError("selected model unavailable")
+        return await converse(session, prompt, **kwargs)
+
+    if failure == "call":
+        monkeypatch.setattr(api.providers, "converse", failing)
+    elif failure == "disabled":
+        monkeypatch.setitem(api.models, OTHER.id, OTHER.model_copy(update={"enabled": False}))
+    else:
+        monkeypatch.delitem(api.models, OTHER.id)
+    reply, _ = await bot_message(api, runner, "继续聊。")
+    assert sent[-1][0] == "cli:codex" and "先聊一句。" in sent[-1][2]
+    assert "Codex CLI" in reply and "暂不可用" in reply
+    assert runner.get("fake-bot").public()["model_id"] == OTHER.id
+    # A new conversation also falls back if the saved choice is no longer available.
+    reply, _ = await bot_message(api, runner, "新话题。", conversation="c2")
+    assert sent[-1][0] == "cli:codex" and "Codex CLI" in reply
+
+
+async def test_automation_default_auto_keeps_its_existing_fallback_conversation(model_bot, monkeypatch):
+    api, _, runner, sent, _ = model_bot
+    converse = api.providers.converse
+
+    async def failing(session, prompt, **kwargs):
+        if session.model_id == "cli:codex":
+            raise ProviderError("CLI unavailable")
+        return await converse(session, prompt, **kwargs)
+
+    monkeypatch.setattr(api.providers, "converse", failing)
+    reply, _ = await bot_message(api, runner, "你好。")
+    assert BEST.display_name in reply
+    await bot_message(api, runner, "接着说。")
+    assert [item[0] for item in sent] == [BEST.id, BEST.id]
+    assert sent[-1][2] == "接着说。"
+    assert runner.get("fake-bot").public()["model_id"] is None
+
+
+async def test_automation_model_selection_does_not_change_task_planning(model_bot, monkeypatch):
+    api, client, runner, _, _ = model_bot
+    assert (await choose_model(client, OTHER.id)).status_code == 200
+    sent, classified = triaging(api, monkeypatch, '{"kind": "task"}')
+    reply, _ = await bot_message(api, runner, "给商品接口加 Redis 缓存")
+    assert "等主人确认后开工" in reply and not sent
+    assert [item[0] for item in classified] == ["x:cheap"]
+    [task] = api.db.list_runs()
+    assert task.kind == "task" and task.status == RunStatus.AWAITING_CONFIRMATION
+
 
 async def test_an_automation_asks_super_partner_and_a_conversation_goes_on_in_one_chat(packages, monkeypatch):
     api, client, runner, _ = packages

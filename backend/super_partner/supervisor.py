@@ -99,6 +99,9 @@ def chat_opening(run: ExecutionRun, text: str) -> str:
     """A message in a chat: its first one carries the role and the folder it may read."""
     if run.supervisor and run.supervisor.calls:
         return text
+    if run.supervisor and run.supervisor.previous:
+        # A deliberate model change starts a fresh native/API session, as a lost session does.
+        return CHAT_ROLE + handover(run) + text
     folder = f"The user's project folder, which you may read: {run.project_dir}\n\n" if run.project_dir else ""
     return CHAT_ROLE + folder + text
 

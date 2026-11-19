@@ -70,7 +70,7 @@ class Automation:
     def __init__(self, capability_id: str):
         self.id = capability_id
         self.state = {"daily_budget_usd": settings.capability_daily_budget_usd, "spent": {}, "notified": "",
-                      "chats": {}, "handled": 0}
+                      "chats": {}, "handled": 0, "model_id": None, "chat_preferences": {}}
         with contextlib.suppress(OSError, ValueError):
             self.state.update(json.loads(state_path(capability_id).read_text()))
         self.status, self.text, self.error = "off", "", ""
@@ -106,6 +106,7 @@ class Automation:
     def public(self) -> dict:
         return {"status": self.status, "text": self.text, "error": self.error, "log": list(self.log)[-80:],
                 "daily_budget_usd": float(self.state["daily_budget_usd"]), "spent_today_usd": self.spent_today(),
+                "model_id": self.state["model_id"],
                 "handled": int(self.state.get("handled", 0)), "conversations": len(self.state["chats"])}
 
 

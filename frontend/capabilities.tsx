@@ -19,6 +19,7 @@ export type CapabilityProposal = CapabilityCard & { status: "proposed" | "solidi
 type Runtime = {
   secrets: Record<string, boolean>; status?: string; text?: string; error?: string; log?: string[];
   daily_budget_usd?: number; spent_today_usd?: number; handled?: number; conversations?: number;
+  model_id?: string | null;
 };
 type Runtimes = { available: boolean; missing: string; capabilities: Record<string, Runtime> };
 
@@ -120,7 +121,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
             ? <button type="button" className="link-button" onClick={() => onOpenRun(item.source_run_id!)}>「{source(item.source_run_id)!.plan.title || source(item.source_run_id)!.plan.summary}」</button>
             : "已删除的任务"}</dd></>}
         </dl>
-        {uploaded && state && <PackageControls apiBase={base} item={item} state={state} onChanged={load} act={act} />}
+        {uploaded && state && <PackageControls apiBase={apiBase} item={item} state={state} onChanged={load} act={act} />}
         {item.guide && <details className="capability-guide"><summary>说明书（SKILL.md）</summary><MarkdownView text={item.guide} /></details>}
         {item.kind === "automation" && !uploaded && <p className="capability-note">任务固化的自动化没有入口，不能在后台运行；做成能力包上传后才能运行。</p>}
         {item.status === "failed" && <details className="capability-check"><summary>检查输出</summary><pre>{item.check_output}</pre></details>}
@@ -129,12 +130,12 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
   </section>;
 }
 
-/** An uploaded package's secrets, and an automation's state, daily budget and log. */
+/** An uploaded package's secrets, and an automation's chat model, state, daily budget and log. */
 function PackageControls({ apiBase, item, state, onChanged, act }: {
-  apiBase: string; item: Capability; state: Runtime; onChanged: () => void; act: (promise: Promise<unknown>) => Promise<boolean>;
+  apiBase: string; item: Capability; state: Runtime; onChanged: () => Promise<unknown>; act: (promise: Promise<unknown>) => Promise<boolean>;
 }) {
   const [values, setValues] = useState<Record<string, string>>({}), [budget, setBudget] = useState("");
-  const url = `${apiBase}/${encodeURIComponent(item.id)}`;
+  const url = `${apiBase}/api/capabilities/${encodeURIComponent(item.id)}`;
   const running = RUNNING[state.status ?? "off"] ?? RUNNING.off, filled = Object.values(values).some(value => value.trim());
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -147,6 +148,7 @@ function PackageControls({ apiBase, item, state, onChanged, act }: {
       <span className="capability-run-counts">今天花了 ${(state.spent_today_usd ?? 0).toFixed(2)} · 已回 {state.handled ?? 0} 条 · {state.conversations ?? 0} 段对话</span>
     </div>}
     {state.error && <p className="error" role="alert">{state.error}</p>}
+    {item.kind === "automation" && <AutomationModel apiBase={apiBase} url={url} name={item.name} modelId={state.model_id} onChanged={onChanged} />}
     {!!item.secrets.length && <form className="capability-secrets" onSubmit={save} aria-label={`${item.name}的密钥`}>
       {item.secrets.map(name => <label key={name}>{name}<input type="password" autoComplete="new-password" value={values[name] ?? ""}
         placeholder={state.secrets[name] ? "已保存，要换才填" : "还没填"} onChange={event => setValues(current => ({ ...current, [name]: event.target.value }))} /></label>)}
@@ -162,6 +164,50 @@ function PackageControls({ apiBase, item, state, onChanged, act }: {
       <small>判断和回答的花费；排好的任务按你确认的预算另算。</small></label>}
     {!!state.log?.length && <details className="capability-check"><summary>运行日志</summary><pre>{state.log.join("\n")}</pre></details>}
   </div>;
+}
+
+/** The same available conversation models as 新建 → 对话, saved separately for each automation. */
+function AutomationModel({ apiBase, url, name, modelId, onChanged }: {
+  apiBase: string; url: string; name: string; modelId?: string | null; onChanged: () => Promise<unknown>;
+}) {
+  const [models, setModels] = useState<{ id: string; display_name: string; channel: string }[] | null>(null);
+  const [selected, setSelected] = useState(modelId ?? ""), [saved, setSaved] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
+  const [listError, setListError] = useState(""), [error, setError] = useState("");
+  useEffect(() => { setSelected(modelId ?? ""); }, [modelId]);
+  async function loadModels() {
+    setLoading(true); setListError("");
+    try { setModels(await call(`${apiBase}/api/chats/models`)); }
+    catch (failure) { setListError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void loadModels(); }, [apiBase]);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (saving || loading || selected === (modelId ?? "")) return;
+    setSaving(true); setSaved(null); setError("");
+    try {
+      const result = await call<Runtime>(`${url}/model`, sendJson("PUT", { model_id: selected || null }));
+      setSelected(result.model_id ?? ""); setSaved(result.model_id ?? "");
+      await onChanged();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { setSaving(false); }
+  }
+  const label = (id: string) => models?.find(model => model.id === id)?.display_name ?? id;
+  return <form className="capability-model capability-budget" aria-label={`${name}的聊天模型`} onSubmit={save}>
+    <label className="chat-model">聊天模型 <select aria-label={`${name}的聊天模型`} value={selected} disabled={loading || saving}
+      onChange={event => { setSelected(event.target.value); setSaved(null); setError(""); }}>
+      <option value="">自动选择</option>
+      {!!selected && !models?.some(model => model.id === selected) && <option value={selected} disabled>{selected}{models ? "（当前不可用）" : ""}</option>}
+      {(models ?? []).map(model => <option key={model.id} value={model.id}>{model.display_name} · {model.channel === "cli" ? "会员 CLI" : "API"}</option>)}
+    </select></label>
+    <button type="submit" className="primary" disabled={loading || saving || selected === (modelId ?? "")}>{saving ? "保存中…" : "保存模型"}</button>
+    {loading && <span role="status">正在加载模型…</span>}
+    {saved !== null && <span role="status">已保存：{saved ? label(saved) : "自动选择"}</span>}
+    {listError && <p className="error" role="alert">{listError} <button type="button" className="ghost" onClick={() => void loadModels()}>重试</button></p>}
+    {error && <p className="error" role="alert">{error}</p>}
+    <small>设置重启后保留。当前回复先完成，下一条回复使用新设置并接续最近对话。仅影响聊天，消息分类和任务规划、执行仍自动选模型。</small>
+  </form>;
 }
 
 /** On a finished task's result page: what its lead found reusable, to solidify or dismiss. */

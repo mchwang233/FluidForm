@@ -162,6 +162,12 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
         return json({ secrets: entry.secrets });
       }
       if (sub === "budget") { runtime.capabilities[id].daily_budget_usd = body.daily_budget_usd; return json(runtime.capabilities[id]); }
+      if (sub === "model") {
+        if (state.holdModelSave) await new Promise(resolve => { state.releaseModelSave = resolve; });
+        if (state.modelSaveError) return json({ detail: state.modelSaveError }, 422);
+        runtime.capabilities[id].model_id = body.model_id;
+        return json(runtime.capabilities[id]);
+      }
       if (options.method === "PATCH") {
         const { enabled, confirmed } = body;
         const current = items.find(item => item.id === id);
@@ -320,7 +326,8 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.records = state.records.map(run => run.id === updated.id ? updated : run);
       return json(updated);
     }
-    if (path === "/api/chats/models") return json(state.chatModels ?? [{ id: "cli:claude", display_name: "Claude Code CLI" }, { id: "x:fast", display_name: "Fast" }]);
+    if (path === "/api/chats/models") return state.chatModelsError ? json({ detail: state.chatModelsError }, 503)
+      : json(state.chatModels ?? [{ id: "cli:claude", display_name: "Claude Code CLI", channel: "cli" }, { id: "x:fast", display_name: "Fast", channel: "api" }]);
     if (path === "/api/chats" && options.method === "POST") {
       const body = JSON.parse(options.body);
       (state.chatPosts ??= []).push(body);
@@ -891,6 +898,112 @@ test("a capability package is uploaded, given its secrets, enabled after confirm
   await click(button("确认卸载", card()));
   await settle();
   assert.deepEqual(state.capabilities, []);
+});
+
+async function automationSettings(t, modelId, listError = "") {
+  const context = await setup(t, [], [], { openComposer: false });
+  const { state, document, button, click, act, window } = context;
+  state.capabilities = [
+    { ...FEISHU, id: "feishu-bot", name: "飞书机器人", kind: "automation", source: "upload", status: "disabled" },
+    { ...FEISHU, id: "other-bot", name: "另一个机器人", kind: "automation", source: "upload", status: "disabled" },
+    { ...FEISHU, id: "tool", source: "upload", status: "disabled" },
+  ];
+  state.capabilityRuntime = { available: true, missing: "", capabilities: Object.fromEntries(state.capabilities.map(item =>
+    [item.id, { secrets: {}, model_id: item.id === "feishu-bot" ? modelId : null }])) };
+  state.chatModelsError = listError;
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const open = async () => { await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head"))); await settle(); };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  await open();
+  const form = () => document.querySelector('[aria-label="飞书机器人的聊天模型"]');
+  const select = () => form().querySelector("select");
+  const choose = value => act(async () => { select().value = value; select().dispatchEvent(new window.Event("change", { bubbles: true })); });
+  return { ...context, settle, open, form, select, choose };
+}
+
+test("an automation saves an API or membership chat model, reloads it, and can restore automatic selection", async t => {
+  const { state, document, button, click, act, settle, open, form, select, choose } = await automationSettings(t, "x:fast");
+  assert.ok(form(), "The automation offers a chat-model form");
+  assert.equal(select().value, "x:fast");
+  assert.deepEqual([...select().options].map(option => option.value), ["", "cli:claude", "x:fast"]);
+  assert.match(form().textContent, /会员 CLI.*API/s);
+  assert.equal(document.querySelectorAll(".capability-model").length, 2, "Tools do not have a chat model");
+  assert.equal(button("保存模型", form()).disabled, true);
+  await choose("cli:claude");
+  assert.equal(state.capabilityRuntime.capabilities["feishu-bot"].model_id, "x:fast");
+  state.holdModelSave = true;
+  t.after(() => state.releaseModelSave?.());
+  await act(async () => form().requestSubmit());
+  await settle();
+  assert.equal(select().disabled, true);
+  assert.equal(button("保存中…", form()).disabled, true);
+  await act(async () => state.releaseModelSave());
+  await settle();
+  assert.equal(select().value, "cli:claude");
+  assert.match(form().textContent, /已保存.*Claude Code CLI/);
+  assert.deepEqual(state.capabilityCalls.find(call => call[2] === "model"), ["PUT", "feishu-bot", "model", { model_id: "cli:claude" }]);
+  assert.equal(state.capabilityRuntime.capabilities["other-bot"].model_id, null);
+  await click(button("← 平台"));
+  await settle();
+  await open();
+  assert.equal(select().value, "cli:claude");
+  state.holdModelSave = false;
+  await choose("");
+  await act(async () => form().requestSubmit());
+  await settle();
+  assert.equal(state.capabilityRuntime.capabilities["feishu-bot"].model_id, null);
+  assert.equal(select().value, "");
+  assert.match(form().textContent, /已保存.*自动/);
+  assert.match(form().textContent, /下一条回复.*最近.*分类.*任务/s);
+});
+
+test("an automation shows model-save failures and retains the stored choice", async t => {
+  const { state, button, click, act, settle, open, form, select, choose } = await automationSettings(t, "cli:claude");
+  assert.ok(form());
+  await choose("x:fast");
+  state.modelSaveError = "这个模型暂不可用，请重新选择。";
+  await act(async () => form().requestSubmit());
+  await settle();
+  assert.match(form().querySelector('[role="alert"]').textContent, /暂不可用/);
+  assert.doesNotMatch(form().textContent, /已保存/);
+  assert.equal(button("保存模型", form()).disabled, false);
+  assert.equal(select().disabled, false);
+  assert.equal(state.capabilityRuntime.capabilities["feishu-bot"].model_id, "cli:claude");
+  await click(button("← 平台"));
+  await settle();
+  await open();
+  assert.equal(select().value, "cli:claude");
+  await choose("x:fast");
+  state.modelSaveError = "";
+  await act(async () => form().requestSubmit());
+  await settle();
+  assert.match(form().textContent, /已保存.*Fast/);
+});
+
+test("old automation settings default to automatic and a failed model list can be retried", async t => {
+  const { state, button, click, settle, form, select } = await automationSettings(t, undefined, "模型列表读取失败");
+  assert.ok(form());
+  assert.equal(select().value, "");
+  assert.match(form().querySelector('[role="alert"]').textContent, /模型列表读取失败/);
+  state.chatModelsError = "";
+  await click(button("重试", form()));
+  await settle();
+  assert.equal(select().disabled, false);
+  assert.equal(select().options.length, 3);
+  assert.equal(form().querySelector('[role="alert"]'), null);
+});
+
+test("an unavailable saved automation model is displayed without silently changing it to automatic", async t => {
+  const { state, act, settle, form, select, choose } = await automationSettings(t, "removed:model");
+  assert.ok(form());
+  assert.equal(select().value, "removed:model");
+  assert.match(select().selectedOptions[0].textContent, /removed:model.*不可用/);
+  assert.equal(state.capabilityCalls.filter(call => call[2] === "model").length, 0);
+  await choose("");
+  await act(async () => form().requestSubmit());
+  await settle();
+  assert.equal(state.capabilityRuntime.capabilities["feishu-bot"].model_id, null);
 });
 
 test("a plan made in parts shows its major parts as stages; each opens in place, or all at once", async t => {

@@ -156,6 +156,16 @@ history, active lessons and already submitted independent platform jobs remain i
 | Results listing, ZIP, GitHub publish | `publish.py` | `SKIP`, `result_markdown` |
 | Settings (env `SUPER_PARTNER_*`) | `config.py` | `settings` |
 
+Automation chat preferences live in `capability_runner.Automation.state` (`model_id`, automatic
+when absent/null, and `chat_preferences` for the last applied choice per chat), independently of
+package code and secrets. `PUT /api/capabilities/{id}/model` validates uploaded automations against
+`chat_models`; runtime exposes the saved choice to 平台 → 能力 → 聊天模型. `automation_message`
+applies it before a reply starts, after any pending reply finishes. A changed model gets a fresh
+session; `supervisor.chat_opening` hands over recent messages via the existing bounded transcript.
+Restoring automatic chooses afresh, while unchanged automatic chats retain their conversation.
+Unavailable selections/call failures use the normal fallback and disclose the actual replying
+model; classification and task planning/execution keep their existing selection policies.
+
 ## Executor
 
 `Executor` (`executor.py`) mixes in `Reviewing` (`review.py`), `Leading` (`leading.py`), `Diagnosing`
