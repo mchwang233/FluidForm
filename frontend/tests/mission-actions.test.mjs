@@ -2785,6 +2785,25 @@ test("the 平台 page's 技能 更多 shows every skill with its whole descripti
   assert.ok(button("← 平台"));
 });
 
+test("in 全部记录 the engineer's repairs of this machine are listed too, and open their task", async t => {
+  const { state, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.engineer = { available: true, jobs: [engineerJob({ id: "done", title: "修复状态", headline: "步骤结果误判", status: "applied", kind: "repair" })],
+    environment: [{ id: "d1", run_id: "finished-task", task: "仿真回归", step: "跑 VCS", trigger: "manual", status: "done",
+      verdict: "fixed", model_id: "cli:codex", summary: "重启了 lmgrd", created_at: "2026-11-19T12:00:00Z" }] };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  await click(button("全部 1 条记录 ›"));
+  await settle();
+  const list = document.querySelector('[aria-label="平台工程师的工作"]');
+  const repairs = [...list.querySelectorAll("details")].find(node => node.querySelector("summary").textContent === "修环境 · 1");
+  assert.ok(repairs);
+  const row = repairs.querySelector("button");
+  assert.match(row.textContent, /仿真回归 · 跑 VCS.*已修好.*修环境 · 你请来的/);
+  await click(row);
+  assert.match(document.querySelector(".detail").textContent, /finished-task/);
+});
+
 test("in 全部记录 any piece of work can be talked on about, and opened in its conversation", async t => {
   const { state, window, document, button, click, act } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
   const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });

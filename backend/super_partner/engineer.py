@@ -185,7 +185,27 @@ class Engineering:
             "working_on": self.engineer_job_id if self.engineer_task and not self.engineer_task.done() else None,
             "pending": self.platform_pending.get("id") if self.platform_pending else None,
             "jobs": [job.model_dump(mode="json") for job in jobs],
+            # Its repairs of this machine are kept in each task (Diagnosis): listed here too.
+            "environment": [] if run_id else self._environment_repairs(),
         }
+
+    def _environment_repairs(self, limit: int = 50) -> list[dict]:
+        """The platform engineer's looks at tasks that did not change FluidForm's source (those
+        are jobs): repairs of this machine and findings, newest first, from every task."""
+        from .supervisor import ENGINEER_CALLERS
+
+        found = []
+        for run in self.db.list_runs():
+            titles = {node.id: node.title for node in run.plan.nodes}
+            for item in run.diagnoses:
+                if item.trigger not in ENGINEER_CALLERS or item.status == "running" or item.scope == "super_partner":
+                    continue
+                found.append({"id": item.id, "run_id": run.id, "task": run.plan.title or run.plan.summary[:40],
+                              "step": titles.get(item.node_id or "", ""), "trigger": item.trigger,
+                              "status": item.status, "verdict": item.verdict, "model_id": item.model_id,
+                              "summary": (item.report or item.error or "")[:300], "user_action": item.user_action,
+                              "created_at": item.created_at.isoformat()})
+        return sorted(found, key=lambda entry: entry["created_at"], reverse=True)[:limit]
 
     def _engineer_save(self, job: EngineerJob) -> None:
         job.updated_at = _now()
@@ -294,7 +314,10 @@ class Engineering:
                     if record and record.get("status") in {"activated", "failed", "rolled_back", "cancelled"}:
                         self._engineer_finished(record)
                         continue
-                job.messages.append(EngineerMessage(role="system", text="服务重启打断了这项工作，重新开始。"))
+                copy = self.platform.load(job.repair_id) if job.repair_id else None
+                kept = job.phase == "edit" and copy and not self.platform.stale(copy) and self.platform.edited(copy)
+                job.messages.append(EngineerMessage(role="system", text=(
+                    "服务重启打断了这项工作；已经改了的保留着，接着做。" if kept else "服务重启打断了这项工作，重新开始。")))
                 job.status = "queued"
                 if job.phase == "edit" and job.kind == "component" and not job.plan:
                     job.phase = "plan"
@@ -392,7 +415,8 @@ class Engineering:
         job.status = "editing"
         self._engineer_save(job)
         copy = self.platform.load(job.repair_id)
-        if not copy or copy.get("status") not in {"editing", "validating", "validated"} or self.platform.stale(copy):
+        fresh = not copy or copy.get("status") not in {"editing", "validating", "validated"} or self.platform.stale(copy)
+        if fresh:
             # A first edit, or the live source has changed since: a fresh copy, so applying it
             # cannot overwrite what changed.
             copy = await self.platform.prepare(job.run_id, None)
@@ -402,7 +426,12 @@ class Engineering:
             self._engineer_save(job)
         source = Path(copy["folder"]) / "source"
         guide = repair_guide(source, COMPONENT_GUIDES if job.kind == "component" else REPAIR_GUIDES)
-        feedback = ""
+        done = [] if fresh else self.platform.edited(copy)
+        # The same copy as before (a restart cut the work off, or the user asked for changes to it):
+        # it goes on from what is there instead of starting over.
+        feedback = (f"\nThe copy already has your earlier changes to: {', '.join(done[:40])}. Build on them: "
+                    "check what is done and finish what the conversation asks for now; do not start over.\n"
+                    if done else "")
         for attempt in range(settings.platform_repair_attempts):
             text = await self._engineer_call(job, edit_prompt(job, guide, feedback), source)
             report, status, question, choices = read_reply(text)

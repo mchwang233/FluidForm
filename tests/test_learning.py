@@ -280,6 +280,7 @@ async def test_restart_resumes_validation_without_regenerating_items(setup_learn
 
 async def test_platform_changes_use_the_existing_engineer_and_wait_for_actual_activation(setup_learning, monkeypatch):
     db, models, executor = setup_learning
+    finished(db, "earlier")  # the same problem came up in an earlier task
     finished(db)
     models.items = [proposal("platform", content="Improve the task splitting rule and add a regression test.")]
     requested = []
@@ -300,6 +301,19 @@ async def test_platform_changes_use_the_existing_engineer_and_wait_for_actual_ac
     db.save_engineer_job(job)
     executor.sync_improvements()
     assert db.improvement(item.id).status == "active"
+
+
+async def test_a_change_for_a_problem_seen_in_one_task_only_waits(setup_learning, monkeypatch):
+    # Regression: every retrospective sent its platform idea to the engineer as a component; most
+    # were turned down, after waiting hours for the user.
+    db, models, executor = setup_learning
+    finished(db)
+    models.items = [proposal("platform", content="Improve the task splitting rule and add a regression test.")]
+    requested = []
+    monkeypatch.setattr(executor, "engineer_request", lambda request, **kwargs: requested.append(kwargs))
+    _, [item] = await learn(db, executor)
+    assert not requested and item.status == "deferred" and "只在这一个任务里出现过" in item.validation["reason"]
+    assert retrospect.runs_with(db, "turns_over", "x:writer") == {"first"}
 
 
 async def test_a_duplicate_lesson_is_not_republished_by_later_reviews(setup_learning):

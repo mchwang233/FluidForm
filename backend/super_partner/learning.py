@@ -382,6 +382,11 @@ class Learning:
             platform = [i for i in items if i.kind == "platform" and i.status == "proposed"]
             allowance = max(0, review.budget_usd - review.cost_usd - review.allocated_usd) / max(1, len(platform))
             for item in platform:
+                if reason := self._not_for_engineer(item):
+                    # Kept, not acted on: it reaches the engineer once the problem comes back.
+                    item.status, item.validation = "deferred", {"passed": None, "reason": reason}
+                    self.db.save_improvement(item)
+                    continue
                 self._learning_engineer(review, item, allowance)
             review.status = "done"
         except SkippedLearning:
@@ -466,6 +471,21 @@ class Learning:
                 item.validation["merged_into"] = [
                     str(path) for path in skills.add_lesson(item.id, item.title, item.content, item.tools)]
         self.db.save_improvement(item)
+
+    def _not_for_engineer(self, item) -> str:
+        """Why a proposed change to FluidForm waits instead of going to the platform engineer, or "":
+        the problem came up in too few tasks, or a change for it is already under way."""
+        if not item.problem_kind:
+            return "没有对应到记录里的具体问题，先记下；同样的问题再出现时再请平台工程师。"
+        runs = retrospect.runs_with(self.db, item.problem_kind, item.problem_key)
+        if len(runs | {item.run_id}) < retrospect.PLATFORM_MIN_RUNS:
+            return (f"这个问题只在这一个任务里出现过，先记下；在 {retrospect.PLATFORM_MIN_RUNS} 个任务里出现后"
+                    "再请平台工程师。")
+        for other in self.db.improvements():
+            if (other.id != item.id and (other.problem_kind, other.problem_key) == (item.problem_kind, item.problem_key)
+                    and other.status == "engineering"):
+                return "平台工程师已经在处理同一个问题的改进。"
+        return ""
 
     def _learning_engineer(self, review, item, allowance):
         self._learning_source(review)

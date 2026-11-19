@@ -190,6 +190,13 @@ class PlatformRepairs:
         """The live source has changed since the copy was made: applying it would overwrite that."""
         return not self.root or source_files(self.root) != job["before"]
 
+    def edited(self, job: dict) -> list[str]:
+        """The files the copy has changed so far, checked or not (an edit a restart cut off)."""
+        try:
+            return changed(job["before"], source_files(Path(job["folder"]) / "source"))
+        except (RepairError, OSError, KeyError):
+            return []
+
     def diff(self, job: dict) -> str:
         """A unified diff of what the copy changed, for the user to read before applying it."""
         import difflib

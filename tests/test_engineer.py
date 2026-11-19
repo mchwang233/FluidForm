@@ -542,3 +542,55 @@ async def test_a_job_that_spent_its_budget_asks_before_going_on(setup):
     job = executor.db.get_engineer_job(job.id)
     assert job.budget_usd == pytest.approx(spent + settings.engineer_budget_usd)
     assert job.status == "ready" and len(providers.prompts) > calls
+
+
+async def test_the_records_list_the_engineers_repairs_of_this_machine(setup):
+    from super_partner.models import Diagnosis, ExecutionRun, RunStatus, TaskNode, TaskPlan
+    build, _, _ = setup
+    executor = build()
+    node = TaskNode(id="n", title="跑 VCS", instructions="i", capability="coding")
+    executor.db.save_run(ExecutionRun(id="r", prompt="p", status=RunStatus.SUCCEEDED, budget_usd=1,
+                                      plan=TaskPlan(summary="仿真回归", title="仿真回归", nodes=[node]), diagnoses=[
+        Diagnosis(id="d1", trigger="manual", node_id="n", status="done", verdict="fixed", report="重启了 lmgrd"),
+        Diagnosis(id="d2", trigger="lead", node_id="n", status="done", question="要联网吗？"),  # a question, not a look
+        Diagnosis(id="d3", trigger="auto", node_id="n", status="done", scope="super_partner"),  # a job of its own
+        Diagnosis(id="d4", trigger="preflight", status="running")]))
+    [item] = executor.engineer_overview()["environment"]
+    assert (item["id"], item["task"], item["step"], item["trigger"], item["verdict"]) == ("d1", "仿真回归", "跑 VCS", "manual", "fixed")
+    assert item["summary"] == "重启了 lmgrd" and executor.engineer_overview(run_id="r")["environment"] == []
+
+
+async def test_work_a_restart_cut_off_goes_on_from_its_changes(setup, tmp_path):
+    # Regression: after a restart the engineer did the whole change again from the start.
+    build, _, _ = setup
+    providers = Engineer()
+    db = Database(tmp_path / "test.db")
+    executor = build(providers, db)
+    job = executor.engineer_request("加一个导出按钮")
+    await idle(executor)
+    executor.engineer_approve(job.id)
+    await idle(executor)
+    job = db.get_engineer_job(job.id)
+    assert job.status == "ready" and job.files
+    job.status = "editing"  # as a restart finds it mid-edit
+    db.save_engineer_job(job)
+    again = build(providers, db)
+    again.restore_engineer()
+    await idle(again)
+    job = db.get_engineer_job(job.id)
+    assert any(m.text == "服务重启打断了这项工作；已经改了的保留着，接着做。" for m in job.messages)
+    assert "The copy already has your earlier changes to:" in providers.prompts[-1][0]
+    assert job.status == "ready"
+
+
+def test_a_stopped_platform_repair_says_why(tmp_path):
+    import asyncio as aio
+
+    from super_partner.models import ExecutionRun, RunStatus, TaskPlan
+    db = Database(tmp_path / "t.db")
+    executor = Executor(db, None, {})
+    db.save_run(ExecutionRun(id="r", prompt="p", status=RunStatus.CANCELLED, budget_usd=1, plan=TaskPlan(summary="s", nodes=[])))
+    assert "任务被取消或删除了" in executor._why_stopped("r", aio.CancelledError())
+    db.save_run(ExecutionRun(id="r", prompt="p", status=RunStatus.RUNNING, budget_usd=1, plan=TaskPlan(summary="s", nodes=[])))
+    assert "服务重启或停止打断了" in executor._why_stopped("r", aio.CancelledError())
+    assert "KeyError" in executor._why_stopped("r", KeyError())

@@ -18,7 +18,18 @@ export type EngineerJob = {
   commit?: string | null; model_id?: string | null; messages?: EngineerMessage[]; budget_usd: number; cost_usd: number;
   error?: string | null; created_at: string; updated_at: string; finished_at?: string | null;
 };
-export type EngineerOverview = { available: boolean; working_on?: string | null; pending?: string | null; jobs: EngineerJob[] };
+// A look the platform engineer took at a task without changing FluidForm's source: a repair of
+// this machine, or what it found (each task keeps it; GET /api/engineer lists them all).
+export type EnvironmentRepair = { id: string; run_id: string; task: string; step: string; trigger: string; status: string;
+  verdict?: string | null; model_id?: string | null; summary: string; user_action?: string | null; created_at: string };
+export type EngineerOverview = { available: boolean; working_on?: string | null; pending?: string | null; jobs: EngineerJob[];
+  environment?: EnvironmentRepair[] };
+const REPAIR_VERDICT: Record<string, { label: string; tone: string }> = {
+  fixed: { label: "已修好", tone: "ok" }, retry: { label: "已查过", tone: "ok" }, quota_exhausted: { label: "换了模型", tone: "ok" },
+  model_unavailable: { label: "换了模型", tone: "ok" }, blocked: { label: "要你处理", tone: "warn" },
+  needs_input: { label: "等你回复", tone: "warn" }, unable: { label: "这里做不到", tone: "warn" },
+};
+const CALLED: Record<string, string> = { manual: "你请来的", auto: "失败后请来", lead_repair: "负责人请来", preflight: "执行前检查请来" };
 type RunRef = { id: string; plan: { summary: string; title?: string } };
 
 export const ENGINEER_STATUS: Record<string, { label: string; tone: string }> = {
@@ -110,6 +121,14 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
     <span className="engineer-list-title">{headlineOf(job)}</span>
     <span className="engineer-list-meta"><StatusChip status={job.status} /><span>{KIND[job.kind]} · {ORIGIN[job.origin]} · {when(job.created_at)}</span></span>
   </button>;
+  const environment = data?.environment ?? [];
+  const repairRow = (item: EnvironmentRepair) => {
+    const verdict = item.status === "failed" ? { label: "没查完", tone: "bad" } : REPAIR_VERDICT[item.verdict ?? ""] ?? { label: "查完了", tone: "ok" };
+    return <button type="button" key={item.id} title={item.summary} onClick={() => onOpenRun(item.run_id)}>
+      <span className="engineer-list-title">{item.task}{item.step ? ` · ${item.step}` : ""}</span>
+      <span className="engineer-list-meta"><span className={`dx-chip ${verdict.tone}`}>{verdict.label}</span><span>修环境 · {CALLED[item.trigger] ?? "平台工程师"} · {when(item.created_at)}</span></span>
+    </button>;
+  };
   if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} openThread={thread} visit={visit}
     onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} onSkills={() => pick("skills")} />;
   return <div className="engineer-page">
@@ -119,9 +138,10 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
     {error && <p className="error" role="alert">{error}</p>}
     {tab === "skills" ? <SkillsPage apiBase={apiBase} /> : tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
       <nav className="engineer-list" aria-label="平台工程师的工作">
-        {!jobs.length && <p className="empty">还没有记录。</p>}
+        {!jobs.length && !environment.length && <p className="empty">还没有记录。</p>}
         {!!(waiting.length + active.length) && <><h4>进行中</h4>{[...waiting, ...active].map(row)}</>}
         {!!applied.length && <><h4>已生效</h4>{applied.map(row)}</>}
+        {!!environment.length && <details className="engineer-others"><summary>修环境 · {environment.length}</summary>{environment.map(repairRow)}</details>}
         {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
       {selected ? <JobDetail apiBase={apiBase} job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread} />

@@ -123,7 +123,7 @@ class SelfRepair:
             self.maintenance_task = asyncio.create_task(self._activate_platform(job))
             return report + "\nSTATUS: PLATFORM_PENDING", cost
         except BaseException as exc:
-            job.update(status="failed", error=str(exc) or "平台修复被取消。")
+            job.update(status="failed", error=str(exc) or self._why_stopped(run.id, exc))
             self.platform.save(job)
             record_job.status, record_job.error = "failed", job["error"][:2000]
             record_job.cost_usd = round(cost + getattr(exc, "accounted_cost_usd", 0.0), 6)
@@ -153,6 +153,16 @@ class SelfRepair:
             job.update(status="failed", error=str(exc))
             self.platform.save(job)
             self._finish_platform(job)
+
+    def _why_stopped(self, run_id: str, exc: BaseException) -> str:
+        """What stopped a platform repair that says nothing itself: the task was cancelled, or a
+        restart or shutdown cut it off."""
+        if isinstance(exc, asyncio.CancelledError):
+            latest = self.db.get_run(run_id)
+            if not latest or latest.status == RunStatus.CANCELLED:
+                return "任务被取消或删除了，这次平台修复跟着停下，没有改动 FluidForm。"
+            return "服务重启或停止打断了这次平台修复，没有改动 FluidForm；任务接着做时会再查一次。"
+        return f"平台修复没能完成（{type(exc).__name__}），没有改动 FluidForm。"
 
     async def _wait_to_apply(self) -> None:
         """Wait for what a restart must not cut off: requests being handled, repairs and the

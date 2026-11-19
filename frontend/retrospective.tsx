@@ -20,7 +20,7 @@ type LearningData = {
 };
 const STATUS: Record<string, string> = {
   queued: "等待复盘", analyzing: "生成结论中", validating: "验证中", done: "复盘完成", blocked: "等待处理",
-  failed: "未通过", proposed: "待验证", active: "已生效", engineering: "平台工程师处理中", disabled: "已停用", skipped: "已跳过自动复盘",
+  failed: "未通过", proposed: "待验证", active: "已生效", engineering: "平台工程师处理中", deferred: "先记下", disabled: "已停用", skipped: "已跳过自动复盘",
 };
 const KIND = { skill: "Skill", rule: "执行规则", platform: "平台改进" };
 const money = (n: number) => `$${n.toFixed(4)}`;

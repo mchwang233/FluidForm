@@ -361,6 +361,25 @@ def topics(db, min_runs: int = 1) -> list[dict]:
     return sorted(found, key=lambda group: (-len(group["runs"]), group["topic"]))
 
 
+# Tasks a problem must have come up in before a retrospective asks the platform engineer to change
+# FluidForm for it (learning.py): a one-off seldom merits a change, and most were turned down.
+PLATFORM_MIN_RUNS = 2
+
+
+def runs_with(db, kind: str, key: str) -> set[str]:
+    """The tasks a problem came up in: by its kind and key, and by the name it was given, which
+    joins the same cause recorded under other keys."""
+    member = f"{kind}:{key}"
+    found = set()
+    for group in recurring(db):
+        if (group["kind"], group["key"]) == (kind, key):
+            found |= set(group["runs"])
+    for group in topics(db):
+        if member in group["members"]:
+            found |= set(group["runs"])
+    return found
+
+
 # A model's overrun counts once this many of its steps have run; fewer say too little.
 CALIBRATION_STEPS = 3
 
