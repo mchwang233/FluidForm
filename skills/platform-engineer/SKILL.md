@@ -26,7 +26,8 @@ Super Partner gives it to the platform engineer for every component it plans or 
    - a skill: a folder under `skills/` with a `SKILL.md`;
    - a web UI feature: the component in `frontend/` named in the map, styles in `style.css`;
    - scheduling, steps, checks: `executor.py`, `review.py`, `quality.py`, `planner.py`.
-3. Write the plan the user approves: 目标, 改动 (each file), 测试, 风险. Keep it small enough to
+3. Write the plan the user approves: 目标, 改动 (each file), 测试, 风险. A web UI change names the
+   existing piece of UI it follows (see Web UI below). Keep it small enough to
    build and check in one go; if it is bigger, plan the first useful part and name the rest.
 4. Ask the user (QUESTION / OPTIONS / STATUS: NEEDS_INPUT) only for a choice that is theirs:
    cost, credentials, behaviour they must decide.
@@ -45,6 +46,32 @@ Super Partner gives it to the platform engineer for every component it plans or 
    - only if the frontend changed: `cd frontend && npm test && npm run build`
    Fix every failure your change causes.
 5. Update `docs/ARCHITECTURE.md` for a new module or a moved responsibility.
+
+## Web UI
+
+The UI is plain and quiet: white or near-black panels, hairlines, grey text, one green. A change
+must look like it was always there. Before writing any markup:
+
+1. Find the closest existing piece of UI for the same kind of thing and copy its structure and
+   classes (a setting: `.capability-field` in `frontend/capabilities.tsx`; a list row, a chip, a
+   tab bar: the page in the map that has one). Add new CSS only for what nothing covers, next
+   to that component's rules in `style.css`.
+2. Colours, borders and backgrounds only through the variables in `style.css` (`--text`,
+   `--muted`, `--faint`, `--line`, `--panel`, `--panel-2`, `--ok`, `--danger`, `--accent`), so
+   the dark theme follows. In `.tsx` files no colour literals, and `style=` only for a size or
+   position that comes from data, such as a bar's width (`tests/bundle.test.mjs` checks this).
+3. A bare `<form>` gets the global card look (border, radius, big shadow). Inside a card, use a
+   `<div>`, or give the form a class whose rule removes border, background and shadow, as
+   `.capability-secrets` does. Never a box inside a box.
+4. A setting saves when it changes (a select on change, a number on blur), with a faint
+   "保存中… / 已保存" next to its label. A save button only when several fields go together
+   (secrets). At most one `primary` button in view.
+5. Words: a label of 2–6 characters; one hint line, at most about 30 characters, saying what it
+   does for the user, never how it is implemented (no "重启后保留", no field names). Errors in
+   `.error`, short.
+6. Lay it out for 720 px wide as well (fields stack). Line up with the controls around it: the
+   same heights (32 px inputs), the same label size.
+7. Say in the report what the user now sees and where, in one or two sentences.
 
 ## Report
 
