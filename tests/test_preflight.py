@@ -328,3 +328,55 @@ async def test_in_codexs_real_sandbox_a_step_cannot_read_keys_or_other_tasks(fak
     lines = output.splitlines()
     assert "private" not in lines and "db" not in lines  # what the files hold never comes back
     assert "mine" in lines and "t" in lines and "s" in lines  # its own folder, TMPDIR and /tmp work
+
+
+class NoisyCodexSandbox(CodexSandbox):
+    """Codex's sandbox where bash complains it cannot read the hidden home's startup file."""
+
+    def __init__(self, output):
+        super().__init__()
+        self.output = output
+
+    async def sandbox_run(self, model_id, command, cwd, timeout, network=False):
+        if command == preflight.CLI_SANDBOX_COMMAND:
+            return self.output, True
+        return await super().sandbox_run(model_id, command, cwd, timeout, network)
+
+
+async def test_a_shell_unable_to_read_the_hidden_homes_startup_files_still_passes(tmp_path):
+    # Regression: "bash: ~/.bashrc: Permission denied" (the home is hidden on purpose) failed the check.
+    uid = os.getuid()
+    noisy = f"/bin/bash: /home/u/.bashrc: Permission denied\nbash: /home/u/.bash_profile: No such file or directory\nsp-write\n{uid}"
+    [check] = await preflight.cli_checks(NoisyCodexSandbox(noisy), task_with([]), tmp_path, {"cli:codex"})
+    assert check.ok
+    # Anything else printed still fails it.
+    [check] = await preflight.cli_checks(NoisyCodexSandbox(f"something else\nsp-write\n{uid}"), task_with([]), tmp_path,
+                                         {"cli:codex"})
+    assert not check.ok
+    assert preflight.without_shell_noise("bash: /etc/x: Permission denied\nok") == "bash: /etc/x: Permission denied\nok"
+
+
+@needs_bwrap
+async def test_the_platforms_own_check_still_failing_after_the_repair_goes_to_the_platform_engineer(tmp_path):
+    # Regression: a failing check of FluidForm's own sandbox only paused the task; the diagnosis
+    # said it was FluidForm's to fix, and nobody did.
+    machine = Machine()
+    machine.cli = NoisyCodexSandbox("sp-write\nnot-the-user")
+    database = Database(tmp_path / "t.db")
+    executor = Executor(database, machine, MODELS | {"cli:codex": model("cli:codex", 96, "cli")})
+    asked = []
+    executor.engineer_join = lambda run_id, call, origin, **kwargs: (asked.append((run_id, call, origin)) or (None, "不可用"))
+    run = task_with([])
+    run.plan.nodes = [TaskNode(id="n", title="t", instructions="i", capability="coding", model_id="x:flash")]
+    database.save_run(run)
+    assert await executor._preflight("r") is False
+    [(run_id, call, origin)] = asked
+    assert run_id == "r" and origin == "diagnosis" and call["kind"] == "repair"
+    assert "Codex 沙箱：写工作目录" in call["request"] and "not-the-user" in call["request"]
+    assert "平台工程师" in database.get_run("r").error
+    # Once: going on anyway does not ask again.
+    run = database.get_run("r")
+    run.status = RunStatus.QUEUED
+    database.save_run(run)
+    await executor._preflight("r")
+    assert len(asked) == 1

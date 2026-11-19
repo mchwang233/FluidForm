@@ -39,6 +39,16 @@ SANDBOX_COMMAND = ("echo sp-out; echo sp-err >&2; printf x > .sp-preflight && rm
                    "printf sp-tmp > /tmp/.sp-preflight && cat /tmp/.sp-preflight && echo; id -u; exit 7")
 
 
+# What bash prints when it cannot read a startup file in the home folder, which the sandboxes hide
+# on purpose: noise around what is checked, not a failure of it.
+SHELL_NOISE = re.compile(r"^\S*bash: \S*/\.(?:bashrc|bash_profile|bash_login|bash_logout|profile): "
+                         r"(?:Permission denied|No such file or directory)$")
+
+
+def without_shell_noise(output: str) -> str:
+    return "\n".join(line for line in output.splitlines() if not SHELL_NOISE.match(line.strip()))
+
+
 def sandbox_expected() -> str:
     """What the sandbox check prints when all is well: the step is the user, not root."""
     return f"Exit code 7\nsp-out\nsp-err\nsp-write\nsp-tmp\n{os.getuid()}"
@@ -92,7 +102,7 @@ async def sandbox_checks(run: ExecutionRun, workspace: Path) -> list[PreflightCh
         output = await sandbox.call("Bash", {"command": SANDBOX_COMMAND, "timeout": timeout})
         checks.append(PreflightCheck(
             name="步骤沙箱：命令的输出、错误输出、退出码，写工作目录和 /tmp，以用户本人（不是 root）运行",
-            command="(内置)", ok=output.strip() == sandbox_expected(), output=output[:OUTPUT_KEPT]))
+            command="(内置)", ok=without_shell_noise(output).strip() == sandbox_expected(), output=output[:OUTPUT_KEPT]))
         for command, blocking in tool_commands(run):
             output, ok = await sandbox.run("Bash", {"command": command, "timeout": timeout})
             checks.append(PreflightCheck(name="工具" if blocking else "步骤检查命令用到的程序", command=command,
@@ -130,7 +140,8 @@ async def cli_checks(cli, run: ExecutionRun, workspace: Path, models: set[str]) 
         return [PreflightCheck(name="Codex 沙箱：这个版本的 Codex 不能单独运行检查，未检查", command="codex sandbox",
                                ok=False, blocking=False, output=output[:OUTPUT_KEPT])]
     checks = [PreflightCheck(name="Codex 沙箱：写工作目录，以用户本人运行", command="(内置)",
-                             ok=ok and output.split() == ["sp-write", str(os.getuid())], output=output[:OUTPUT_KEPT])]
+                             ok=ok and without_shell_noise(output).split() == ["sp-write", str(os.getuid())],
+                             output=output[:OUTPUT_KEPT])]
     for command, blocking in tool_commands(run):
         output, ok = await run_in(command)
         checks.append(PreflightCheck(name="Codex 沙箱：" + ("工具" if blocking else "步骤检查命令用到的程序"),
@@ -279,11 +290,16 @@ class Preflighting:
         workspace.mkdir(parents=True, exist_ok=True)
         checks = await self._all_checks(run, workspace)
         repaired = bool(run.preflight and run.preflight.repaired)
+        engineer_note = ""
         if failures(checks) and not repaired and not overruled:
             repaired = True
             if await self._preflight_repair(run_id, failures(checks), workspace):
                 run = self.db.get_run(run_id)
                 checks = await self._all_checks(run, workspace)
+            # FluidForm's own sandbox still failing after the environment repair is FluidForm's
+            # defect: the platform engineer is asked to fix it (once, as the repair is).
+            if own := [check for check in failures(checks) if check.command == "(内置)"]:
+                engineer_note = self._preflight_engineer(run_id, own)
         failed = failures(checks)
         prepared = [] if failed and not overruled else await self._prepare_skills(run_id, workspace, checks)
         run = self.db.get_run(run_id)
@@ -292,7 +308,8 @@ class Preflighting:
         if failed and not overruled:
             run.status = RunStatus.PAUSED
             run.error = ("执行前检查没有通过，任务还没开始执行，没有花在步骤上：\n" + describe(failed)
-                         + "\n装好或修好后点“继续”会重新检查；确定不需要这些，也可以直接点“继续”，任务会照常执行。")
+                         + "\n装好或修好后点“继续”会重新检查；确定不需要这些，也可以直接点“继续”，任务会照常执行。"
+                         + (f"\n{engineer_note}" if engineer_note else ""))
         self._save(run)
         self.emit(run_id, "run.preflight", passed=not failed, overruled=bool(failed) and overruled,
                   failed=[check.command or check.name for check in failed],
@@ -429,6 +446,17 @@ class Preflighting:
                 checks.append(PreflightCheck(name="模型", command=model_id, ok=False, blocking=False,
                                              output=str(exc)[:OUTPUT_KEPT] or type(exc).__name__))
         return checks
+
+    def _preflight_engineer(self, run_id: str, failed: list[PreflightCheck]) -> str:
+        """Ask the platform engineer to fix FluidForm's own failing sandbox checks, with what they
+        printed and what the diagnosis found; what to tell the user."""
+        run = self.db.get_run(run_id)
+        found = next((item.report for item in reversed(run.diagnoses) if item.trigger == "preflight" and item.report), "")
+        request = ("执行前检查里，FluidForm 自己的沙箱检查没通过；诊断员修过环境后复查仍然失败，像是平台本身的缺陷。\n"
+                   + "\n".join(f"- {check.name}，输出：\n{check.output[:1500]}" for check in failed)
+                   + (f"\n\n诊断员的报告：\n{found[:2000]}" if found else ""))
+        job, why = self.engineer_join(run_id, {"request": request, "kind": "repair"}, "diagnosis")
+        return f"已请平台工程师修这个检查（工作 {job.id}）。" if job else f"想请平台工程师来修，但{why}"
 
     async def _preflight_repair(self, run_id: str, failed: list[PreflightCheck], workspace: Path) -> bool:
         """One environment repair for the failed checks, by the diagnosers; whether it ran."""
