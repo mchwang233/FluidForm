@@ -1357,7 +1357,7 @@ test("the sidebar groups tasks by what they need and folds into a rail it rememb
   const groups = [...document.querySelectorAll(".run-group")];
   assert.deepEqual(groups.map(group => group.querySelector(".run-group-title").textContent), ["进行中1", "需要处理2", "最近1"]);
   assert.match(groups[0].querySelector(".run small").textContent, /运行中 · 1\/2/);
-  assert.equal(window.document.title, "● (2) 若水");
+  assert.equal(window.document.title, "● (2) FluidForm");
 
   await click(document.querySelector('.mission-history [title="收起任务栏"]'));
   assert.ok(document.querySelector(".app-shell").classList.contains("history-collapsed"));
@@ -1412,7 +1412,7 @@ test("the task page shows its phase, progress and spend, and notices tell when a
   await click([...toast.querySelectorAll("button")].find(b => b.textContent === "查看"));
   assert.match(document.querySelector(".detail h3").textContent, /build-task/);
   assert.equal(document.querySelector(".toast"), null);
-  assert.equal(window.document.title, "若水");
+  assert.equal(window.document.title, "FluidForm");
 });
 
 test("Markdown in results and .md files is previewed safely, with the source one click away", async t => {

@@ -36,9 +36,9 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 }
 
 /** The product's name, in one place: what the user sees it called. */
-export const PRODUCT_NAME = "若水";
+export const PRODUCT_NAME = "FluidForm";
 
-/** Its mark: a drop of water, which takes the shape of whatever it is given (若水 FluidForm). */
+/** Its mark: a drop of water, which takes the shape of whatever it is given (FluidForm). */
 export function BrandMark({ size = 26 }: { size?: number }) {
   return <svg className="brand-mark" width={size} height={size} viewBox="0 0 26 26" fill="none" stroke="currentColor"
     strokeWidth={size > 30 ? 1.6 : 2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">

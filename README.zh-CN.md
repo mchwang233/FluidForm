@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/banner.svg" alt="若水 FluidForm" width="100%"></p>
+<p align="center"><img src="docs/images/banner.svg" alt="FluidForm" width="100%"></p>
 
 <p align="center">
   <b>像水一样，随任务成形：一支 AI 模型小队，在你自己的机器上把事办成。</b>
@@ -13,7 +13,7 @@
 
 <br>
 
-你描述要做什么，确认一次计划和预算。之后负责人规划、员工分头做、另一个模型逐步验收；遇到障碍，有人诊断、有人修复。团队只在真正需要你的时候回来找你。
+FluidForm（中文名若水）用起来很简单：你描述要做什么，确认一次计划和预算。之后负责人规划、员工分头做、另一个模型逐步验收；遇到障碍，有人诊断、有人修复。团队只在真正需要你的时候回来找你。
 
 <p align="center"><img src="docs/images/progress-dark.png" alt="一个任务的步骤全部完成（深色主题）" width="100%"></p>
 
@@ -44,7 +44,7 @@
 <td valign="top">
 
 **会修环境，也会修自己**<br>
-缺软件、许可证、端口这类问题由诊断员修。若水本身的缺陷交给平台工程师，在隔离副本里改，测试通过才生效。
+缺软件、许可证、端口这类问题由诊断员修。FluidForm 本身的缺陷交给平台工程师，在隔离副本里改，测试通过才生效。
 
 </td>
 </tr>

@@ -53,8 +53,7 @@ def mark(x, y, size, width):
 # ---- banner ----
 def banner():
     b = mark(90, 114, 64, 3.2)
-    b += text(136, 136, "若水", "ink", 52, 650)
-    b += text(256, 134, "FluidForm", "muted", 30, 500)
+    b += text(136, 136, "FluidForm", "ink", 52, 650)
     b += text(64, 204, "像水一样，随任务成形，把事办成。", "ink", 22, 500)
     b += text(64, 238, "Like water, it takes the shape of each task, and gets it done.", "muted", 17)
     b += (f'  <text x="64" y="282" class="mono faint" font-size="14" letter-spacing="0.5">'
@@ -78,18 +77,18 @@ def banner():
             b += f'  <circle class="dot" cx="{x - 44}" cy="{y}" r="4.5"/>\n'
         b += text(x - 28, y + 5, label, "faint" if state == "wait" else "ink", 15, 500)
     b += text(968, 262, "每一步交给够用且最便宜的模型", "faint", 13, 400, "middle")
-    (OUT / "banner.svg").write_text(svg(1280, 320, "若水 FluidForm：像水一样随任务成形的多模型执行团队", b))
+    (OUT / "banner.svg").write_text(svg(1280, 320, "FluidForm：像水一样随任务成形的多模型执行团队", b))
 
 
 # ---- team ----
 TEAM = {
     "zh": {
-        "file": "team.zh-CN.svg", "label": "若水的团队：你、负责人、员工、验收者、进度检查员、诊断员、平台工程师、复盘员",
+        "file": "team.zh-CN.svg", "label": "FluidForm 的团队：你、负责人、员工、验收者、进度检查员、诊断员、平台工程师、复盘员",
         "inside": "一个任务内", "ask": "提问 · 回答 · 确认", "retro_edge": "复盘结束的任务", "eng_edge": "拉进对话 · 请求组件",
         "cards": {
             "retro": ("盘", "复盘员", ["任务结束后总结经验，把有证据的", "改进交给之后的任务或平台工程师"]),
             "you": ("你", "你", ["描述任务、确认预算、回答提问"]),
-            "eng": ("工", "平台工程师", ["修改若水本身：修缺陷、加组件，", "在隔离副本里改，测过才生效"]),
+            "eng": ("工", "平台工程师", ["修改 FluidForm 本身：修缺陷、加组件，", "在隔离副本里改，测过才生效"]),
             "lead": ("负", "负责人", ["规划任务，每次失败后决定怎么办，最后检查整体结果。", "同一个对话从规划一直保留到任务结束。"]),
             "w1": ("员", "员工", ["在沙箱里用工具完成自己的步骤，", "发现新的子任务可以委派给同事"]),
             "w2": ("验", "验收者", ["由另一个模型担任，按验收标准", "检查每次结果，给出意见和证据"]),

@@ -247,7 +247,7 @@ class Runner:
                     item.state["notified"] = today()
                     item.save()
                     notice = (f"今天的额度（${float(item.state['daily_budget_usd']):g}）用完了，明天再来；"
-                              "也可以请主人在若水里调高。")
+                              "也可以请主人在 FluidForm 里调高。")
                 await self._send(item, {"re": request, "reply": notice, "over_budget": True})
                 return
         try:
