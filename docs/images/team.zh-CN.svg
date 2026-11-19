@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="588" viewBox="0 0 1280 588" role="img" aria-label="搭子的团队：你、负责人、员工、验收者、进度检查员、诊断员、平台工程师、复盘员">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="588" viewBox="0 0 1280 588" role="img" aria-label="若水的团队：你、负责人、员工、验收者、进度检查员、诊断员、平台工程师、复盘员">
   <style>
     .bg { fill: #fbfaf8; } .frame { fill: none; stroke: #e8e6e1; }
     .card { fill: #ffffff; stroke: #e6e3de; } .card.lead { stroke: #1d1d1f; stroke-width: 1.6; }
@@ -52,7 +52,7 @@
   <circle class="avatar" cx="952" cy="72" r="17"/>
   <text x="952" y="77.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">工</text>
   <text x="980" y="78" class="t ink" font-size="17" font-weight="650" text-anchor="start">平台工程师</text>
-  <text x="936" y="112" class="t muted" font-size="14" font-weight="400" text-anchor="start">修改搭子本身：修缺陷、加组件，</text>
+  <text x="936" y="112" class="t muted" font-size="14" font-weight="400" text-anchor="start">修改若水本身：修缺陷、加组件，</text>
   <text x="936" y="134" class="t muted" font-size="14" font-weight="400" text-anchor="start">在隔离副本里改，测过才生效</text>
   <rect class="card lead" x="420" y="214" width="440" height="124" rx="14"/>
   <circle class="avatar lead" cx="456" cy="250" r="17"/>

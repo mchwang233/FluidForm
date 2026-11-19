@@ -1,8 +1,8 @@
 <p align="center"><b>English</b> | <a href="guide.zh-CN.md">简体中文</a> · <a href="../README.md">Back to the front page</a></p>
 
-# The 搭子 (Super Partner) guide
+# The FluidForm guide
 
-Super Partner gives each task a small team of AI models and lets them work it through on your
+FluidForm gives each task a small team of AI models and lets them work it through on your
 machine. A lead plans the work and makes the calls, workers do the steps, a reviewer checks every
 result, and when something goes wrong a diagnostician or a platform engineer steps in. You describe
 the task and confirm the plan and budget once; after that the team comes back to you only when it
@@ -66,7 +66,7 @@ More: [Environment repair](#how-nodes-hand-off-and-check-work)
 
 ### Platform engineer
 
-The platform engineer works on Super Partner itself, not on any one task. It takes two kinds of
+The platform engineer works on FluidForm itself, not on any one task. It takes two kinds of
 job: a **repair** (a defect) or a **component** (a new model channel, tool, skill, page or step in
 the flow). Work reaches it three ways: you ask it (the 🛠 bubble at the bottom right, or
 `@平台工程师` in a task's lead chat), the lead asks it, or a diagnosis finds a defect in the
@@ -76,7 +76,7 @@ passes is applied on its own; a component first shows you a plan to approve, and
 apply it. Applying waits for running model calls, restarts the service, rolls back if the health
 check fails, and commits the changed files to git (without pushing). Its own budget is
 `SUPER_PARTNER_ENGINEER_BUDGET_USD` (default $2).
-More: [Repairing Super Partner itself](#how-nodes-hand-off-and-check-work) · [design](design/platform-engineer.md)
+More: [Repairing FluidForm itself](#how-nodes-hand-off-and-check-work) · [design](design/platform-engineer.md)
 
 ### Retrospective
 
@@ -94,20 +94,20 @@ More: [design](design/continuous-improvement.md)
 A task often builds something worth keeping: a client for a service, a converter, a bot. With
 `SUPER_PARTNER_CAPABILITY_PROPOSALS=true` the lead proposes such things when a task succeeds, and
 you keep one from the result page (固化). Capabilities can also be uploaded as packages and
-uninstalled again, without touching Super Partner's source or restarting it
+uninstalled again, without touching FluidForm's source or restarting it
 (`SUPER_PARTNER_CAPABILITY_PACKAGES=true`, off by default):
 
 - **Packages.** A package is a zip with a `capability.json` (id, kind, the hosts it may reach, the
   secrets it needs, an `entry` for an automation), its code, and optionally a `SKILL.md` and a
-  `requirements.txt`. Upload it on 平台工程师 → 能力. Super Partner builds its own Python
+  `requirements.txt`. Upload it on 平台工程师 → 能力. FluidForm builds its own Python
   environment and runs its check. It is installed switched off. Uploading the same id again
   upgrades it and keeps its secrets. Uninstalling removes its files, data, state and secrets.
 - **The sandbox.** Packages run in a sandbox of their own. Their folder is read-only, they write
-  only their own data folder, and they cannot see your home folder or Super Partner's data. They
+  only their own data folder, and they cannot see your home folder or FluidForm's data. They
   have no network but a proxy that reaches only the hosts they declared. Secrets are kept in the
   keyring and given only to the package that declared them. Enabling one asks you to confirm what
   it may reach and get.
-- **Automations.** An automation package keeps running in the background and talks to Super Partner
+- **Automations.** An automation package keeps running in the background and talks to FluidForm
   in JSON lines. A question someone sends it is answered in a chat. Work it is asked to do becomes a
   task that waits for your confirmation, and the result goes back to it when the task ends. It has
   a daily budget (`SUPER_PARTNER_CAPABILITY_DAILY_BUDGET_USD`, default $2) and is restarted if it
@@ -251,7 +251,7 @@ any typed or pasted path as you go, showing its branch and uncommitted changes. 
 desktop's own folder dialog on the machine running the API, starting at the current folder (needs
 `DISPLAY`/`WAYLAND_DISPLAY` and `zenity`; the button is hidden otherwise).
 
-- The directory must be an existing absolute path inside `SUPER_PARTNER_PROJECT_ROOTS` (a JSON list, default: your home directory), and cannot be the Super Partner data directory.
+- The directory must be an existing absolute path inside `SUPER_PARTNER_PROJECT_ROOTS` (a JSON list, default: your home directory), and cannot be the FluidForm data directory.
 - The planner sees the project's top-level layout and git state, and marks nodes that must read or change project files. Only those nodes run in the project; everything else runs in a scratch workspace.
 - Project nodes route to membership CLIs or to API models that support tool calls (see below); a CLI project node never falls back to an API. Nodes editing the same project run one at a time, across runs as well.
 - Each run records the starting git HEAD, branch, and uncommitted file count as a `workspace.snapshot` event. Agents are told not to commit, so review changes with `git diff` and revert with `git checkout`/`git stash` if needed. Starting from a clean working tree makes that easiest.
@@ -572,7 +572,7 @@ The task waits for an actual answer; no option is selected automatically. Routin
 repairs continue without an extra question. The reply endpoint is
 `POST /api/tasks/{run_id}/diagnoses/{diagnosis_id}/reply` with `text` and/or `choice`.
 
-**Repairing Super Partner itself.** Diagnosis distinguishes task mistakes, shared environment
+**Repairing FluidForm itself.** Diagnosis distinguishes task mistakes, shared environment
 problems, and defects in this application's scheduler, provider handling, persistence, API or
 web UI. `STATUS: PLATFORM_REPAIR` automatically starts a separate source-editing phase.
 It copies application source and tests into `<data_dir>/platform-repairs/<id>/source`,
@@ -584,7 +584,7 @@ build. A failed check feeds back into a bounded repair attempt; it is not treate
 Every model that diagnoses or repairs the platform, CLI or API, follows one procedure:
 [`skills/platform-repair/SKILL.md`](../skills/platform-repair/SKILL.md), with the module map in
 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md). The repair prompt contains both; a diagnosis
-gets their paths in the source checkout, marked as being about Super Partner's own code and not
+gets their paths in the source checkout, marked as being about FluidForm's own code and not
 the task's. They are copied into the repair source, where `AGENTS.md` (read by Codex) and
 `CLAUDE.md` (read by Claude Code) point to them. A diagnosis names the places to change in
 `LOCATION: path:line` lines, and the repair starts from them instead of rereading the code.

@@ -36,10 +36,11 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 }
 
 /** The product's name, in one place: what the user sees it called. */
-export const PRODUCT_NAME = "搭子";
+export const PRODUCT_NAME = "若水";
 
-/** Its mark: two rings, you and it. */
+/** Its mark: a drop of water, which takes the shape of whatever it is given (若水 FluidForm). */
 export function BrandMark({ size = 26 }: { size?: number }) {
   return <svg className="brand-mark" width={size} height={size} viewBox="0 0 26 26" fill="none" stroke="currentColor"
-    strokeWidth={size > 30 ? 1.6 : 2} aria-hidden="true" focusable="false"><circle cx="10" cy="13" r="7" /><circle cx="16" cy="13" r="7" /></svg>;
+    strokeWidth={size > 30 ? 1.6 : 2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <path d="M13 2.8C13 2.8 5.5 11 5.5 16.2a7.5 7.5 0 0 0 15 0C20.5 11 13 2.8 13 2.8Z" /><path d="M9.6 16.8a3.4 3.4 0 0 0 3.2 3" /></svg>;
 }

@@ -41,18 +41,22 @@ def text(x, y, value, cls, size, weight=400, anchor="start", extra=""):
             f'text-anchor="{anchor}"{extra}>{escape(value)}</text>\n')
 
 
-def mark(x, y, r, width):
-    return (f'  <g class="ring" stroke-width="{width}"><circle cx="{x - r * 0.42}" cy="{y}" r="{r}"/>'
-            f'<circle cx="{x + r * 0.42}" cy="{y}" r="{r}"/></g>\n')
+def mark(x, y, size, width):
+    """The app's mark, a drop of water (frontend/icons.tsx BrandMark), centred on (x, y)."""
+    k = size / 26
+    return (f'  <g class="ring" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round" '
+            f'transform="translate({x - 13 * k} {y - 13 * k}) scale({k})">'
+            f'<path d="M13 2.8C13 2.8 5.5 11 5.5 16.2a7.5 7.5 0 0 0 15 0C20.5 11 13 2.8 13 2.8Z" stroke-width="{width / k}"/>'
+            f'<path d="M9.6 16.8a3.4 3.4 0 0 0 3.2 3" stroke-width="{width / k}"/></g>\n')
 
 
 # ---- banner ----
 def banner():
-    b = mark(96, 118, 26, 3.2)
-    b += text(148, 136, "搭子", "ink", 52, 650)
-    b += text(268, 134, "Super Partner", "muted", 30, 500)
-    b += text(64, 204, "你说要做什么，一群模型分工把它做完。", "ink", 22, 500)
-    b += text(64, 238, "A local-first team of models that plans, works, checks and repairs.", "muted", 17)
+    b = mark(90, 114, 64, 3.2)
+    b += text(136, 136, "若水", "ink", 52, 650)
+    b += text(256, 134, "FluidForm", "muted", 30, 500)
+    b += text(64, 204, "像水一样，随任务成形，把事办成。", "ink", 22, 500)
+    b += text(64, 238, "Like water, it takes the shape of each task, and gets it done.", "muted", 17)
     b += (f'  <text x="64" y="282" class="mono faint" font-size="14" letter-spacing="0.5">'
           f'plan → route → run → review → repair → learn</text>\n')
     # A small plan: two steps done, one running, two waiting.
@@ -74,18 +78,18 @@ def banner():
             b += f'  <circle class="dot" cx="{x - 44}" cy="{y}" r="4.5"/>\n'
         b += text(x - 28, y + 5, label, "faint" if state == "wait" else "ink", 15, 500)
     b += text(968, 262, "每一步交给够用且最便宜的模型", "faint", 13, 400, "middle")
-    (OUT / "banner.svg").write_text(svg(1280, 320, "搭子 Super Partner：本地优先的多模型自主任务编排", b))
+    (OUT / "banner.svg").write_text(svg(1280, 320, "若水 FluidForm：像水一样随任务成形的多模型执行团队", b))
 
 
 # ---- team ----
 TEAM = {
     "zh": {
-        "file": "team.zh-CN.svg", "label": "搭子的团队：你、负责人、员工、验收者、进度检查员、诊断员、平台工程师、复盘员",
+        "file": "team.zh-CN.svg", "label": "若水的团队：你、负责人、员工、验收者、进度检查员、诊断员、平台工程师、复盘员",
         "inside": "一个任务内", "ask": "提问 · 回答 · 确认", "retro_edge": "复盘结束的任务", "eng_edge": "拉进对话 · 请求组件",
         "cards": {
             "retro": ("盘", "复盘员", ["任务结束后总结经验，把有证据的", "改进交给之后的任务或平台工程师"]),
             "you": ("你", "你", ["描述任务、确认预算、回答提问"]),
-            "eng": ("工", "平台工程师", ["修改搭子本身：修缺陷、加组件，", "在隔离副本里改，测过才生效"]),
+            "eng": ("工", "平台工程师", ["修改若水本身：修缺陷、加组件，", "在隔离副本里改，测过才生效"]),
             "lead": ("负", "负责人", ["规划任务，每次失败后决定怎么办，最后检查整体结果。", "同一个对话从规划一直保留到任务结束。"]),
             "w1": ("员", "员工", ["在沙箱里用工具完成自己的步骤，", "发现新的子任务可以委派给同事"]),
             "w2": ("验", "验收者", ["由另一个模型担任，按验收标准", "检查每次结果，给出意见和证据"]),
@@ -94,13 +98,13 @@ TEAM = {
         },
     },
     "en": {
-        "file": "team.svg", "label": "The 搭子 (Super Partner) team: you, the lead, workers, reviewer, progress checker, diagnostician, platform engineer, retrospective",
+        "file": "team.svg", "label": "The FluidForm team: you, the lead, workers, reviewer, progress checker, diagnostician, platform engineer, retrospective",
         "inside": "Inside one task", "ask": "questions · answers · approval", "retro_edge": "looks back on tasks",
         "eng_edge": "joins chats · builds parts",
         "cards": {
             "retro": ("R", "Retrospective", ["After a task ends, turns evidence", "into lessons for later tasks"]),
             "you": ("U", "You", ["Describe the task, approve the budget"]),
-            "eng": ("E", "Platform engineer", ["Changes Super Partner itself: fixes", "bugs, adds components, tested first"]),
+            "eng": ("E", "Platform engineer", ["Changes FluidForm itself: fixes", "bugs, adds components, tested first"]),
             "lead": ("L", "The lead", ["Plans the task, decides after every failure, checks", "the whole result. One conversation, start to end."]),
             "w1": ("W", "Workers", ["Do their steps with tools in a", "sandbox; can hand off new subtasks"]),
             "w2": ("R", "Reviewer", ["A different model checks each", "result against its acceptance criteria"]),

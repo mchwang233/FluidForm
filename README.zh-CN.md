@@ -1,7 +1,7 @@
-<p align="center"><img src="docs/images/banner.svg" alt="搭子 Super Partner" width="100%"></p>
+<p align="center"><img src="docs/images/banner.svg" alt="若水 FluidForm" width="100%"></p>
 
 <p align="center">
-  <b>一个任务，一支 AI 模型小队，在你自己的机器上把它做完。</b>
+  <b>像水一样，随任务成形：一支 AI 模型小队，在你自己的机器上把事办成。</b>
 </p>
 
 <p align="center">
@@ -44,7 +44,7 @@
 <td valign="top">
 
 **会修环境，也会修自己**<br>
-缺软件、许可证、端口这类问题由诊断员修。搭子本身的缺陷交给平台工程师，在隔离副本里改，测试通过才生效。
+缺软件、许可证、端口这类问题由诊断员修。若水本身的缺陷交给平台工程师，在隔离副本里改，测试通过才生效。
 
 </td>
 </tr>

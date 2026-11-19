@@ -102,7 +102,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
           <ul>
             <li>能访问：{item.domains.length ? item.domains.join("、") : "不联网"}（只有这些）</li>
             {!!item.secrets.length && <li>会拿到你填的：{item.secrets.join("、")}</li>}
-            <li>只能写它自己的数据文件夹，看不到你的主目录和搭子的数据</li>
+            <li>只能写它自己的数据文件夹，看不到你的主目录和若水的数据</li>
             {item.kind === "automation" && <li>别人通过它提的事要你确认才开工，每天的花费有上限</li>}
           </ul>
           {!!lacking.length && <p className="capability-confirm-missing">先在下面填好 {lacking.join("、")}。</p>}

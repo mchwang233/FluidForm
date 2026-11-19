@@ -1,7 +1,7 @@
-<p align="center"><img src="docs/images/banner.svg" alt="搭子 Super Partner" width="100%"></p>
+<p align="center"><img src="docs/images/banner.svg" alt="若水 FluidForm" width="100%"></p>
 
 <p align="center">
-  <b>One task, a small team of AI models, done on your own machine.</b>
+  <b>Like water, it takes the shape of each task: a small team of AI models that gets it done on your own machine.</b>
 </p>
 
 <p align="center">

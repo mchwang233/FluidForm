@@ -1400,7 +1400,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         db.save_run(latest)
         estimate = latest.plan.estimate
         guess = f"，预计 ${estimate.low_usd:.2f}–${estimate.high_usd:.2f}" if estimate else ""
-        reply = (f"这件事要动手做。我在搭子里排好了计划「{_task_name(latest)}」{guess}，"
+        reply = (f"这件事要动手做。我在若水里排好了计划「{_task_name(latest)}」{guess}，"
                  "等主人确认后开工，做完在这里告诉你。")
         return reply, latest.actual_cost_usd
     # A question: the conversation goes on in one chat, which its first message started.
