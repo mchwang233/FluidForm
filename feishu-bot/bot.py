@@ -41,6 +41,8 @@ INBOX = "inbox"
 MAX_FILES = 10
 # The reaction on a message while it is being answered (Feishu's "typing" emoji), taken off after.
 WORKING_EMOJI = "Typing"
+# The card element an answer is written into.
+ANSWER = "answer"
 
 
 @dataclass
@@ -96,6 +98,76 @@ def wanted(message_type: str, chat_type: str, content: str, mentions: list, crea
     return incoming if incoming.text or incoming.images or incoming.files else None
 
 
+def summary(text: str) -> str:
+    """A card's preview in the chat list: its first line, without Markdown's marks."""
+    first = next((line for line in text.splitlines() if line.strip()), "")
+    return re.sub(r"[*_`#>\[\]]|^\s*[-+] ", "", first).strip()[:60] or "回复"
+
+
+def card_json(text: str, streaming: bool = False) -> dict:
+    """A reply as a card (schema 2.0): its Markdown shown as meant, which a text message is not.
+    ``streaming``: written word by word as the answer comes (Feishu's CardKit streaming)."""
+    config = {"summary": {"content": summary(text)}}
+    if streaming:
+        config.update(streaming_mode=True, summary={"content": "正在回答…"},
+                      streaming_config={"print_frequency_ms": {"default": 40}, "print_step": {"default": 2}})
+    return {"schema": "2.0", "config": config,
+            "body": {"elements": [{"tag": "markdown", "content": text, "element_id": ANSWER}]}}
+
+
+class Typing:
+    """A reply card written as the answer comes: started on its first piece, then the newest piece
+    written each time the last write is done (one at a time, in order), and finished with the
+    whole answer. ``cards`` does the calls: start(card) -> card id or None, write(card_id, text,
+    sequence) -> ok, close(card_id, text, sequence) -> ok."""
+
+    def __init__(self, cards):
+        self.cards, self.lock, self.calls = cards, threading.Lock(), threading.Lock()
+        self.card_id, self.sequence, self.latest = None, 0, None
+        self.writing = self.failed = self.closed = False
+
+    def heard(self, text: str) -> None:
+        with self.lock:
+            if self.failed or self.closed:
+                return
+            self.latest = cut(text)
+            if self.writing:
+                return
+            self.writing = True
+        threading.Thread(target=self._flush, daemon=True).start()
+
+    def _flush(self) -> None:
+        while True:
+            with self.lock:
+                text, self.latest = self.latest, None
+                if text is None or self.failed or self.closed:
+                    self.writing = False
+                    return
+            with self.calls:
+                if self.closed:
+                    continue
+                if self.card_id is None:
+                    self.card_id = self.cards.start(card_json(text, streaming=True))
+                    self.failed = self.card_id is None
+                    self.sequence = 1
+                else:
+                    self.sequence += 1
+                    self.cards.write(self.card_id, text, self.sequence)
+
+    def finish(self, text: str) -> bool:
+        """Write the whole answer and stop streaming; False when no card was started (or it
+        could not be finished), so the answer still has to be sent."""
+        with self.lock:
+            self.closed = True
+        with self.calls:
+            if self.card_id is None or self.failed:
+                return False
+            self.sequence += 1
+            written = self.cards.write(self.card_id, cut(text), self.sequence)
+            self.sequence += 1
+            return self.cards.close(self.card_id, cut(text), self.sequence) and written
+
+
 def safe_name(name: str) -> str:
     name = re.sub(r"[^\w.\-\u4e00-\u9fff]+", "_", Path(name).name)[:80].strip("._")
     return name or "file"
@@ -141,15 +213,17 @@ class Host:
     def status(self, text: str) -> None:
         self.send({"op": "status", "text": text})
 
-    def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = ()) -> Optional[str]:
+    def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
+            heard=None) -> Optional[str]:
+        """Super Partner's answer; ``heard`` hears it as it is being written ({"progress": ...})."""
         request, done = uuid.uuid4().hex, threading.Event()
-        self.pending[request] = [done, None]
+        self.pending[request] = [done, None, heard]
         message = {"op": "message", "id": request, "conversation": conversation, "text": text, "origin": origin}
         if attachments:
             message["attachments"] = list(attachments)
         self.send(message)
         done.wait(REPLY_WAIT)
-        return self.pending.pop(request, [None, None])[1]
+        return self.pending.pop(request, [None, None, None])[1]
 
     def listen(self) -> None:
         for line in sys.stdin:
@@ -160,6 +234,9 @@ class Host:
             if "re" in payload and payload["re"] in self.pending:
                 self.pending[payload["re"]][1] = payload.get("reply")
                 self.pending[payload["re"]][0].set()
+            elif "progress" in payload and payload["progress"] in self.pending:
+                if heard := self.pending[payload["progress"]][2]:
+                    heard(str(payload.get("text") or ""))
             elif payload.get("event") == "task_ended":
                 threading.Thread(target=self.on_event, args=(payload,), daemon=True).start()
         os._exit(0)  # Super Partner has gone
@@ -183,6 +260,14 @@ class StatusLog(logging.Handler):
 def main() -> None:
     import lark_oapi as lark
     import lark_oapi.ws.client as ws_client
+    from lark_oapi.api.cardkit.v1 import (
+        ContentCardElementRequest,
+        ContentCardElementRequestBody,
+        CreateCardRequest,
+        CreateCardRequestBody,
+        SettingsCardRequest,
+        SettingsCardRequestBody,
+    )
     from lark_oapi.api.im.v1 import (
         CreateMessageReactionRequest,
         CreateMessageReactionRequestBody,
@@ -206,14 +291,72 @@ def main() -> None:
     client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
     data = Path(os.environ.get("SP_DATA_DIR", "."))
     seen = Seen(data)
+    warned = set()
+
+    def send_reply(message_id: str, kind: str, content: dict) -> bool:
+        request = (ReplyMessageRequest.builder().message_id(message_id)
+                   .request_body(ReplyMessageRequestBody.builder().msg_type(kind)
+                                 .content(json.dumps(content, ensure_ascii=False)).build()).build())
+        try:
+            response = client.im.v1.message.reply(request)
+        except Exception as exc:
+            print(f"飞书回复失败：{exc}", file=sys.stderr, flush=True)
+            return False
+        if not response.success():
+            print(f"飞书回复失败（{kind}）：{response.code} {response.msg}", file=sys.stderr, flush=True)
+        return response.success()
 
     def reply(message_id: str, text: str) -> None:
-        request = (ReplyMessageRequest.builder().message_id(message_id)
-                   .request_body(ReplyMessageRequestBody.builder().msg_type("text")
-                                 .content(json.dumps({"text": cut(text)}, ensure_ascii=False)).build()).build())
-        response = client.im.v1.message.reply(request)
-        if not response.success():
-            print(f"飞书回复失败：{response.code} {response.msg}", file=sys.stderr, flush=True)
+        """As a card, so its Markdown shows as meant; as plain text if a card cannot be sent."""
+        if not send_reply(message_id, "interactive", card_json(cut(text))):
+            send_reply(message_id, "text", {"text": cut(text)})
+
+    def ok(response, what: str) -> bool:
+        if not response.success() and what not in warned:  # once: most likely a missing permission
+            warned.add(what)
+            print(f"飞书卡片{what}失败（需要「创建与更新卡片」权限）：{response.code} {response.msg}",
+                  file=sys.stderr, flush=True)
+        return response.success()
+
+    class Cards:
+        """CardKit's calls for one reply (Typing)."""
+
+        def __init__(self, message_id: str):
+            self.message_id = message_id
+
+        def start(self, card: dict) -> Optional[str]:
+            try:
+                response = client.cardkit.v1.card.create(CreateCardRequest.builder().request_body(
+                    CreateCardRequestBody.builder().type("card_json").data(json.dumps(card, ensure_ascii=False)).build()).build())
+                if not ok(response, "创建") or not response.data:
+                    return None
+                card_id = response.data.card_id
+                sent = send_reply(self.message_id, "interactive", {"type": "card", "data": {"card_id": card_id}})
+                return card_id if sent else None
+            except Exception as exc:
+                print(f"飞书卡片创建失败：{exc}", file=sys.stderr, flush=True)
+                return None
+
+        def write(self, card_id: str, text: str, sequence: int) -> bool:
+            try:
+                return ok(client.cardkit.v1.card_element.content(
+                    ContentCardElementRequest.builder().card_id(card_id).element_id(ANSWER).request_body(
+                        ContentCardElementRequestBody.builder().content(text).sequence(sequence)
+                        .uuid(f"w-{card_id}-{sequence}").build()).build()), "更新")
+            except Exception as exc:
+                print(f"飞书卡片更新失败：{exc}", file=sys.stderr, flush=True)
+                return False
+
+        def close(self, card_id: str, text: str, sequence: int) -> bool:
+            settings = {"config": {"streaming_mode": False, "summary": {"content": summary(text)}}}
+            try:
+                return ok(client.cardkit.v1.card.settings(
+                    SettingsCardRequest.builder().card_id(card_id).request_body(
+                        SettingsCardRequestBody.builder().settings(json.dumps(settings, ensure_ascii=False))
+                        .sequence(sequence).uuid(f"c-{card_id}-{sequence}").build()).build()), "收尾")
+            except Exception as exc:
+                print(f"飞书卡片收尾失败：{exc}", file=sys.stderr, flush=True)
+                return False
 
     def task_ended(payload: dict) -> None:
         if message_id := (payload.get("origin") or {}).get("message_id"):
@@ -223,8 +366,6 @@ def main() -> None:
     threading.Thread(target=host.listen, name="host", daemon=True).start()
     logging.getLogger("Lark").addHandler(StatusLog(host))
     started = time.time()
-
-    warned = set()
 
     def working(message_id: str) -> Optional[str]:
         """Show the asker it is being answered: a "typing" reaction on their message; its id."""
@@ -274,8 +415,12 @@ def main() -> None:
             if not incoming.text and not kept:
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
-            if result := host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept):
+            typing = Typing(Cards(message_id))
+            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept, typing.heard)
+            if result and not typing.finish(result):
                 reply(message_id, result)
+            elif not result:
+                typing.finish("（没有回答）")
         finally:
             done(message_id, reaction)
 
@@ -312,6 +457,43 @@ def check() -> None:
     assert wanted("image", "p2p", json.dumps({}), [], ms, now) is None
     assert wanted("sticker", "p2p", json.dumps({"file_key": "s"}), [], ms, now) is None
     assert safe_name("../../etc/passwd") == "passwd" and safe_name("a b/截图.png") == "截图.png"
+    # Replies are cards; one being written is written in order, the newest piece each time.
+    assert card_json("**WAL** 是预写日志")["config"]["summary"]["content"] == "WAL 是预写日志"
+    assert card_json("x", streaming=True)["config"]["streaming_mode"] is True
+
+    class Fake:
+        def __init__(self, card_id="c1"):
+            self.card_id, self.calls = card_id, []
+
+        def start(self, card):
+            self.calls.append(("start", card["body"]["elements"][0]["content"]))
+            time.sleep(0.05)
+            return self.card_id
+
+        def write(self, card_id, text, sequence):
+            self.calls.append(("write", text, sequence))
+            return True
+
+        def close(self, card_id, text, sequence):
+            self.calls.append(("close", text, sequence))
+            return True
+
+    fake = Fake()
+    typing = Typing(fake)
+    for piece in ("W", "WA", "WAL", "WAL 是"):
+        typing.heard(piece)
+    time.sleep(0.2)
+    assert typing.finish("WAL 是预写日志。")
+    typing.heard("late")
+    assert fake.calls[0] == ("start", "W") and fake.calls[-2:] == [("write", "WAL 是预写日志。", fake.calls[-2][2]),
+                                                                  ("close", "WAL 是预写日志。", fake.calls[-1][2])]
+    sequences = [call[2] for call in fake.calls[1:]]
+    assert sequences == sorted(sequences) and len(set(sequences)) == len(sequences)
+    assert ("write", "WAL 是", 2) in fake.calls  # the newest piece, not every one
+    failed = Typing(Fake(card_id=None))
+    failed.heard("W")
+    time.sleep(0.1)
+    assert failed.finish("WAL") is False and Typing(Fake()).finish("x") is False
     print("ok")
 
 
