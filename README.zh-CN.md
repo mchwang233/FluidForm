@@ -81,8 +81,8 @@ FluidForm（中文名若水）用起来很简单：你描述要做什么，确�
 ## 快速开始
 
 ```bash
-git clone https://github.com/mchwang233/super-partner.git
-cd super-partner
+git clone https://github.com/mchwang233/FluidForm.git
+cd FluidForm
 ./start.sh
 ```
 
@@ -100,7 +100,7 @@ cd super-partner
 - **[使用手册](docs/guide.zh-CN.md)**：每个角色、失败怎么处理、命令行、在已有项目上工作、凭据、模型目录与评分、沙箱与联网、API。
 - **[架构](docs/ARCHITECTURE.md)**：模块地图，每项功能在哪个文件、由哪些测试覆盖（英文）。
 - **[设计文档](docs/design/)**：负责人、平台工程师、员工团队、能力与能力包等设计说明。
-- **[能力包](https://github.com/mchwang233/super-partner/tree/capabilities)**：`capabilities` 分支，可以单独上传的能力包，比如飞书机器人。
+- **[能力包](https://github.com/mchwang233/FluidForm/tree/capabilities)**：`capabilities` 分支，可以单独上传的能力包，比如飞书机器人。
 
 ## 许可证
 

@@ -85,8 +85,8 @@ sandbox and permissions, network access, and retry limits. How each role works:
 ## Quick start
 
 ```bash
-git clone https://github.com/mchwang233/super-partner.git
-cd super-partner
+git clone https://github.com/mchwang233/FluidForm.git
+cd FluidForm
 ./start.sh
 ```
 
@@ -108,7 +108,7 @@ Open <http://127.0.0.1:5173>.
   tests cover it.
 - **[Design notes](docs/design/):** the lead, the platform engineer, employee teams,
   capabilities and packages.
-- **[Capability packages](https://github.com/mchwang233/super-partner/tree/capabilities):** the
+- **[Capability packages](https://github.com/mchwang233/FluidForm/tree/capabilities):** the
   `capabilities` branch, packages to upload on their own, such as the Feishu bot.
 
 ## License
