@@ -141,6 +141,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
   window.setInterval = callback => { polls.set(++timerId, callback); return timerId; };
   window.clearInterval = id => polls.delete(id);
   state.poll = () => [...polls.values()][0]();
+  state.pollAll = () => [...polls.values()].forEach(callback => callback());
   window.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
     if (path === "/api/skills") return json(state.skills ?? []);
@@ -407,6 +408,10 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     if (path === "/api/models/sync") return json(state.catalogSync ?? { last_checked_at: null, providers: [] });
     if (path === "/api/models") return json(state.models);
     if (path === "/api/providers") return json(state.providers);
+    if (path.startsWith("/api/engineer/jobs/") && path.endsWith("/activity")) {
+      state.activityReads = (state.activityReads ?? 0) + 1;
+      return json(state.engineerActivity ?? { running: false, total: 0, calls: [] });
+    }
     if (path === "/api/engineer") return json(state.engineer ?? { available: true, jobs: [] });
     throw new Error(`Unexpected request: ${path}`);
   };
@@ -1978,6 +1983,32 @@ function engineerJob(fields) {
     status: "plan_ready", plan: "- 目标: 结果页可以导出 CSV", messages: [], files: [], checks: [], budget_usd: 2, cost_usd: 0,
     created_at: "2026-10-19T08:00:00Z", updated_at: "2026-10-19T08:00:00Z", ...fields };
 }
+
+test("a working platform engineer job shows what it is doing, refreshed as it goes", async t => {
+  const { state, document, click, act } = await setup(t, [], [], { openComposer: false });
+  state.engineer = { available: true, working_on: "job1", jobs: [engineerJob({ status: "editing", model_id: "cli:codex", plan: null })] };
+  state.engineerActivity = { running: true, total: 2, calls: [
+    { turn: 0, tool: "file_change", detail: "update backend/super_partner/api.py", ok: true },
+    { turn: 0, tool: "command", detail: "pytest -q tests/test_engineer.py", ok: null, running: true, status: "running" }] };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await click([...document.querySelectorAll(".platform-link")].find(node => node.textContent.startsWith("全部")));
+  await click([...document.querySelectorAll(".engineer-list button")].find(node => node.textContent.includes("导出按钮")));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const panel = () => document.querySelector('.engineer-job [aria-label="正在做"]');
+  assert.match(panel().textContent, /改文件.*api\.py.*运行命令.*pytest -q tests\/test_engineer\.py.*运行中/s);
+  assert.match(panel().textContent, /最后一条命令还在运行/);
+  // Then the platform's own checks, named as the finished job names them.
+  state.engineerActivity = { running: true, total: 3, calls: [...state.engineerActivity.calls.slice(0, 1),
+    { turn: 0, tool: "check", detail: "Backend tests", ok: null, running: true, status: "running" }] };
+  const reads = state.activityReads;
+  await act(async () => { state.pollAll(); for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.ok(state.activityReads > reads, "It refreshes on its own");
+  assert.match(panel().textContent, /检查.*后端测试.*这项检查还在跑/s);
+  // Not working: no panel, and no more reads.
+  state.engineer = { available: true, working_on: null, jobs: [engineerJob({ status: "ready", plan: null })] };
+  await act(async () => { state.pollAll(); for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.equal(panel(), null);
+});
 
 test("the platform engineer page opens from a task's conversation, shows finished work, and takes approvals", async t => {
   const run = mission("finished-task", "succeeded");

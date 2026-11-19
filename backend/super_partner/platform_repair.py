@@ -18,7 +18,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from uuid import uuid4
 
 SOURCE_DIRS = {"backend", "frontend", "tests", "scripts", "docs", "skills"}
@@ -226,7 +226,8 @@ class PlatformRepairs:
         self.save(job)
         atomic_json(self.directory / "pending.json", {"id": job["id"]})
 
-    async def check(self, job: dict) -> list[dict]:
+    async def check(self, job: dict, on_check: Optional[Callable[[str, Optional[bool]], None]] = None) -> list[dict]:
+        """Run the checks; ``on_check(title, ok)`` hears each one start (None) and end."""
         source = Path(job["folder"]) / "source"
         after = source_files(source)
         files = changed(job["before"], after)
@@ -286,9 +287,13 @@ print('Existing records remain compatible')
             if title == "Existing database compatibility":
                 snapshot.parent.mkdir(parents=True, exist_ok=True)
                 backup_database(self.database_path, snapshot)
+            if on_check:
+                on_check(title, None)
             try:
                 result = await self._check_command(command, cwd, source,
                                                    allow_network=job.get("allow_network", False))
+                if on_check:
+                    on_check(title, not result["returncode"])
             finally:
                 if title == "Existing database compatibility":
                     for suffix in ["", "-wal", "-shm", "-journal"]:

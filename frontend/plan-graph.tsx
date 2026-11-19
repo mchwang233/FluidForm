@@ -13,7 +13,7 @@ export type PlanNode = {
   changed_files?: string[]; folders?: string[]; inputs?: { node_id: string; form: string; changed_files: number }[];
   files?: string[]; reads?: string[]; provides?: string; check?: string; part_id?: string | null;
 };
-type ToolCall = { turn: number; tool: string; detail?: string; ok?: boolean | null; output?: string; running?: boolean; status?: string; diagnostic?: string | null };
+export type ToolCall = { turn: number; tool: string; detail?: string; ok?: boolean | null; output?: string; running?: boolean; status?: string; diagnostic?: string | null };
 type NodeAttempt = { model_id?: string | null; outcome: string; reason?: string | null; reviewer_model_id?: string | null; cost_usd: number; finished_at?: string;
   turns?: number; turn_limit?: boolean; tool_calls?: ToolCall[]; result?: string | null; result_source?: string | null };
 const TOOL_LABELS: Record<string, string> = { Bash: "运行命令", Read: "读文件", Write: "写文件", Edit: "改文件", MultiEdit: "批量改文件",
@@ -21,10 +21,12 @@ const TOOL_LABELS: Record<string, string> = { Bash: "运行命令", Read: "读�
   // Attempts recorded before the tools followed Claude Code's.
   list_dir: "列目录", read_file: "读文件", write_file: "写文件", edit_file: "改文件", run_command: "运行命令",
   // What a membership CLI does, as it prints it (activity.py).
-  command: "运行命令", file_change: "改文件", message: "说明", plan: "计划" };
+  command: "运行命令", file_change: "改文件", message: "说明", plan: "计划",
+  // The platform engineer's checks of its change (engineer.py).
+  check: "检查" };
 
 /** Where an API model's turns went: calls per tool, then every call, folded by default. */
-function ToolLog({ calls, open = false, title = "工具调用" }: { calls: ToolCall[]; open?: boolean; title?: string }) {
+export function ToolLog({ calls, open = false, title = "工具调用" }: { calls: ToolCall[]; open?: boolean; title?: string }) {
   const counts = new Map<string, [number, number]>();
   for (const call of calls) {
     const [n, bad] = counts.get(call.tool) ?? [0, 0];

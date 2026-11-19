@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from . import activity, quality, supervisor
 from . import diagnosis as diagnosis_text
-from . import quality, supervisor
 from .budget import BudgetExceeded, RequestBudget
 from .config import settings
 from .models import (
@@ -315,6 +315,8 @@ class Engineering:
     async def _engineer_run(self, job_id: str) -> None:
         job = self._engineer_job(job_id)
         stopped = False
+        # What it does while it works, shown on its page (engineer_activity); kept only meanwhile.
+        self.engineer_logs[job_id] = []
         try:
             if job.phase == "plan":
                 await self._engineer_plan(job)
@@ -329,6 +331,7 @@ class Engineering:
             job.messages.append(EngineerMessage(role="system", text=f"平台工程师没能完成：{job.error[:500]}"))
             self._engineer_end(job)
         finally:
+            self.engineer_logs.pop(job_id, None)
             if self.engineer_task is asyncio.current_task():
                 self.engineer_task, self.engineer_job_id = None, None
             if not stopped:
@@ -354,6 +357,17 @@ class Engineering:
         job.plan, job.status = report, "plan_ready"
         job.messages.append(EngineerMessage(role="engineer", text="方案写好了，请看过后批准，或回复要改的地方。"))
         self._engineer_save(job)
+
+    def _engineer_check_seen(self, job: EngineerJob, title: str, ok: Optional[bool]) -> None:
+        """One of the platform's own checks starting (``ok`` None) or ending, in the job's log."""
+        log = self.engineer_logs.setdefault(job.id, [])
+        entry = {"turn": 0, "id": f"check:{title}", "tool": "check", "detail": title, "ok": ok,
+                 "running": ok is None, "status": "running" if ok is None else "succeeded" if ok else "failed"}
+        for index in range(len(log) - 1, -1, -1):
+            if log[index].get("id") == entry["id"] and log[index].get("running"):
+                log[index] = entry
+                return
+        log.append(entry)
 
     def _engineer_ask(self, job: EngineerJob, report: str, question: str, choices: list[str]) -> None:
         job.status, job.question, job.choices = "needs_input", question, choices
@@ -384,7 +398,7 @@ class Engineering:
             job.status = "validating"
             self._engineer_save(job)
             try:
-                checks = await self.platform.check(copy)
+                checks = await self.platform.check(copy, lambda title, ok: self._engineer_check_seen(job, title, ok))
                 break
             except RepairError as exc:
                 if attempt + 1 == settings.platform_repair_attempts:
@@ -416,14 +430,18 @@ class Engineering:
         if not candidates:
             raise RepairError("没有可用、并且能修改文件的模型来做这项工作。")
         last: Optional[Exception] = None
+        # A CLI's commands, file changes and messages as it prints them (activity.py), an API
+        # model's tool calls as it makes them: the same log its page shows.
+        log = self.engineer_logs.setdefault(job.id, [])
         for model in candidates:
             job.model_id = model.id
             self._engineer_save(job)
             try:
-                result = await self._engineer_charged(job, model.id, lambda budget, model=model: self.providers.complete(
-                    model.id, prompt, workspace, spend_ok=budget,
-                    cli_timeout=settings.repair_call_minutes * 60, attachments=job.attachments,
-                    allow_api_fallback=False, act=model.channel != "cli", repair=False))
+                with activity.recording(log):
+                    result = await self._engineer_charged(job, model.id, lambda budget, model=model: self.providers.complete(
+                        model.id, prompt, workspace, spend_ok=budget,
+                        cli_timeout=settings.repair_call_minutes * 60, attachments=job.attachments,
+                        allow_api_fallback=False, act=model.channel != "cli", repair=False, tool_log=log))
                 return result.text
             except asyncio.CancelledError:
                 raise

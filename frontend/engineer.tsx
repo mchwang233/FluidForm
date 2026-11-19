@@ -7,6 +7,7 @@ import { detailText } from "./mission-history";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
 import { kindOf } from "./lead-engineer";
+import { ToolLog, type ToolCall } from "./plan-graph";
 
 export type EngineerMessage = { role: "user" | "engineer" | "lead" | "system"; text: string; created_at: string; attachments?: Attachment[] };
 export type EngineerJob = {
@@ -123,7 +124,7 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
         {!!applied.length && <><h4>已生效</h4>{applied.map(row)}</>}
         {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
-      {selected ? <JobDetail job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread} />
+      {selected ? <JobDetail apiBase={apiBase} job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread} />
         : <section className="engineer-job empty big">还没有记录。</section>}
     </div>}
   </div>;
@@ -159,13 +160,40 @@ function GoOn({ job, act }: { job: EngineerJob; act: Act }) {
   </form>;
 }
 
+/** What a working job is doing, as a running step's page shows it: its model's commands, file
+ * changes and messages as they happen, then the platform's checks. Refreshed every 3 seconds. */
+function JobActivity({ apiBase, job }: { apiBase: string; job: EngineerJob }) {
+  const [activity, setActivity] = useState<{ total: number; calls: ToolCall[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    async function load() {
+      try {
+        const response = await fetch(`${apiBase}/api/engineer/jobs/${encodeURIComponent(job.id)}/activity`);
+        if (response.ok && live) setActivity(await response.json());
+      } catch { /* the next refresh tries again */ }
+    }
+    void load();
+    const timer = setInterval(load, 3000);
+    return () => { live = false; clearInterval(timer); };
+  }, [apiBase, job.id]);
+  const calls = (activity?.calls ?? []).map(call => call.tool === "check" ? { ...call, detail: CHECKS[call.detail ?? ""] ?? call.detail } : call);
+  const last = calls[calls.length - 1];
+  return <section className="engineer-section engineer-activity" aria-live="polite" aria-label="正在做"><h4>正在做</h4>
+    {calls.length ? <>
+      <ToolLog calls={calls} open title={activity!.total > calls.length ? `最近的动作（共 ${activity!.total} 次）` : "这一轮的动作"} />
+      <p className="engineer-activity-note">每 3 秒刷新。{last.running ? (last.tool === "check" ? "这项检查还在跑。" : "最后一条命令还在运行。") : ""}</p>
+    </> : <p className="engineer-activity-note">{(job.model_id ?? "").startsWith("cli:") && job.model_id !== "cli:codex"
+      ? "这个会员 CLI 只在结束时汇报，执行中看不到具体动作。" : "还没有动作，模型正在思考。"}</p>}
+  </section>;
+}
+
 function StatusChip({ status }: { status: string }) {
   const known = ENGINEER_STATUS[status] ?? { label: status, tone: "ok" };
   return <span className={`dx-chip ${known.tone}`}>{known.tone === "busy" && <i className="pulse" aria-hidden="true" />}{known.label}</span>;
 }
 
-function JobDetail({ job, working, runs, act, onOpenRun, onOpenThread }: {
-  job: EngineerJob; working: boolean; runs: RunRef[]; act: Act; onOpenRun: (id: string) => void; onOpenThread?: (threadId: string) => void;
+function JobDetail({ apiBase, job, working, runs, act, onOpenRun, onOpenThread }: {
+  apiBase: string; job: EngineerJob; working: boolean; runs: RunRef[]; act: Act; onOpenRun: (id: string) => void; onOpenThread?: (threadId: string) => void;
 }) {
   const [busy, setBusy] = useState(""), [error, setError] = useState("");
   const run = job.run_id ? runs.find(item => item.id === job.run_id) : undefined;
@@ -189,6 +217,7 @@ function JobDetail({ job, working, runs, act, onOpenRun, onOpenThread }: {
     <details className="engineer-request-text" open={!job.plan}><summary>需求</summary><div className="engineer-request-body"><MarkdownView text={job.request} /></div></details>
     {working && <p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>
       {job.status === "planning" ? "平台工程师正在读代码、写方案…" : job.status === "validating" ? "正在独立运行测试和构建…" : "平台工程师正在修改源码副本…"}</p>}
+    {working && <JobActivity apiBase={apiBase} job={job} />}
     {job.plan && <div className="engineer-section"><h4>方案</h4><div className="dx-report"><MarkdownView text={job.plan} /></div></div>}
     {job.status === "plan_ready" && <div className="engineer-actions">
       <button type="button" className="primary" disabled={!!busy} onClick={() => post("approve", "approve")}>{busy === "approve" ? "提交中…" : "批准方案，开始实施"}</button>

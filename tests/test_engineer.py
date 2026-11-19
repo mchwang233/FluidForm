@@ -2,6 +2,7 @@
 copy, checked, approved again and applied; a repair applies once checked; the lead may ask for a
 component, and hears how it went."""
 import asyncio
+import json
 import subprocess
 
 import pytest
@@ -281,6 +282,19 @@ async def test_the_api_lists_jobs_and_refuses_what_the_engineer_cannot_take(task
     refused = await client.post("/api/engineer/jobs", json={"request": "加一个按钮"})
     assert refused.status_code == 409 and "不可用" in refused.json()["detail"]
     assert (await client.post("/api/engineer/jobs/nope/approve")).status_code == 409
+    assert (await client.get("/api/engineer/jobs/nope/activity")).status_code == 404
+
+
+async def test_the_api_shows_a_working_jobs_activity_and_nothing_once_it_stops(task_api):
+    from super_partner.models import EngineerJob
+    api, client = task_api
+    job = EngineerJob(request="加一个按钮", status="editing")
+    api.db.save_engineer_job(job)
+    api.executor.engineer_logs[job.id] = [{"turn": 0, "tool": "command", "detail": f"echo {n}", "ok": True} for n in range(5)]
+    shown = (await client.get(f"/api/engineer/jobs/{job.id}/activity", params={"limit": 2})).json()
+    assert shown["running"] and shown["total"] == 5 and [call["detail"] for call in shown["calls"]] == ["echo 3", "echo 4"]
+    del api.executor.engineer_logs[job.id]
+    assert (await client.get(f"/api/engineer/jobs/{job.id}/activity")).json() == {"running": False, "total": 0, "calls": []}
 
 
 def test_a_call_for_the_engineer_is_read_from_a_chat_answer_and_a_decision():
@@ -437,3 +451,49 @@ def test_jobs_and_messages_saved_before_files_could_be_sent_load():
     from super_partner.models import EngineerJob, LeadMessage
     assert EngineerJob.model_validate({"request": "x", "messages": [{"role": "user", "text": "x"}]}).attachments == []
     assert LeadMessage.model_validate({"role": "user", "text": "x"}).attachments == []
+
+
+class Showing(Engineer):
+    """Builds as Engineer does, printing Codex's events as it goes, and waits to be looked at."""
+
+    def __init__(self):
+        super().__init__()
+        self.working, self.go_on = asyncio.Event(), asyncio.Event()
+
+    async def complete(self, model_id, prompt, workspace=None, **kwargs):
+        if not prompt.startswith("[[super-partner:platform-engineer:plan]]"):
+            from super_partner import activity
+            for event in ({"type": "item.started", "item": {"id": "c1", "type": "command_execution", "command": "pytest -q tests/test_x.py"}},
+                          {"type": "item.completed", "item": {"id": "c1", "type": "command_execution", "command": "pytest -q tests/test_x.py",
+                                                              "exit_code": 0, "aggregated_output": "1 passed"}},
+                          {"type": "item.completed", "item": {"id": "f1", "type": "file_change", "status": "completed",
+                                                              "changes": [{"kind": "update", "path": "backend/super_partner/api.py"}]}}):
+                activity.note_line(json.dumps(event).encode())
+            self.working.set()
+            await self.go_on.wait()
+        return await super().complete(model_id, prompt, workspace, **kwargs)
+
+
+async def test_while_it_works_its_page_shows_what_it_is_doing(setup, monkeypatch):
+    build, _, _ = setup
+    providers = Showing()
+    executor = build(providers)
+    seen_in_checks = []
+
+    async def checking(self, *args, **kwargs):
+        seen_in_checks.append([dict(entry) for entry in executor.engineer_logs[job.id] if entry["tool"] == "check"])
+        return await passing_check()
+    monkeypatch.setattr(platform.PlatformRepairs, "_check_command", checking)
+    job = executor.engineer_request("修复：状态显示错误", kind="repair")
+    await asyncio.wait_for(providers.working.wait(), 5)
+    # The model's commands and file changes, as Codex prints them.
+    log = executor.engineer_logs[job.id]
+    assert [(entry["tool"], entry["detail"], entry["ok"]) for entry in log] == [
+        ("command", "pytest -q tests/test_x.py", True), ("file_change", "update backend/super_partner/api.py", True)]
+    providers.go_on.set()
+    await idle(executor)
+    # Each of the platform's checks was shown running, then passed.
+    assert seen_in_checks[0][-1]["running"] and seen_in_checks[1][0]["ok"] is True
+    assert {entry["detail"] for entry in seen_in_checks[-1]} >= {"Python syntax", "Backend tests"}
+    # Kept only while it works.
+    assert job.id not in executor.engineer_logs

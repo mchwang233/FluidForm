@@ -127,6 +127,9 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
         self.maintenance_task: Optional[asyncio.Task] = None
         # The platform engineer's job at work, if any (engineer.py).
         self.engineer_task: Optional[asyncio.Task] = None
+        # What the platform engineer's running job is doing, by job id (engineer.py): its model's
+        # commands, file changes and messages as they happen, and the platform's own checks.
+        self.engineer_logs: dict[str, list[dict]] = {}
         self.engineer_job_id: Optional[str] = None
         self.active_requests = 0
 

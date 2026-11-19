@@ -317,6 +317,16 @@ async def engineer_request(body: EngineerRequest):
                                                        thread_id=body.thread_id, attachments=attached))
 
 
+@app.get("/api/engineer/jobs/{job_id}/activity")
+def engineer_activity(job_id: str, limit: int = 200):
+    """What the platform engineer's job is doing right now (activity.py, as a step's page shows):
+    its model's commands, file changes and messages, and the platform's checks; empty when idle."""
+    if not db.get_engineer_job(job_id):
+        raise HTTPException(404, "找不到这项平台工程师工作。")
+    calls = list(executor.engineer_logs.get(job_id) or [])
+    return {"running": job_id in executor.engineer_logs, "total": len(calls), "calls": calls[-max(1, min(limit, 400)):]}
+
+
 @app.post("/api/engineer/jobs/{job_id}/reply")
 async def engineer_reply(job_id: str, body: EngineerReply):
     attached = _attached(body.attachments)
