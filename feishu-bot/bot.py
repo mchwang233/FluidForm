@@ -218,6 +218,28 @@ class Typing:
             return self.cards.close(self.card_id, cut(text), self.sequence) and written
 
 
+# Where FluidForm puts the files it sends with an answer, in the data folder.
+OUTBOX = "outbox"
+# Feishu's kinds of file, by extension; anything else is a "stream".
+FILE_TYPES = {".pdf": "pdf", ".doc": "doc", ".docx": "doc", ".xls": "xls", ".xlsx": "xls", ".ppt": "ppt",
+              ".pptx": "ppt", ".mp4": "mp4", ".opus": "opus"}
+
+
+def file_type(name: str) -> str:
+    return FILE_TYPES.get(Path(name).suffix.lower(), "stream")
+
+
+def picture(head: bytes) -> bool:
+    """Whether a file is a picture Feishu shows, by its first bytes, not its name."""
+    return head.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")) or \
+        (head[:4] == b"RIFF" and head[8:12] == b"WEBP")
+
+
+def sent_name(stored: str) -> str:
+    """A sent file's own name: FluidForm stores it as <8 hex>-<name>."""
+    return re.sub(r"^[0-9a-f]{8}-", "", stored) or stored
+
+
 def safe_name(name: str) -> str:
     name = re.sub(r"[^\w.\-\u4e00-\u9fff]+", "_", Path(name).name)[:80].strip("._")
     return name or "file"
@@ -264,10 +286,11 @@ class Host:
         self.send({"op": "status", "text": text})
 
     def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
-            heard=None, addressed: bool = True, sender: str = "") -> Optional[str]:
-        """Super Partner's answer; ``heard`` hears it as it is being written ({"progress": ...})."""
+            heard=None, addressed: bool = True, sender: str = "") -> tuple[Optional[str], list]:
+        """Super Partner's answer, and the files to send with it (paths in the data folder);
+        ``heard`` hears the answer as it is being written ({"progress": ...})."""
         request, done = uuid.uuid4().hex, threading.Event()
-        self.pending[request] = [done, None, heard]
+        self.pending[request] = [done, None, heard, []]
         message = {"op": "message", "id": request, "conversation": conversation, "text": text, "origin": origin}
         if attachments:
             message["attachments"] = list(attachments)
@@ -277,7 +300,8 @@ class Host:
             message["sender"] = sender
         self.send(message)
         done.wait(REPLY_WAIT)
-        return self.pending.pop(request, [None, None, None])[1]
+        _, answer, _, files = self.pending.pop(request, [None, None, None, []])
+        return answer, files
 
     def listen(self) -> None:
         for line in sys.stdin:
@@ -286,8 +310,10 @@ class Host:
             except ValueError:
                 continue
             if "re" in payload and payload["re"] in self.pending:
-                self.pending[payload["re"]][1] = payload.get("reply")
-                self.pending[payload["re"]][0].set()
+                waiting = self.pending[payload["re"]]
+                waiting[1] = payload.get("reply")
+                waiting[3] = [str(item) for item in payload.get("files") or [] if isinstance(item, str)]
+                waiting[0].set()
             elif "progress" in payload and payload["progress"] in self.pending:
                 if heard := self.pending[payload["progress"]][2]:
                     heard(str(payload.get("text") or ""))
@@ -323,6 +349,10 @@ def main() -> None:
         SettingsCardRequestBody,
     )
     from lark_oapi.api.im.v1 import (
+        CreateFileRequest,
+        CreateFileRequestBody,
+        CreateImageRequest,
+        CreateImageRequestBody,
         CreateMessageReactionRequest,
         CreateMessageReactionRequestBody,
         DeleteMessageReactionRequest,
@@ -458,6 +488,44 @@ def main() -> None:
             except Exception as exc:
                 print(f"飞书表情撤回失败：{exc}", file=sys.stderr, flush=True)
 
+    def upload(path: Path, name: str, image: bool) -> Optional[tuple[str, dict]]:
+        """A file uploaded to Feishu, as the message that shows it: ("image", ...) or ("file", ...)."""
+        try:
+            with path.open("rb") as body:
+                if image:
+                    response = client.im.v1.image.create(CreateImageRequest.builder().request_body(
+                        CreateImageRequestBody.builder().image_type("message").image(body).build()).build())
+                    if response.success() and response.data:
+                        return "image", {"image_key": response.data.image_key}
+                else:
+                    response = client.im.v1.file.create(CreateFileRequest.builder().request_body(
+                        CreateFileRequestBody.builder().file_type(file_type(name)).file_name(name).file(body).build()).build())
+                    if response.success() and response.data:
+                        return "file", {"file_key": response.data.file_key}
+            print(f"飞书上传失败（{name}）：{response.code} {response.msg}", file=sys.stderr, flush=True)
+        except Exception as exc:
+            print(f"飞书上传失败（{name}）：{exc}", file=sys.stderr, flush=True)
+        return None
+
+    def send_files(message_id: str, sent: list) -> None:
+        """The files FluidForm sent with an answer, each replied under the message: a picture as a
+        picture (as a file if Feishu will not take it as one), anything else as a file. Removed once
+        sent, or once it could not be."""
+        outbox = (data / OUTBOX).resolve()
+        for relative in sent[:MAX_FILES]:
+            path = (data / relative).resolve()
+            if outbox not in path.parents or not path.is_file():
+                continue
+            name = sent_name(path.name)
+            try:
+                image = picture(path.read_bytes()[:16])
+                made = upload(path, name, True) if image else None
+                made = made or upload(path, name, False)
+                if made:
+                    send_reply(message_id, *made)
+            finally:
+                path.unlink(missing_ok=True)
+
     def download(message_id: str, key: str, kind: str, name: str) -> Optional[str]:
         """A picture or file of the message, saved in the inbox; its path there, or None."""
         request = GetMessageResourceRequest.builder().message_id(message_id).file_key(key).type(kind).build()
@@ -481,9 +549,10 @@ def main() -> None:
             if not incoming.text and not kept:
                 return
             typing = Typing(Cards(message_id))
-            result = host.ask(chat_id, incoming.text, origin, kept, typing.heard, addressed=False, sender=sender)
+            result, files = host.ask(chat_id, incoming.text, origin, kept, typing.heard, addressed=False, sender=sender)
             if result and not typing.finish(result):
                 reply(message_id, result)
+            send_files(message_id, files)
             return
         reaction = working(message_id)
         try:
@@ -494,11 +563,12 @@ def main() -> None:
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
             typing = Typing(Cards(message_id))
-            result = host.ask(chat_id, incoming.text, origin, kept, typing.heard, sender=sender)
+            result, files = host.ask(chat_id, incoming.text, origin, kept, typing.heard, sender=sender)
             if result and not typing.finish(result):
                 reply(message_id, result)
             elif not result:
                 typing.finish("（没有回答）")
+            send_files(message_id, files)
         finally:
             done(message_id, reaction)
 
@@ -559,8 +629,8 @@ def check() -> None:
     other = Incoming("@张三 明天几点开会？", addressed=False)
     assert wanted("text", "group", said, {"@_user_2": "张三"}, ms, now, alone) == other
     assert wanted("text", "group", json.dumps({"text": "大家好"}), {}, ms, now, alone) == Incoming("大家好", addressed=False)
-    picture = Incoming("", ["img_1"], addressed=False)
-    assert wanted("image", "group", json.dumps({"image_key": "img_1"}), {}, ms, now, frozenset()) == picture
+    photo = Incoming("", ["img_1"], addressed=False)
+    assert wanted("image", "group", json.dumps({"image_key": "img_1"}), {}, ms, now, frozenset()) == photo
     assert wanted("text", "p2p", text, {}, int((now - 3600) * 1000), now) is None
     # A picture, a file, and rich text with words and pictures (in a group, @ it in rich text).
     assert wanted("image", "p2p", json.dumps({"image_key": "img_1"}), {}, ms, now) == Incoming("", ["img_1"])
@@ -609,6 +679,10 @@ def check() -> None:
     failed.heard("W")
     time.sleep(0.1)
     assert failed.finish("WAL") is False and Typing(Fake()).finish("x") is False
+    # Files FluidForm sends: their own names, pictures known by their bytes, Feishu's file kinds.
+    assert sent_name("0a1b2c3d-猫.png") == "猫.png" and sent_name("cat.png") == "cat.png"
+    assert picture(b"\x89PNG\r\n\x1a\n" + b"\0" * 8) and not picture(b"%PDF-1.7")
+    assert file_type("报价.PDF") == "pdf" and file_type("表.xlsx") == "xls" and file_type("a.zip") == "stream"
     # Messages sent in a row are passed on once, together, after the sender stops.
     assert merged([Incoming("我想问下"), Incoming("", ["img_1"], addressed=False), Incoming("这是什么猫")]) == \
         Incoming("我想问下\n这是什么猫", ["img_1"], [], True)
