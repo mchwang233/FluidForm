@@ -114,7 +114,7 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
   return <div className="engineer-page">
     <button type="button" className="platform-back" onClick={() => pick("home")}>← 平台</button>
     <header className="engineer-head"><h2>{tab === "records" ? "全部记录" : tab === "skills" ? "技能" : "能力"}</h2>
-      {tab !== "records" && <p>{tab === "skills" ? "它知道怎么用的工具：每份是一本用法说明，步骤用到相应工具时会拿到。" : "任务做出来、你固化下来的代码和说明书，之后的任务会直接用。"}</p>}</header>
+      {tab !== "records" && <p>{tab === "skills" ? "它知道怎么用的工具：每份是一本用法说明，步骤用到相应工具时会拿到。" : "任务做出来、你固化下来的代码和说明书，或你上传的能力包；可用的工具之后的任务会直接用。"}</p>}</header>
     {error && <p className="error" role="alert">{error}</p>}
     {tab === "skills" ? <SkillsPage apiBase={apiBase} /> : tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
       <nav className="engineer-list" aria-label="平台工程师的工作">

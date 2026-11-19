@@ -158,7 +158,9 @@ sequenceDiagram
 |---|---|
 | ![Plan confirmation](docs/images/plan-confirm.png) | ![Task progress](docs/images/progress-dark.png) |
 
-![Model profile with routing scores](docs/images/model-profile.png)
+| Models: in use, set up, missing a key | Capabilities: upload, secrets, uninstall |
+|---|---|
+| ![Models page](docs/images/models.png) | ![Capability packages](docs/images/capabilities.png) |
 
 <sub>Screenshots use the built-in offline demo model (`mock:local`), so the task finishes instantly at almost no cost.</sub>
 
@@ -279,9 +281,12 @@ Seed prices for models marked `pricing_verified: false` are placeholders and mus
 
 ## Automatic model catalog updates
 
-The **模型画像** page shows the model catalog, per-provider sync results, release dates,
-metadata sources, and an **立即更新** button. Models are sorted by release date and can be
-filtered by provider. The API refreshes overdue catalogs in the background on startup and
+The **模型** page groups the models into **在用** (in use, with the last 30 days' calls and
+cost), **已配好，没启用** (set up, not enabled) and **缺密钥或没安装** (missing a key or not
+installed, one row per provider). It can be searched and filtered to membership CLIs or APIs; the
+selected model's price, context, routing scores and recent uses are on the right. Per-provider
+sync results, metadata sources and the **立即更新** button are under **目录与评分来源**. The API
+refreshes overdue catalogs in the background on startup and
 then every 24 hours while the app is running; failed sources retry after one hour.
 
 The public [Models.dev catalog](https://models.dev/) supplies text-model metadata for OpenAI,
@@ -321,12 +326,10 @@ The interval accepts 1–720 hours. Turning off automatic sync keeps manual refr
 
 ## Public benchmark scores
 
-**模型画像** defaults exclusively to **Artificial Analysis** for scores, radar charts,
-coverage counts, the **仅有 AA 成绩** filter, and the comparison table. A model without a
-matching AA result stays unscored, even when another benchmark exists.
-The **评分依据** selector explicitly switches the whole view to BFCL, SuperCLUE, or
-**调度评分（高级）**; reopening the page starts with AA again. Routing-score sorting is
-available only in the routing-score view.
+The **模型** page uses only **Artificial Analysis** for scores, radar charts (under
+**评测明细与能力雷达图** in a model's details), and **所有模型的评测对比**. A model without a
+matching AA result stays unscored, even when another benchmark exists. BFCL and SuperCLUE
+results are still synchronized and kept, for the API.
 
 Public results retain source links, evaluation versions, dates, and inference settings.
 The comparison table uses a single source/version with an optional configuration filter.
