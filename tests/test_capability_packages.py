@@ -42,6 +42,9 @@ for n, ask in enumerate(asks):
                "origin": {"message_id": "om_%d" % n}}
     if "files" in ask or "refs" in ask:
         message["attachments"] = list(ask.get("files", {})) + ask.get("refs", [])
+    for key in ("addressed", "sender"):
+        if key in ask:
+            message[key] = ask[key]
     print(json.dumps(message), flush=True)
     while True:
         heard = json.loads(sys.stdin.readline())
@@ -269,6 +272,52 @@ async def test_an_answer_being_written_reaches_the_automation_before_it_is_done(
     progress = [line for line in lines("events.jsonl") if "progress" in line]
     assert progress == [{"progress": "0", "text": "**WAL**"}, {"progress": "0", "text": "**WAL** 是预写日志。"}]
     assert streaming.listener.get() is None
+
+
+async def test_in_a_group_it_answers_only_what_is_meant_for_it_knowing_what_was_said_before(packages, monkeypatch):
+    api, client, runner, _ = packages
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}')
+    judged = []
+
+    async def complete(model_id, prompt, *_args, **_kwargs):
+        if prompt.startswith("You are 假机器人, an assistant in a group chat"):
+            judged.append(prompt)
+            return ProviderResult('{"reply": true}' if "助手" in prompt.split("New message:")[-1] else '{"reply": false}', 100, 5)
+        return ProviderResult('{"kind": "chat"}', 100, 5)
+
+    monkeypatch.setattr(api.providers, "complete", complete)
+    await upload(client, package([
+        {"conversation": "g1", "text": "今天三点开会，记得带电脑", "addressed": False, "sender": "成员1"},
+        {"conversation": "g1", "text": "好的", "addressed": False, "sender": "成员2"},
+        {"conversation": "g1", "text": "助手，几点开会？", "addressed": False, "sender": "成员2"},
+        {"conversation": "g1", "text": "谢谢", "addressed": True},
+    ]))
+    await enable(client)
+    replies = await eventually(lambda: len(lines("replies.jsonl")) == 4 and lines("replies.jsonl"))
+    # Talk among members is not answered; what is meant for it is, and @ it always is.
+    assert [item["reply"] for item in replies] == [None, None, "好的。", "嗯。"]
+    assert len(judged) == 3 and "成员1：今天三点开会" in judged[1]
+    # The model answering is told what the group said before.
+    assert "群里此前的消息" in sent[0][2] and "成员1：今天三点开会，记得带电脑" in sent[0][2] and "成员2：助手，几点开会？" in sent[0][2]
+    assert sent[1][2] == "谢谢"
+    state = runner.get("fake-bot").state
+    assert state["heard"] == {} and state["spent"]
+
+
+async def test_past_its_budget_it_stays_quiet_where_it_was_not_called_on(packages, monkeypatch):
+    api, client, runner, _ = packages
+    triaging(api, monkeypatch, '{"kind": "chat"}')
+    await upload(client, package([{"conversation": "g1", "text": "随便聊聊", "addressed": False}]))
+    await client.put("/api/capabilities/fake-bot/budget", json={"daily_budget_usd": 0}, headers=ORIGIN)
+    await enable(client)
+    [reply] = await eventually(lambda: lines("replies.jsonl"))
+    assert reply["reply"] is None and runner.get("fake-bot").state.get("notified") != capability_runner.today()
+
+
+def test_what_the_group_said_is_kept_bounded():
+    kept = capability_runner.keep_heard([f"成员：{n}" * 100 for n in range(50)])
+    assert len(kept) <= capability_runner.MAX_HEARD_LINES and sum(map(len, kept)) <= capability_runner.MAX_HEARD_CHARS
+    assert kept[-1].startswith("成员：49")
 
 
 async def test_work_sent_with_an_image_is_planned_with_it(packages, monkeypatch):

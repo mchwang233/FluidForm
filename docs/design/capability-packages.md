@@ -62,6 +62,12 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - **To the automation** (stdin):
     - `{"re": id, "reply": …}`;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
+    - A message may say `"addressed": false` (said where it was not called on: a group message
+      without @ it) and `"sender"`. The cheapest model decides whether it is meant for it
+      (`triage.addressed`; failure or doubt: no). If not, it is not answered (`reply` null) but
+      kept, per conversation (`state["heard"]`, bounded by `keep_heard`), and the next message it
+      answers there is told what the group said before. Past its day's budget it stays quiet
+      there, with no notice.
     - `{"progress": id, "text": …}`: a chat's answer while it is being written, all of it so far,
       at most every `PROGRESS_SECONDS`, before its `re`. An API model's streamed text
       (`streaming.listener`, heard in `providers._stream`, set only around the chat's lead, so

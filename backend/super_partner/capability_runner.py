@@ -6,7 +6,9 @@ Each automation is its package's ``entry`` command, run in the capabilities' san
 - it writes ``{"op": "status", "text": ...}`` (how it is doing, shown to the user), and
   ``{"op": "message", "id": ..., "conversation": ..., "text": ..., "origin": {...}}`` when someone
   asks it something, with ``"attachments": [path, ...]`` for files sent along: paths in its data
-  folder, which FluidForm takes (copies into its attachments, then removes);
+  folder, which FluidForm takes (copies into its attachments, then removes); with
+  ``"addressed": false`` when it was not called on (a group message without @ it), and
+  ``"sender"`` naming who said it;
 - it reads ``{"re": id, "reply": ...}``, the answer, and ``{"event": "task_ended", "origin": {...},
   "text": ...}`` when a task it asked for ends. While a chat's answer is being written (an API
   model streams it), ``{"progress": id, "text": ...}`` carries all of it so far, at most every
@@ -69,6 +71,27 @@ class Asked:
     attachments: list[Attachment] = field(default_factory=list)
     # Hears a chat's answer as it is written: all of it so far (streaming.listener).
     on_text: Optional[Callable[[str], None]] = None
+    # False: said where the automation was not called on (a group message without @ it), so it
+    # answers only if the message is meant for it; ``sender`` names who said it there.
+    addressed: bool = True
+    sender: str = ""
+
+
+# What is kept of a group's talk the automation was not called on, per conversation (keep_heard).
+MAX_HEARD_LINES = 30
+MAX_HEARD_CHARS = 4000
+
+
+def keep_heard(lines: list[str]) -> list[str]:
+    """The latest lines that fit MAX_HEARD_LINES and MAX_HEARD_CHARS, each cut to fit too."""
+    kept, size = [], 0
+    for line in reversed(lines[-MAX_HEARD_LINES:]):
+        line = line[:500]
+        if size + len(line) > MAX_HEARD_CHARS:
+            break
+        kept.append(line)
+        size += len(line)
+    return kept[::-1]
 
 
 def take_files(item: Automation, capability_id: str, names) -> list[Attachment]:
@@ -284,8 +307,12 @@ class Runner:
             return
         asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text or FILES_ONLY,
                       origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},
-                      attachments=attached, on_text=self._progress(item, request))
+                      attachments=attached, on_text=self._progress(item, request),
+                      addressed=payload.get("addressed") is not False, sender=str(payload.get("sender") or "")[:40])
         async with item.lock:
+            if item.remaining() <= 0 and not asked.addressed:
+                await self._send(item, {"re": request, "reply": None, "over_budget": True})  # it was not asked
+                return
             if item.remaining() <= 0:
                 notice = None
                 if item.state.get("notified") != today():

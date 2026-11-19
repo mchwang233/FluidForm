@@ -1416,13 +1416,32 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     """What a message to an automation becomes, decided as 新建's 自动 decides (triage.classify): a
     question is answered by the conversation's own chat; work is planned as a task that waits for
     the owner's confirmation. Returns the reply and what it cost."""
+    configured = providers.configured_models(list(models))
+    cheapest = brief_writer(list(models.values()), configured)
+    # What was said where it was not called on (a group chat): kept, and told with the next
+    # message it answers, so it knows what the group was talking about.
+    heard = automation.state.setdefault("heard", {})
+    earlier = list(heard.get(asked.conversation, [])) if asked.conversation else []
+    line = f"{asked.sender or '成员'}：{asked.text}"
+    judged = 0.0
+    if not asked.addressed:
+        meant, judged = await triage.addressed(asked.text, "\n".join(earlier), capability.name, providers, cheapest)
+        if not meant:
+            if asked.conversation:
+                heard[asked.conversation] = capability_runner.keep_heard([*earlier, line])
+            return None, judged
+    said = asked.text
+    if earlier:
+        said = ("群里此前的消息（不是问你的，供参考）：\n" + "\n".join(earlier)
+                + f"\n\n现在问你的：\n{line if asked.sender else asked.text}")
+        heard.pop(asked.conversation, None)
     if asked.attachments and asked.text == capability_runner.FILES_ONLY:
         # Files with no words (a picture sent alone): there is nothing to tell work from; it is
         # asked about in the chat, as a picture sent to a person would be.
-        kind, spent = "chat", 0.0
+        kind, spent = "chat", judged
     else:
-        configured = providers.configured_models(list(models))
-        kind, spent = await triage.classify(asked.text, providers, brief_writer(list(models.values()), configured))
+        kind, spent = await triage.classify(asked.text, providers, cheapest)
+        spent += judged
     origin = {**asked.origin, "capability": capability.id}
     attached = [item.id for item in asked.attachments]
     needs_vision = any(item.kind == "image" for item in asked.attachments)
@@ -1446,7 +1465,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             # The answer's lead runs in a task started here, which takes this context along.
             heard = streaming.listener.set(asked.on_text)
             try:
-                run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, pick.id, attached,
+                run = _start_chat(said, max(automation.remaining(), 0.01), True, None, pick.id, attached,
                                   auto_routed=True, spent=spent)
             finally:
                 streaming.listener.reset(heard)
@@ -1485,10 +1504,10 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             before, extra = latest.actual_cost_usd, spent
             heard = streaming.listener.set(asked.on_text)
             try:
-                executor.start_lead_chat(run.id, asked.text, asked.attachments)
+                executor.start_lead_chat(run.id, said, asked.attachments)
             except files.AttachmentError as exc:
                 automation.note(f"附件没带上：{exc}")
-                executor.start_lead_chat(run.id, asked.text)
+                executor.start_lead_chat(run.id, said)
             finally:
                 streaming.listener.reset(heard)
             break
