@@ -1385,10 +1385,12 @@ def _task_name(run: ExecutionRun) -> str:
     return run.plan.title or run.plan.summary[:40]
 
 
-def _automation_chat_model(automation: capability_runner.Automation, run: Optional[ExecutionRun] = None) -> ModelProfile:
-    """The saved choice, with the ordinary fallback if it has become unavailable. An unchanged
-    automatic preference keeps its conversation; restoring automatic chooses afresh."""
-    available = chat_models()
+def _automation_chat_model(automation: capability_runner.Automation, run: Optional[ExecutionRun] = None,
+                           needs_vision: bool = False) -> ModelProfile:
+    """The saved choice, with the ordinary fallback if it has become unavailable (or cannot see the
+    images sent). An unchanged automatic preference keeps its conversation; restoring automatic
+    chooses afresh."""
+    available = chat_models(needs_vision=needs_vision)
     wanted = automation.state["model_id"]
     if not wanted and run and not automation.state["chat_preferences"].get(run.id) and run.supervisor:
         wanted = run.supervisor.model_id
@@ -1406,8 +1408,10 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     configured = providers.configured_models(list(models))
     kind, spent = await triage.classify(asked.text, providers, brief_writer(list(models.values()), configured))
     origin = {**asked.origin, "capability": capability.id}
+    attached = [item.id for item in asked.attachments]
+    needs_vision = any(item.kind == "image" for item in asked.attachments)
     if kind == "task" and len(asked.text) >= 3:
-        task = await _new_task(CreateTask(prompt=asked.text))
+        task = await _new_task(CreateTask(prompt=asked.text, attachments=attached))
         latest = get_task(task.id)
         latest.origin, latest.auto_routed = origin, True
         latest.actual_cost_usd = round(latest.actual_cost_usd + spent, 6)
@@ -1422,8 +1426,9 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         known = automation.state["chats"].get(asked.conversation) if asked.conversation else None
         run = db.get_run(known) if known else None
         if run is None or run.kind != "chat":
-            requested, pick = automation.state["model_id"], _automation_chat_model(automation)
-            run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, pick.id, auto_routed=True, spent=spent)
+            requested, pick = automation.state["model_id"], _automation_chat_model(automation, needs_vision=needs_vision)
+            run = _start_chat(asked.text, max(automation.remaining(), 0.01), True, None, pick.id, attached,
+                              auto_routed=True, spent=spent)
             latest = get_task(run.id)
             prefix = f"{capability.name} · "
             latest.plan.title = prefix + asked.text.splitlines()[0][:max(CHAT_TITLE_CHARS - len(prefix), 10)]
@@ -1446,7 +1451,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             latest = get_task(run.id)
             if latest.kind != "chat":
                 continue
-            requested, pick = automation.state["model_id"], _automation_chat_model(automation, latest)
+            requested, pick = automation.state["model_id"], _automation_chat_model(automation, latest, needs_vision)
             previous = latest.supervisor.model_id if latest.supervisor else None
             if previous != pick.id:
                 latest.supervisor = supervisor.new_session(pick, latest.supervisor, supervisor.chat_folder(latest))
@@ -1457,7 +1462,11 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             if previous != pick.id:
                 executor.emit(run.id, "run.lead_changed", model_id=pick.id, previous_model_id=previous)
             before, extra = latest.actual_cost_usd, spent
-            executor.start_lead_chat(run.id, asked.text)
+            try:
+                executor.start_lead_chat(run.id, asked.text, asked.attachments)
+            except files.AttachmentError as exc:
+                automation.note(f"附件没带上：{exc}")
+                executor.start_lead_chat(run.id, asked.text)
             break
     # Remember the preference actually used for this turn, not a later change saved mid-reply.
     automation.state["chat_preferences"][run.id] = requested

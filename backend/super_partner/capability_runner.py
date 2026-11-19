@@ -5,7 +5,8 @@ Each automation is its package's ``entry`` command, run in the capabilities' san
 
 - it writes ``{"op": "status", "text": ...}`` (how it is doing, shown to the user), and
   ``{"op": "message", "id": ..., "conversation": ..., "text": ..., "origin": {...}}`` when someone
-  asks it something;
+  asks it something, with ``"attachments": [path, ...]`` for files sent along: paths in its data
+  folder, which FluidForm takes (copies into its attachments, then removes);
 - it reads ``{"re": id, "reply": ...}``, the answer, and ``{"event": "task_ended", "origin": {...},
   "text": ...}`` when a task it asked for ends.
 
@@ -27,9 +28,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from . import attachments as files
 from . import capabilities, capability_packages, capability_sandbox
 from .config import settings
-from .models import Capability
+from .models import Attachment, Capability
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +60,38 @@ class Asked:
     conversation: str
     text: str
     origin: dict = field(default_factory=dict)
+    attachments: list[Attachment] = field(default_factory=list)
+
+
+def take_files(item: Automation, capability_id: str, names) -> list[Attachment]:
+    """The files an automation sent with a message, from its data folder: each becomes one of
+    FluidForm's attachments and is removed there. Anything outside that folder, a link, or too
+    large is refused, with a line in its log."""
+    if not isinstance(names, list) or not names:
+        return []
+    folder = capability_packages.data_folder(capability_id).resolve()
+    taken = []
+    for name in names[:files.MAX_ATTACHMENTS + 1]:
+        name = str(name)
+        source = folder / name
+        try:
+            if len(taken) == files.MAX_ATTACHMENTS:
+                raise files.AttachmentError(f"一条消息最多 {files.MAX_ATTACHMENTS} 个附件")
+            if Path(name).is_absolute() or ".." in Path(name).parts or source.is_symlink() \
+                    or folder not in source.resolve().parents or not source.is_file():
+                raise files.AttachmentError("不是它数据目录里的文件")
+            if source.stat().st_size > files.MAX_ATTACHMENT_BYTES:
+                raise files.AttachmentError(f"超过 {files.MAX_ATTACHMENT_BYTES // 1024 // 1024} MB")
+            taken.append(files.save(source.name, source.read_bytes()))
+        except (OSError, files.AttachmentError) as exc:
+            item.note(f"附件 {name[:80]} 没收下：{exc}")
+        finally:
+            # Removed only from its own folder, never through a link out of it.
+            with contextlib.suppress(OSError, ValueError):
+                parent = source.parent.resolve()
+                if (parent == folder or folder in parent.parents) and (source.is_file() or source.is_symlink()):
+                    source.unlink()
+    return taken
 
 
 class Fatal(Exception):
@@ -236,11 +270,13 @@ class Runner:
     async def _ask(self, item: Automation, capability: Capability, payload: dict) -> None:
         request = payload.get("id")
         text = str(payload.get("text") or "").strip()[:MAX_TEXT]
-        if not text:
+        attached = take_files(item, capability.id, payload.get("attachments"))
+        if not text and not attached:
             await self._send(item, {"re": request, "reply": None})
             return
-        asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text,
-                      origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {})
+        asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text or "（见附件）",
+                      origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},
+                      attachments=attached)
         async with item.lock:
             if item.remaining() <= 0:
                 notice = None

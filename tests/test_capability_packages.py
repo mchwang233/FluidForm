@@ -22,7 +22,7 @@ from test_chat import BEST, ORIGIN, OTHER, triaging
 
 # A fake automation: asks what asks.json lists, one at a time, and writes what it hears.
 FAKE = r'''
-import json, os, sys
+import base64, json, os, sys
 data = os.environ["SP_DATA_DIR"]
 def note(name, value):
     with open(os.path.join(data, name), "a") as out:
@@ -32,8 +32,16 @@ print(json.dumps({"op": "status", "text": "就绪"}), flush=True)
 print("plain output goes to the log", flush=True)
 asks = json.load(open("asks.json"))
 for n, ask in enumerate(asks):
-    print(json.dumps({"op": "message", "id": str(n), "conversation": ask["conversation"], "text": ask["text"],
-                      "origin": {"message_id": "om_%d" % n}}), flush=True)
+    # Files sent along: written to its data folder, then named in the message (as feishu-bot does).
+    for name, content in ask.get("files", {}).items():
+        os.makedirs(os.path.dirname(os.path.join(data, name)), exist_ok=True)
+        with open(os.path.join(data, name), "wb") as out:
+            out.write(base64.b64decode(content))
+    message = {"op": "message", "id": str(n), "conversation": ask["conversation"], "text": ask["text"],
+               "origin": {"message_id": "om_%d" % n}}
+    if "files" in ask or "refs" in ask:
+        message["attachments"] = list(ask.get("files", {})) + ask.get("refs", [])
+    print(json.dumps(message), flush=True)
     while True:
         heard = json.loads(sys.stdin.readline())
         if heard.get("re") == str(n):
@@ -192,6 +200,88 @@ async def test_uninstalled_it_leaves_nothing_behind(packages, monkeypatch):
 
 
 # ---- running ----
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
+
+
+def b64(data: bytes) -> str:
+    import base64
+    return base64.b64encode(data).decode()
+
+
+async def test_an_image_sent_to_an_automation_reaches_its_chat_and_leaves_its_data_folder(packages, monkeypatch, tmp_path):
+    api, client, runner, _ = packages
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}')
+    outside = tmp_path / "outside.txt"
+    outside.write_text("not its file")
+    await upload(client, package([
+        {"conversation": "c1", "text": "这张图里是什么？", "files": {"img/shot.png": b64(PNG)}, "refs": [str(outside), "../x"]},
+        {"conversation": "c1", "text": "", "files": {"img/only.png": b64(PNG)}},
+    ]))
+    assert (await enable(client)).status_code == 200
+    replies = await eventually(lambda: len(lines("replies.jsonl")) == 2 and lines("replies.jsonl"))
+    assert all(item["reply"] for item in replies)
+    # The images went to the model with the messages; nothing else did.
+    assert sent.attached == [["shot.png"], ["only.png"]]
+    chat = api.db.get_run(runner.get("fake-bot").state["chats"]["c1"])
+    assert [item.name for item in chat.attachments] == ["shot.png", "only.png"]
+    assert [m.text for m in chat.lead_messages if m.role == "user"] == ["这张图里是什么？", "（见附件）"]
+    # Taken out of its data folder; what was outside it stays, and is logged as refused.
+    assert not list((capability_packages.data_folder("fake-bot") / "img").iterdir())
+    assert outside.read_text() == "not its file"
+    log = "\n".join(runner.get("fake-bot").log)
+    assert "outside.txt 没收下" in log and "../x 没收下" in log
+
+
+async def test_work_sent_with_an_image_is_planned_with_it(packages, monkeypatch):
+    api, client, _, _ = packages
+    triaging(api, monkeypatch, '{"kind": "task"}')
+    await upload(client, package([{"conversation": "c1", "text": "照这张图改首页", "files": {"design.png": b64(PNG)}}]))
+    await enable(client)
+    await eventually(lambda: lines("replies.jsonl"))
+    [task] = [run for run in api.db.list_runs() if run.kind == "task"]
+    assert [item.name for item in task.attachments] == ["design.png"]
+
+
+async def test_an_image_goes_to_a_model_that_can_see_it_when_the_chosen_one_cannot(model_bot, monkeypatch):
+    from super_partner import attachments as files
+    api, client, runner, sent, _ = model_bot
+    blind = api.models[OTHER.id].model_copy(update={"supports_vision": False})
+    monkeypatch.setitem(api.models, OTHER.id, blind)
+    assert (await choose_model(client, OTHER.id)).status_code == 200
+    image = files.save("shot.png", PNG)
+    reply, _ = await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(
+        conversation="c1", text="看看这个", attachments=[image]), runner.get("fake-bot"))
+    assert sent[-1][0] != OTHER.id and sent.attached[-1] == ["shot.png"]
+    assert "本次由" in reply
+    # Words alone go back to the chosen model.
+    await bot_message(api, runner, "谢谢")
+    assert sent[-1][0] == OTHER.id
+
+
+def test_files_outside_its_data_folder_links_and_oversized_ones_are_refused(packages, monkeypatch, tmp_path):
+    from super_partner import attachments as files
+    item = capability_runner.Automation("fake-bot")
+    folder = capability_packages.data_folder("fake-bot")
+    (folder / "in").mkdir(parents=True)
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(PNG)
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "elsewhere" / "far.png").write_bytes(PNG)
+    (folder / "in" / "ok.png").write_bytes(PNG)
+    (folder / "in" / "link.png").symlink_to(secret)
+    (folder / "dirlink").symlink_to(tmp_path / "elsewhere")
+    (folder / "in" / "big.png").write_bytes(PNG + b"\0" * 100)
+    monkeypatch.setattr(files, "MAX_ATTACHMENT_BYTES", 80)
+    taken = capability_runner.take_files(item, "fake-bot",
+                                         ["in/ok.png", "in/link.png", "dirlink/far.png", "in/big.png", str(secret), "in/none.png"])
+    assert [attachment.name for attachment in taken] == ["ok.png"]
+    assert files.path(taken[0]).read_bytes() == PNG
+    # Its own files are gone; nothing outside its folder was touched.
+    assert sorted(path.name for path in (folder / "in").iterdir()) == []
+    assert secret.read_bytes() == PNG and (tmp_path / "elsewhere" / "far.png").exists()
+    assert len([line for line in item.log if "没收下" in line]) == 5
+    assert capability_runner.take_files(item, "fake-bot", "in/ok.png") == []
 
 @pytest.fixture
 async def model_bot(packages, monkeypatch):

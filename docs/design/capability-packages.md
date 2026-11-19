@@ -51,6 +51,12 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - **From the automation** (stdout):
     - `{"op": "status", "text": …}`;
     - `{"op": "message", "id", "conversation", "text", "origin": {…}}`: someone asked something.
+      With `"attachments": [path, …]`, files sent along (a picture, a document): paths in its data
+      folder. FluidForm takes each one into its own attachments and removes it there; a path
+      outside that folder, a link, or a file over `MAX_ATTACHMENT_BYTES` is refused with a log
+      line. The chat or task gets them as files the user attached; a chat whose chosen model
+      cannot see images is answered by one that can, saying so. A message of files alone reads
+      "（见附件）".
   - **To the automation** (stdin):
     - `{"re": id, "reply": …}`;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
@@ -100,6 +106,8 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - Reaches `*.feishu.cn` and `*.larksuite.com`.
   - Answers private messages and @ in groups, once each, never the backlog.
   - Replies under the message, and sends a task's result back.
+  - Pictures, rich text with pictures, and files are downloaded into its data folder and sent
+    along (1.0.3). In a group only rich text can @ it, so a picture there goes in a rich-text message.
 - **`settings.capability_packages`** (`SUPER_PARTNER_CAPABILITY_PACKAGES`, off by default): without
   it, nothing can be uploaded and no automation runs.
 
