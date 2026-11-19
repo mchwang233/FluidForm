@@ -83,8 +83,6 @@ def wanted(message_type: str, chat_type: str, content: str, mentions: dict, crea
         return None
     mine = set(mentions) if me is None else set(me)
     called = chat_type == "p2p" or bool(set(mentions) & mine)
-    if not called and message_type not in {"text", "post"}:
-        return None
     if create_time_ms and create_time_ms / 1000 < started_at - BACKLOG_SECONDS:
         return None
     try:
@@ -104,8 +102,9 @@ def wanted(message_type: str, chat_type: str, content: str, mentions: dict, crea
     # Its own mark goes; anyone else's becomes their name, so what was said keeps its sense.
     incoming.text = MENTION.sub(lambda m: "" if m.group(0).strip() in mine else f"@{mentions.get(m.group(0).strip(), '')} ",
                                 incoming.text).strip()
-    if not called:
-        incoming.addressed, incoming.images, incoming.files = False, [], []
+    # Not called on: still passed on, pictures and files too (a picture cannot @ it, and the
+    # question about it comes next); FluidForm decides whether to answer.
+    incoming.addressed = called
     incoming.images, incoming.files = incoming.images[:MAX_FILES], incoming.files[:MAX_FILES - len(incoming.images[:MAX_FILES])]
     return incoming if incoming.text or incoming.images or incoming.files else None
 
@@ -436,8 +435,13 @@ def main() -> None:
     def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "") -> None:
         if not incoming.addressed:
             # Not called on: no "typing" until FluidForm decides it is meant for it.
+            names = [download(message_id, key, "image", "image.png") for key in incoming.images]
+            names += [download(message_id, key, "file", name) for key, name in incoming.files]
+            kept = tuple(name for name in names if name)
+            if not incoming.text and not kept:
+                return
             typing = Typing(Cards(message_id))
-            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, (),
+            result = host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept,
                               typing.heard, addressed=False, sender=sender)
             if result and not typing.finish(result):
                 reply(message_id, result)
@@ -504,7 +508,8 @@ def check() -> None:
     other = Incoming("@张三 明天几点开会？", addressed=False)
     assert wanted("text", "group", said, {"@_user_2": "张三"}, ms, now, alone) == other
     assert wanted("text", "group", json.dumps({"text": "大家好"}), {}, ms, now, alone) == Incoming("大家好", addressed=False)
-    assert wanted("image", "group", json.dumps({"image_key": "img_1"}), {}, ms, now, frozenset()) is None
+    picture = Incoming("", ["img_1"], addressed=False)
+    assert wanted("image", "group", json.dumps({"image_key": "img_1"}), {}, ms, now, frozenset()) == picture
     assert wanted("text", "p2p", text, {}, int((now - 3600) * 1000), now) is None
     # A picture, a file, and rich text with words and pictures (in a group, @ it in rich text).
     assert wanted("image", "p2p", json.dumps({"image_key": "img_1"}), {}, ms, now) == Incoming("", ["img_1"])
