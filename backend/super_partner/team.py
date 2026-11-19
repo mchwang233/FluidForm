@@ -74,8 +74,8 @@ def digest(value) -> str:
 
 
 async def form(say, request, models, configured):
-    """A separate lead decision, completed before the outline is requested."""
-    from .outline import _ask
+    """A separate lead decision, completed before the tasks are planned."""
+    from .lead_planning import _ask
 
     library = skills.library()
     available = [m for m in models if m.id in configured and m.enabled and m.routing_ready and m.provider != "mock"
@@ -266,7 +266,7 @@ def governors(plan, node):
 def delegate(run, parent, payload, models, configured, needs_vision=False):
     """Validate a proposed child graph on a copy; publish all children or nothing."""
     from . import contracts
-    from .outline import MAX_TASKS
+    from .lead_planning import MAX_TASKS
     from .planner import scope_problems, task_node
     from .replan import _check_acyclic
 

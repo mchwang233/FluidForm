@@ -17,7 +17,6 @@ from . import (
     briefing,
     contracts,
     learning,
-    outline,
     progress,
     quality,
     retrospect,
@@ -43,7 +42,6 @@ from .projects import git_snapshot
 from .providers import TOOL_LIMIT_REQUIREMENTS, Conversation, ProviderRegistry
 from .quota import ModelUnavailable, failure_kind
 from .recovery import retry_model, turns_for
-from .refining import PREFIX, Refining
 from .review import Reviewing
 from .routing import (
     NoEligibleModelError,
@@ -79,11 +77,16 @@ def trace_path(run_id: str, node_id: str, attempt: int) -> Path:
     return Path(settings.data_dir).resolve() / "traces" / run_id / f"{node_id}-{attempt}.jsonl"
 
 
-class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining, Preflighting, Learning):
+# Said of a task planned in major parts that were to be split while it ran, which FluidForm no
+# longer does.
+UNSPLIT_PARTS = ("这个任务是按旧的「先分大项、执行时再细化」的方式排的计划，FluidForm 已经不再这样做，"
+                 "还没细化的大项不会再被拆开。请用「需求变更」按现在的方式重新排计划。")
+
+
+class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Preflighting, Learning):
     """Runs a task's steps: scheduling, attempts, retries and step outcomes. Reviewing
     (review.py), the lead's decisions (leading.py), diagnosing (diagnosing.py), self-repair
-    (self_repair.py), the platform engineer (engineer.py) and splitting major parts into tasks
-    (refining.py) are mixed in."""
+    (self_repair.py) and the platform engineer (engineer.py) are mixed in."""
 
     def __init__(self, db: Database, providers: ProviderRegistry, model_lookup: dict):
         self.db = db
@@ -201,9 +204,14 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
             if node.status == NodeStatus.RUNNING:
                 node.status = NodeStatus.PENDING
             node.preparing = False
-        for part in run.plan.parts:
-            if part.status == "refining":
-                part.status = "planned"
+        if run.plan.unsplit_parts():
+            # Planned in major parts to split while running, which FluidForm no longer does
+            # (docs/design/fewer-settings.md): say so instead of waiting for splits that never come.
+            run.status = RunStatus.FAILED
+            run.error = UNSPLIT_PARTS
+            self._save(run)
+            self.emit(run.id, "run.failed", error=run.error)
+            return
         self._save(run)
         self.emit(run.id, "run.started")
         if run.project_dir:
@@ -259,8 +267,6 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
                 if unable:
                     self._end_incomplete(run, unable)
                     return
-                if unsplit := [part.title for part in run.plan.parts if not part.parent_id and part.status != "ready"]:
-                    raise RuntimeError("这些大项还没细化成任务：" + "、".join(unsplit))
                 if any(node.status != NodeStatus.SUCCEEDED for node in run.plan.nodes):
                     raise RuntimeError("Task graph is blocked by failed or cyclic dependencies")
                 # The lead checks the whole result first; steps it reworks or adds run before the end.
@@ -319,9 +325,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
                   unable=[node.id for node in unable], blocked=blocked)
 
     def _dispatch(self, run: ExecutionRun, running: dict[asyncio.Task, str]) -> bool:
-        """Start splitting major parts not split yet, and ready nodes up to the parallel limit;
-        return True if budget held any back."""
-        self._split_parts(run, running)
+        """Start ready nodes up to the parallel limit; return True if budget held any back."""
         in_flight = set(running.values())
         # Steps at work, including those started early (_head_start).
         started = {item.removeprefix(HEAD) for item in in_flight}
@@ -329,7 +333,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
         ready = [
             node for node in run.plan.nodes
             if node.status == NodeStatus.PENDING and node.id not in started
-            and set(node.dependencies) <= completed and not outline.waits_on_unsplit(run.plan, node)
+            and set(node.dependencies) <= completed
         ]
         reserved = run.actual_cost_usd + sum(
             node.estimated_cost_usd for node in run.plan.nodes if node.id in in_flight
@@ -345,9 +349,8 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
                 cap = settings.provider_limits.get(model.provider, {}).get("concurrency", 0)
                 if cap and provider_load[model.provider] >= cap:
                     return True
-            # Splits at work do not count: they are the lead's conversations, not steps.
             limit = settings.max_parallel_nodes
-            return bool(limit) and sum(not item.startswith(PREFIX) for item in running.values()) >= limit
+            return bool(limit) and len(running) >= limit
 
         for node in ready:
             if node.status != NodeStatus.PENDING or not self._admit_tool_channel(run, node, reserved):
@@ -380,7 +383,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
         steps still to do or at work, on a model that edits files, with files or folders of its own
         (an unscoped step would hold the whole folder and stop the steps it waits for)."""
         if (not settings.head_start or node.status != NodeStatus.PENDING or node.id in started or node.attempts
-                or node.head_start_generation == node.generation or outline.waits_on_unsplit(run.plan, node)):
+                or node.head_start_generation == node.generation):
             return False
         by_id = {item.id: item for item in run.plan.nodes}
         waiting = [by_id[dep] for dep in node.dependencies if dep in by_id and by_id[dep].status != NodeStatus.SUCCEEDED]
@@ -537,8 +540,7 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Refining
             node = next(node for node in run.plan.nodes if node.id == node_id)
             if node.status != NodeStatus.PENDING or run.status != RunStatus.RUNNING:
                 return
-            if (any(n.status != NodeStatus.SUCCEEDED for n in run.plan.nodes if n.id in node.dependencies)
-                    or outline.waits_on_unsplit(run.plan, node)):
+            if any(n.status != NodeStatus.SUCCEEDED for n in run.plan.nodes if n.id in node.dependencies):
                 return
             if self.platform_pending:
                 self._hold_for_platform(run)

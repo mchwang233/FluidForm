@@ -50,7 +50,7 @@ def request(**overrides):
         "acceptance_criteria": "给出边界情况和证据", "dependencies": [], **overrides}]}
 
 
-async def test_team_is_decided_before_any_parts_are_planned(monkeypatch):
+async def test_team_is_decided_before_any_tasks_are_planned(monkeypatch):
     monkeypatch.setattr(settings, "employee_teams", True)
     messages = []
 
@@ -58,8 +58,9 @@ async def test_team_is_decided_before_any_parts_are_planned(monkeypatch):
         async def converse(self, session, text, **kwargs):
             messages.append(text)
             payload = ({"team_brief": "保持公开接口并独立验收", "employees": [e.model_dump() for e in employees()]}
-                       if len(messages) == 1 else {"summary": "module", "parts": [{"key": "p1", "title": "模块",
-                           "employee_id": "builder", "goal": "实现模块", "capability": "coding", "size": 1}]})
+                       if len(messages) == 1 else {"summary": "module", "nodes": [{"key": "t1", "title": "模块",
+                           "employee_id": "builder", "instructions": "实现模块", "capability": "coding",
+                           "acceptance_criteria": "自测通过"}]})
             return ProviderResult(json.dumps(payload), 10, 10, session.model_id)
 
     plan = await autonomous_plan("实现模块", models(), {m.id for m in models()}, Planner(), session=SupervisorSession())
@@ -70,7 +71,7 @@ async def test_team_is_decided_before_any_parts_are_planned(monkeypatch):
     assert "smallest" not in messages[0]
     assert "builder" in messages[1] and "tester" in messages[1]
     assert [e.model_id for e in plan.employees] == ["test:build", "test:verify"]
-    assert plan.parts[0].employee_id == "builder"
+    assert plan.nodes[0].employee_id == "builder"
 
 
 def test_employee_context_carries_whole_goal_alignment_and_accepted_own_history():
@@ -260,15 +261,6 @@ async def test_delegated_requests_share_ancestor_cost_and_turn_limits_after_rest
     assert saved.actual_cost_usd == pytest.approx(0.0004)
     assert saved.plan.nodes[0].contract_cost_usd == pytest.approx(0.0004)
     assert saved.plan.nodes[0].contract_turns == 2
-
-
-def test_refinement_keeps_employee_ids_and_inherits_module_owner():
-    from super_partner.outline import Tree, siblings
-    tree = Tree()
-    owner = tree.add(siblings([{"key":"p", "title":"module", "employee_id":"builder"}], False, parts_only=True), None)[0]
-    tree.add(siblings([{"key":"n", "instructions":"implement", "capability":"coding", "files":["a.py"]},
-                       {"key":"v", "instructions":"verify", "capability":"research", "employee_id":"tester"}], True), owner.id)
-    assert [n.employee_id for n in tree.plan("module").nodes] == ["builder", "tester"]
 
 
 def test_named_skill_is_carried_even_when_task_does_not_mention_tool(monkeypatch):

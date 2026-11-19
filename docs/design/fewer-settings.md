@@ -28,6 +28,15 @@
 - `test_profiles.py`、`test_memory.py`：只剩"稳妥"一个档位，单独设过的照旧优先。
 - 其他测试测的不是这些功能，默认仍按原来的行为跑（`conftest.former_defaults`）；测某个功能的测试自己打开它。
 
-## 还没定的
+## 早先的开关
 
-早先的 8 个实验开关：`employee_teams`、`direct_task_planning`、`head_start`、`skill_reuse_first`、`adaptive_refinement`、`capability_proposals`、`capability_packages`、`learning_enabled`。每个要么改成默认开，要么连代码一起删掉，由用户逐个决定。
+用户逐个定了：
+
+- 改成默认开：`capability_packages`（飞书机器人靠它）、`employee_teams`、`head_start`、`skill_reuse_first`、`capability_proposals`。测试里默认仍关（`conftest.former_defaults`、`isolated_environment`），测这些功能的测试自己打开。
+- 删掉：`direct_task_planning` 和 `adaptive_refinement`，连同"先分大项、执行时再细化"的整套做法：`outline.py`、`refining.py`、执行器里的 `_split_parts` 和等待未细化大项的检查。负责人现在只用 `task_planning.py` 直接排出能执行的任务。
+  - 它们共用的几样东西搬到了 `lead_planning.py`：`_ask`、`plan_title`、`MAX_TASKS`、`INTERNET_NOTE`、`MAX_REQUIRES`。
+  - 负责人排不出计划时，退回到普通的单次规划；需要员工队伍时照旧报错。和以前不开直接排任务时一样。
+  - 旧的 `.env` 里写着这两个设置名的，照常能读（`config.RETIRED`）。
+  - 旧任务的计划里带着大项的，照常能读、能显示。还有大项没细化的旧任务，开始执行时会直接结束并说明原因（`executor.UNSPLIT_PARTS`），请用户用"需求变更"重新排计划，不会卡在等细化上。页面上这种大项标为"未细化"。
+  - 少了的一项：细化时，太粗的工作包（没列文件的大步骤）会被退回给负责人重排。直接排任务时没有这一步。这台机器之前一直开着直接排任务，所以实际行为不变。
+- 保留开关：自动复盘 `learning_enabled`。每个任务要花约 $0.50，而且页面上已经有开关。

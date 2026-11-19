@@ -374,9 +374,9 @@ class CostEstimate(BaseModel):
 
 
 class PlanPart(BaseModel):
-    """A part of a plan (大项 at the top level), split level by level into smaller parts and
-    finally tasks (outline.py). Only tasks run; parts group them. A task is planned as major
-    parts only; once it runs, every major part is split at the same time (refining.py)."""
+    """A part of an old plan (大项 at the top level), which grouped its tasks. Plans were once made
+    as major parts split into tasks while the task ran; FluidForm now plans tasks directly
+    (task_planning.py), and parts are kept so old plans load and show."""
     id: str
     title: str
     goal: str = ""
@@ -468,6 +468,10 @@ class TaskPlan(BaseModel):
     planning_cost_usd: float = 0.0
     planning_note: Optional[str] = None
     choices: list[PlanChoice] = Field(default_factory=list)
+
+    def unsplit_parts(self) -> list:
+        """Major parts of an old plan that were never split into tasks (none in a plan made now)."""
+        return [part for part in self.parts if not part.parent_id and part.status != "ready"]
 
     def unsplit_cost(self) -> float:
         """The estimate of major parts not yet split into tasks."""

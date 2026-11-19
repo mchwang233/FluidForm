@@ -1,6 +1,6 @@
 # 设计：逐级拆分的计划
 
-状态：已实现
+状态：已删除（2026-11-19，见 fewer-settings.md）。负责人现在直接排出能执行的任务（direct-task-planning.md）；这里只留作旧计划的说明。
 范围：`outline.py`、`refining.py`（新）、`planner.py`、`models.py`、`executor.py`、`routing.py`、`api.py`、`supervisor.py`、`replan.py`、`quality.py`、`frontend/plan-parts.tsx`、`frontend/plan-graph.tsx`
 
 ## 1. 为什么要改

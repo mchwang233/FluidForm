@@ -65,7 +65,7 @@ export function TeamPage({ apiBase, runId, runStatus, employees = [], nodes, par
         </dl>
         {employee.reason && <details><summary>负责人分配依据</summary><p>{employee.reason}</p></details>}
         {employee.skill_context && <details><summary>员工携带的 Skill</summary><MarkdownView text={employee.skill_context} /></details>}
-        {!!assignedParts.length && <p className="team-task-meta">负责大项：{assignedParts.map(p => p.title).join("、")}（{active ? "等待任务细化" : "尚未完成细化"}）</p>}
+        {!!assignedParts.length && <p className="team-task-meta">负责大项：{assignedParts.map(p => p.title).join("、")}（旧计划，没有细化）</p>}
         <ul className="team-tasks">{shown.map(task)}</ul>
         {!own.length && <p className="team-task-meta">尚未分配具体任务</p>}
       </article>;

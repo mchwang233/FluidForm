@@ -46,6 +46,7 @@ from .config import PROFILES, settings
 from .contracts import ContractError
 from .db import Database
 from .executor import Executor
+from .lead_planning import INTERNET_NOTE
 from .models import (
     FINISHED,
     Attachment,
@@ -62,7 +63,6 @@ from .models import (
     TaskNode,
     TaskPlan,
 )
-from .outline import INTERNET_NOTE
 from .planner import autonomous_plan
 from .projects import (
     NativePickerError,

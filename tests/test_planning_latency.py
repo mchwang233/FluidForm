@@ -16,8 +16,9 @@ MODELS = [ModelProfile(id=f"test:{name}", provider="test", display_name=name,
 CONFIGURED = {m.id for m in MODELS}
 ROSTER = {"team_brief": "保持接口并独立验收", "employees": [
     {"id": "builder", "name": "开发", "role": "实现模块", "model_id": "test:first", "capabilities": ["coding"]}]}
-OUTLINE = {"summary": "模块", "parts": [{"key": "p1", "title": "模块", "goal": "实现模块",
-                                       "capability": "coding", "employee_id": "builder", "size": 1}]}
+# The lead's plan: its tasks (task_planning.py).
+TASKS = {"summary": "模块", "nodes": [{"key": "t1", "title": "实现模块", "instructions": "实现模块并自测",
+                                     "capability": "coding", "employee_id": "builder", "acceptance_criteria": "自测通过"}]}
 
 
 class Planner:
@@ -28,7 +29,7 @@ class Planner:
     async def converse(self, session, text, **kwargs):
         self.calls.append((session.model_id, "TEAM_SETUP" in text, session.reasoning_effort, kwargs))
         self.sessions.append(session)
-        return ProviderResult(json.dumps(ROSTER if "TEAM_SETUP" in text else OUTLINE), 10, 10, session.model_id)
+        return ProviderResult(json.dumps(ROSTER if "TEAM_SETUP" in text else TASKS), 10, 10, session.model_id)
 
 
 @pytest.fixture
@@ -50,17 +51,17 @@ async def test_planning_uses_stage_effort_without_changing_later_lead_policy(sta
     assert all(s.reasoning_effort is None for s in provider.sessions)
 
 
-async def test_outline_fallback_reuses_validated_team_and_keeps_accumulated_cost(stage_settings):
-    class FailOutline(Planner):
+async def test_planning_fallback_reuses_validated_team_and_keeps_accumulated_cost(stage_settings):
+    class FailPlanning(Planner):
         async def converse(self, session, text, **kwargs):
             result = await super().converse(session, text, **kwargs)
             if session.model_id == "test:first" and "TEAM_SETUP" not in text:
-                raise RuntimeError("outline unavailable")
+                raise RuntimeError("planning unavailable")
             if session.model_id == "test:second":
                 assert "保持接口并独立验收" in text and "builder" in text
             return result
 
-    provider, session = FailOutline(), SupervisorSession()
+    provider, session = FailPlanning(), SupervisorSession()
     plan = await autonomous_plan("实现模块", MODELS, CONFIGURED, provider, session=session)
     assert [(model, team) for model, team, *_ in provider.calls] == [
         ("test:first", True), ("test:first", False), ("test:second", False)]
@@ -154,8 +155,8 @@ async def test_auto_plans_at_the_effort_for_the_requests_difficulty(stage_settin
     monkeypatch.setitem(settings.__dict__, "planning_reasoning_effort", "auto")
     provider = Judged(difficulty)
     plan = await autonomous_plan("实现模块", MODELS, CONFIGURED, provider, session=SupervisorSession())
-    judge, team, outline = provider.calls
-    assert judge[1:3] == ("difficulty", "medium") and team[1:3] == (True, "medium") and outline[2] == effort
+    judge, team, tasks = provider.calls
+    assert judge[1:3] == ("difficulty", "medium") and team[1:3] == (True, "medium") and tasks[2] == effort
     # The judgement has a conversation of its own; the plan's conversation starts with the plan.
     assert provider.sessions[0] is not provider.sessions[2]
     assert f"用 {effort} 强度规划" in plan.planning_note
@@ -167,5 +168,5 @@ async def test_auto_staffing_thinks_as_hard_as_the_plan(stage_settings, monkeypa
     monkeypatch.setitem(settings.__dict__, "team_reasoning_effort", "auto")
     provider = Judged(difficulty)
     await autonomous_plan("实现模块", MODELS, CONFIGURED, provider, session=SupervisorSession())
-    _judge, team, outline = provider.calls
-    assert team[1:3] == (True, effort) and outline[2] == effort
+    _judge, team, tasks = provider.calls
+    assert team[1:3] == (True, effort) and tasks[2] == effort

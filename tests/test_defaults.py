@@ -42,3 +42,24 @@ def test_the_former_profiles_read_as_the_defaults(monkeypatch, tmp_path):
         assert Settings(profile=name).profile == ""
     careful = Settings(profile="careful")
     assert careful.acceptance and not careful.quick_tasks and not careful.solo_tasks
+
+
+def test_an_old_env_naming_removed_settings_still_loads(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("SUPER_PARTNER_DIRECT_TASK_PLANNING=true\nSUPER_PARTNER_ADAPTIVE_REFINEMENT=true\n")
+    monkeypatch.setenv("SUPER_PARTNER_DIRECT_TASK_PLANNING", "false")
+    loaded = Settings()
+    assert loaded.employee_teams and loaded.head_start and loaded.capability_packages
+    assert not hasattr(loaded, "direct_task_planning")
+
+
+async def test_an_old_plan_with_parts_never_split_ends_with_the_reason(tmp_path):
+    from super_partner.db import Database
+    from super_partner.executor import UNSPLIT_PARTS, Executor
+    from super_partner.models import ExecutionRun, PlanPart, RunStatus, TaskPlan
+    db = Database(tmp_path / "t.db")
+    plan = TaskPlan(summary="s", nodes=[], parts=[PlanPart(id="p", title="后端", status="planned")])
+    db.save_run(ExecutionRun(id="r", prompt="p", status=RunStatus.QUEUED, budget_usd=1, plan=plan))
+    await Executor(db, None, {}).execute("r")
+    run = db.get_run("r")
+    assert run.status == RunStatus.FAILED and run.error == UNSPLIT_PARTS and run.plan.parts[0].title == "后端"

@@ -75,8 +75,8 @@ def heuristic_plan(prompt: str, in_project: bool = False) -> TaskPlan:
     return TaskPlan(summary=summary, nodes=nodes)
 
 
-# How tasks are rated and scoped; the flat planner and the lead's top-down planning (outline.py)
-# both give these rules.
+# How tasks are rated and scoped; the flat planner and the lead (task_planning.py) both give these
+# rules.
 # Said to the lead in every plan: independent deliverables run side by side, and open scope
 # decisions that change the work a lot are listed for the user to see before confirming.
 INDEPENDENT_RULE = (
@@ -363,10 +363,9 @@ async def planning_difficulty(say, request: str) -> tuple[str, str]:
 async def _plan_as_lead(request: str, models: list[ModelProfile], configured: set[str], providers,
                         session: SupervisorSession, in_project: bool, team_request: str = "",
                         artifact_work: bool = False) -> Optional[TaskPlan]:
-    """The best lead splits the request into major parts in its own conversation (outline.py),
-    which ``session`` then holds; the parts are split into tasks when the task runs. None if no
-    lead can plan."""
-    from . import outline
+    """The best lead plans the request as tasks in its own conversation (task_planning.py), which
+    ``session`` then holds. None if no lead can plan."""
+    from .task_planning import plan_tasks
 
     spent = [0.0]
     roster = None
@@ -413,14 +412,9 @@ async def _plan_as_lead(request: str, models: list[ModelProfile], configured: se
                 roster = await team.form(partial(say, effort=team_effort, stage="team"),
                                          team_request or request, models, configured)
             opening = supervisor.ROLE + request + (team.assignment_prompt(roster) if roster else "")
-            if settings.direct_task_planning:
-                from .task_planning import plan_tasks
-                plan = await plan_tasks(partial(say, effort=planning_effort, stage="tasks"),
-                                        opening, roster, artifact_work)
-                concurrency = plan.planning_note
-            else:
-                plan = await outline.plan_outline(partial(say, effort=planning_effort, stage="outline"),
-                                                  opening, team_plan=roster)
+            plan = await plan_tasks(partial(say, effort=planning_effort, stage="tasks"),
+                                    opening, roster, artifact_work)
+            concurrency = plan.planning_note
         except Exception as exc:
             # The next lead tries; with none left, the usual single-call planner does.
             logger.warning("lead %s could not plan: %s", model.id, exc)
@@ -431,19 +425,13 @@ async def _plan_as_lead(request: str, models: list[ModelProfile], configured: se
         plan.planning_method = "model"
         plan.planner_model_id = model.id
         plan.planning_cost_usd = round(spent[0], 6)
-        plan.planning_note = f"由负责人 {model.display_name} 划分大项；执行时各大项同时细化成任务，负责人全程跟进"
-        if plan.employees:
-            plan.planning_note = f"负责人 {model.display_name} 先配置 {len(plan.employees)} 名员工，再划分和分配工作；员工可委派子任务"
-        if settings.direct_task_planning:
-            plan.planning_note = (f"负责人 {model.display_name} 已明确 {len(plan.nodes)} 个任务的事项、依赖和验收条件；"
-                                  "按依赖直接执行，不再细化" + (f"；分配给 {len(plan.employees)} 名员工" if plan.employees else "")
-                                  + (f"；{concurrency}" if concurrency else ""))
+        plan.planning_note = (f"负责人 {model.display_name} 已明确 {len(plan.nodes)} 个任务的事项、依赖和验收条件；"
+                              "按依赖直接执行" + (f"；分配给 {len(plan.employees)} 名员工" if plan.employees else "")
+                              + (f"；{concurrency}" if concurrency else ""))
         if judged:
             plan.planning_note += (f"；规划难度{DIFFICULTY_LABELS[judged[0]]}，用 {planning_effort} 强度规划"
                                    + (f"（{judged[1]}）" if judged[1] else ""))
         return plan
-    if settings.direct_task_planning:
-        raise contracts.ContractError("未能生成有效的直接任务计划；请检查可用负责人模型或任务约束后重试。")
     if settings.employee_teams and supervisor.candidates(models, configured):
         raise contracts.ContractError("负责人未能建立有效团队和分工；请调整可用模型后重新规划。")
     return None
@@ -462,10 +450,9 @@ async def autonomous_plan(
     session: Optional[SupervisorSession] = None,
     brief: Optional[str] = None,
 ) -> TaskPlan:
-    """Plan ``prompt``. Given ``session``, the plan is made by the task's lead, top-down in parts
-    (outline.py), in a conversation that it keeps for the rest of the task (supervisor.py);
-    ``session`` is filled in. Without a
-    lead able to plan, the best planner plans in a single call and ``session`` stays empty.
+    """Plan ``prompt``: the task's lead plans it as tasks (task_planning.py), in a conversation
+    that it keeps for the rest of the task (supervisor.py); ``session``, if given, is filled in.
+    With no lead model at all, the best planner plans in a single call.
     ``brief`` is the project brief (briefing.py): with it the plan is cut into small work
     packages, each naming the files it needs, so no step has to learn the whole project."""
     in_project = project_context is not None or brief is not None
@@ -482,19 +469,14 @@ async def autonomous_plan(
             raise contracts.ContractError("Requested artifact work has no declared artifact contracts")
         return candidate
 
-    if session is not None or settings.direct_task_planning:
-        from .outline import OUTLINE_PROMPT
+    from .task_planning import PROMPT as TASKS_PROMPT
 
-        planning_prompt = OUTLINE_PROMPT
-        if settings.direct_task_planning:
-            from .task_planning import PROMPT
-            planning_prompt = PROMPT
-        plan = await _plan_as_lead(planning_prompt + body, models, configured, providers,
-                                   session if session is not None else SupervisorSession(), in_project,
-                                   team_request=body, artifact_work=artifact_work)
-        if plan:
-            plan.request = body
-            return plan
+    plan = await _plan_as_lead(TASKS_PROMPT + body, models, configured, providers,
+                               session if session is not None else SupervisorSession(), in_project,
+                               team_request=body, artifact_work=artifact_work)
+    if plan:
+        plan.request = body
+        return plan
     planner = select_planner_model(models, configured)
     if planner is None or planner.provider == "mock":
         if artifact_work:

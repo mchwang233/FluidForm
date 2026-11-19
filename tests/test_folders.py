@@ -3,8 +3,9 @@ import json
 import re
 from datetime import datetime, timezone
 
-from super_partner import folders, outline, supervisor
+from super_partner import folders, supervisor
 from super_partner.config import settings
+from super_partner.task_planning import plan_tasks
 from test_turns import model
 
 
@@ -26,8 +27,9 @@ def test_a_lead_works_outside_the_platforms_folder(tmp_path, monkeypatch):
     assert not session.cwd.startswith(str(settings.data_dir))
 
 
-async def test_the_outline_names_the_tasks_folder():
+async def test_the_plan_names_the_tasks_folder():
     async def say(message):
-        return json.dumps({"summary": "异步 FIFO", "folder": "async-fifo-uvm", "parts": [
-            {"key": "p1", "title": "RTL", "goal": "g", "provides": "rtl/fifo.v", "size": 2}]})
-    assert (await outline.plan_outline(say, "")).folder == "async-fifo-uvm"
+        return json.dumps({"summary": "异步 FIFO", "folder": "async-fifo-uvm", "nodes": [
+            {"key": "t1", "title": "RTL", "instructions": "写 FIFO 的 RTL", "capability": "coding",
+             "acceptance_criteria": "仿真通过", "files": ["rtl/fifo.v"]}]})
+    assert (await plan_tasks(say, "")).folder == "async-fifo-uvm"

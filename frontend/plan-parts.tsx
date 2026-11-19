@@ -10,11 +10,11 @@ export type PlanPart = { employee_id?: string | null; id: string; title: string;
 
 const EFFORT: Record<string, string> = { low: "低", medium: "中", high: "高", max: "最高" };
 
-/** A major part's split into tasks happens once the task runs: these are the states before it is done. */
+/** A major part of an old plan that was never split into tasks: FluidForm no longer splits parts
+ * while a task runs (it plans tasks directly), so it stays as it is. */
+const OLD_PART = { state: "failed", label: "未细化", note: "这是旧的计划方式，这一项不会再细化成任务；请用「需求变更」按现在的方式重新排计划。" };
 const SPLIT_STATE: Record<string, { state: string; label: string; note: string }> = {
-  planned: { state: "planned", label: "待细化", note: "确认执行后，这一项会和其他大项同时细化成任务。" },
-  refining: { state: "running", label: "细化中…", note: "负责人正在把这一项细化成任务。" },
-  failed: { state: "failed", label: "细化失败", note: "这一项没能细化成任务；继续执行会再试一次。" },
+  planned: OLD_PART, refining: OLD_PART, failed: OLD_PART,
 };
 
 type Props = { apiBase: string; runId: string; runStatus: string; nodes: PlanNode[]; parts?: PlanPart[]; inProject: boolean; models: Model[]; onOpenProfile: (model: Model) => void; reworkRounds?: number };
@@ -103,7 +103,7 @@ function PartBoard({ apiBase, runId, runStatus, parts, nodes, models, onOpenProf
   return <div className="plan-graph part-board">
     <div className="plan-summary" aria-label="计划概览">
       <span><b>{top.length}</b> 个大项</span>
-      <span><b>{nodes.length}</b> 个任务{unsplit.length ? <>（另有 {unsplit.length} 个大项待细化{expected ? `，预计约 ${expected} 个任务` : ""}）</> : null}</span>
+      <span><b>{nodes.length}</b> 个任务{unsplit.length ? <>（另有 {unsplit.length} 个大项没有细化{expected ? `，原预计约 ${expected} 个任务` : ""}）</> : null}</span>
       <span>已完成 <b>{done}</b></span>
       {retries > 0 && <span>重试 <b>{retries}</b> 次</span>}
       {reworkRounds > 0 && <span>返工 <b>{reworkRounds}</b> 轮</span>}
@@ -137,7 +137,7 @@ function PartBoard({ apiBase, runId, runStatus, parts, nodes, models, onOpenProf
               {open && <div className="part-detail">
                 {part.refinement_reason && <p className="part-effort">负责人选择依据：{part.refinement_reason}</p>}
                 {part.provides && <details className="part-provides"><summary>对外提供（接口约定）</summary><p>{part.provides}</p></details>}
-                {split && <p className={`part-split ${split.state}`}>{part.status === "failed" && part.error ? `${split.note}原因：${part.error}` : split.note}</p>}
+                {split && <p className={`part-split ${split.state}`}>{split.note}</p>}
               </div>}
               {open && !split && body(part)}
             </article>;

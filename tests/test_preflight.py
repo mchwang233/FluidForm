@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import pytest
-from super_partner import agent, outline, preflight
+from super_partner import agent, preflight
 from super_partner.cli_channels import CliChannelRegistry, codex_home, codex_package
 from super_partner.config import settings
 from super_partner.db import Database
@@ -13,6 +13,7 @@ from super_partner.executor import Executor
 from super_partner.models import ExecutionRun, NodeStatus, RunStatus, TaskNode, TaskPlan
 from super_partner.providers import ProviderResult
 from super_partner.quota import ModelUnavailable
+from super_partner.task_planning import plan_tasks
 from test_turns import model
 
 # Read before a test changes HOME: where Codex is installed and keeps its helper on this machine.
@@ -69,13 +70,13 @@ def test_the_tools_checked_are_the_leads_and_those_the_checks_call():
     assert preflight.tool_commands(run) == [("vcs -ID", True), ("make --version", True), ("command -v iverilog", False)]
 
 
-async def test_the_outline_names_the_commands_that_check_the_tools():
+async def test_the_plan_names_the_commands_that_check_the_tools():
     async def say(message):
-        long_probe = "python3 -c '" + "x = 1\n" * 1000 + "'"  # cut short, it would not even parse
         multi_line = "python3 -c 'import sys\nprint(sys.version)\n' && echo " + "y" * 400
-        return json.dumps({"summary": "FIFO", "requires": ["make --version", "make --version", "", long_probe, multi_line], "parts": [
-            {"key": "p1", "title": "RTL", "goal": "g", "provides": "rtl/fifo.v", "size": 2}]})
-    plan = await outline.plan_outline(say, "")
+        return json.dumps({"summary": "FIFO", "requires": ["make --version", "make --version", multi_line], "nodes": [
+            {"key": "t1", "title": "RTL", "instructions": "写 FIFO 的 RTL", "capability": "coding",
+             "acceptance_criteria": "仿真通过", "files": ["rtl/fifo.v"]}]})
+    plan = await plan_tasks(say, "")
     assert plan.requires[0] == "make --version" and len(plan.requires) == 2
     assert plan.requires[1].startswith("python3 -c 'import sys") and plan.requires[1].endswith("y" * 400)
 
@@ -146,8 +147,7 @@ def test_the_repair_is_told_what_failed_and_how_steps_run(tmp_path):
 
 def test_every_model_is_told_where_it_runs():
     """A model that does not know it is in a sandbox works around limits it does not see."""
-    from super_partner import agent, outline, quality
-    from super_partner.models import PlanPart
+    from super_partner import agent, quality
 
     step = agent.agent_instructions(root="/w")
     assert "Where you are: a sandbox" in step and "not root" in step and "home folder is hidden" in step
@@ -163,12 +163,6 @@ def test_every_model_is_told_where_it_runs():
         assert "find . -name '*.o' -delete" in prompt  # the same note for every CLI (cli_channels.codex_rules)
     api_step = TaskNode(id="n", title="t", instructions="i", capability="coding", model_id="x:flash")
     assert "FluidForm runs you" not in quality.node_prompt(api_step, run, 4000)[0]
-    # The lead splitting a part hears whether the task allows the internet now, not at planning.
-    plan = TaskPlan(summary="s", nodes=[], request="写 FIFO\n\n" + outline.INTERNET_NOTE)
-    part = PlanPart(id="p", title="RTL")
-    assert outline.INTERNET_NOTE not in outline.part_opening(plan, part, internet=False)
-    assert "does not allow the internet" in outline.part_opening(plan, part, internet=False)
-    assert outline.part_opening(plan, part, internet=True).count(outline.INTERNET_NOTE) == 1
 
 
 class CodexSandbox:

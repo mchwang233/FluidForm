@@ -24,7 +24,6 @@ TASKS = {"summary": "交付模块", "title": "小模块交付。", "folder": "sm
 @pytest.fixture(autouse=True)
 def direct_policy(monkeypatch):
     monkeypatch.setattr(settings, "employee_teams", True)
-    monkeypatch.setitem(settings.__dict__, "direct_task_planning", True)
 
 
 class Planner:
@@ -52,7 +51,7 @@ async def test_team_then_tasks_contains_dependencies_without_refinement():
     assert all(n.employee_id == "builder" for n in plan.nodes)
     assert plan.requires == ["python --version"] and plan.folder == "small-module"
     assert plan.title == "小模块交付" and '"title"' in provider.messages[1]
-    assert "不再细化" in plan.planning_note
+    assert "按依赖直接执行" in plan.planning_note
     assert TaskPlan.model_validate_json(plan.model_dump_json()) == plan
 
 
@@ -110,11 +109,7 @@ async def test_direct_tasks_dispatch_in_dependency_order_without_refiner(tmp_pat
     async def execute(run_id, node_id):
         started.append(node_id)
 
-    async def refine(*args):
-        pytest.fail("direct tasks must never invoke a refinement model")
-
     monkeypatch.setattr(executor, "_execute_node", execute)
-    monkeypatch.setattr(executor, "_split_part", refine)
     running = {}
     executor._dispatch(run, running)
     await asyncio.gather(*running)

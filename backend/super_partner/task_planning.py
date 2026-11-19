@@ -1,7 +1,7 @@
 """Plan complete work items once, using the existing task graph and execution gates."""
 from . import contracts, team
+from .lead_planning import MAX_REQUIRE_CHARS, MAX_REQUIRES, _ask, plan_title
 from .models import TaskPlan
-from .outline import MAX_REQUIRE_CHARS, MAX_REQUIRES, _ask, plan_title
 from .planner import (
     CHOICES_RULE,
     CHOICES_SHAPE,

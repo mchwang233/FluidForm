@@ -16,6 +16,8 @@ PROFILES: dict[str, dict] = {
 }
 # Profiles there were before the defaults did what they did: read as no profile.
 FORMER_PROFILES = {"fast", "balanced"}
+# Settings there are no more (docs/design/fewer-settings.md): an old .env naming them still loads.
+RETIRED = {"direct_task_planning", "adaptive_refinement"}
 
 
 class Settings(BaseSettings):
@@ -37,12 +39,10 @@ class Settings(BaseSettings):
     # A step whose inputs are not ready yet starts early on what does not need them (a testbench from
     # the interface contract, its own files), for at most head_start_minutes, then waits for them.
     # Only steps whose files or folders are known: an unscoped one would hold the whole folder. Off by default.
-    head_start: bool = False
+    head_start: bool = True
     head_start_minutes: float = Field(default=30, gt=0)
     # New projects form a durable team before planning. Existing records keep their workflow.
-    employee_teams: bool = False
-    # New plans contain executable tasks immediately, with no subsequent part refinement.
-    direct_task_planning: bool = False
+    employee_teams: bool = True
     team_max_employees: int = Field(default=8, ge=1, le=12)
     team_max_delegation_depth: int = Field(default=3, ge=1, le=5)
     team_max_delegations: int = Field(default=6, ge=1, le=20)
@@ -63,13 +63,13 @@ class Settings(BaseSettings):
     preflight_skills: bool = True
     # Opt in to reusing general/local skills, then public discovery (only for tasks allowing
     # network), before bounded generation. Existing installations retain their old policy.
-    skill_reuse_first: bool = False
+    skill_reuse_first: bool = True
     # When a task succeeds, ask its lead whether it built a reusable capability (a tool, an
     # automation) for the user to solidify (capabilities.py). Off by default: one more lead call.
-    capability_proposals: bool = False
+    capability_proposals: bool = True
     # Capability packages (capability_packages.py, docs/design/capability-packages.md): uploading
     # them, and running automation packages in the background. Off: nothing is uploaded or run.
-    capability_packages: bool = False
+    capability_packages: bool = True
     # What an automation may spend a day deciding and answering, unless changed on its card.
     capability_daily_budget_usd: float = Field(default=2.0, ge=0, le=1000)
     skill_generation_max_turns: int = Field(default=6, ge=1, le=30)
@@ -130,6 +130,14 @@ class Settings(BaseSettings):
     web_fetch: bool = True
     # before_tool / after_tool argv commands receive one JSON event. Empty: no hooks.
     api_tool_hooks: dict[str, list[list[str]]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_retired(cls, data):
+        if isinstance(data, dict):
+            data = {key: value for key, value in data.items()
+                    if key.lower().removeprefix("super_partner_") not in RETIRED}
+        return data
 
     @model_validator(mode="after")
     def apply_profile(self):
@@ -230,8 +238,6 @@ class Settings(BaseSettings):
     # Seconds a planning call may take at low or medium effort; longer at high and max
     # (planner.PLANNING_TIME). 0: no limit.
     planning_call_timeout: float = Field(default=0, ge=0)
-    # Let the lead's per-part difficulty/effort assessment control refinement conversations.
-    adaptive_refinement: bool = False
     diagnosis_reasoning_effort: str = "high"
     # A diagnosis, environment repair or platform repair call may run this long. A long
     # regression or a tool install can outlast half an hour, and the call must still finish.

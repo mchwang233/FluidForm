@@ -77,7 +77,6 @@ async def test_the_plan_is_asked_for_without_verification_steps(monkeypatch):
 
     from super_partner.models import CapabilityScore, ModelProfile, SupervisorSession
     from super_partner.planner import NO_ACCEPTANCE_NOTE, autonomous_plan
-    monkeypatch.setattr(settings, "direct_task_planning", True)
     lead = ModelProfile(id="test:lead", provider="test", display_name="lead", context_window=100000,
                         scores=CapabilityScore(**{key: 95 for key in CapabilityScore.model_fields}),
                         scores_source="artificial_analysis", input_per_million=1, output_per_million=1)

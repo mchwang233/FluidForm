@@ -7,8 +7,8 @@ from __future__ import annotations
 from uuid import uuid4
 
 from . import contracts, team
+from .lead_planning import MAX_TASKS
 from .models import ExecutionRun, ModelProfile, NodeStatus, TaskNode
-from .outline import MAX_TASKS
 from .planner import _difficulty, package
 from .routing import NoEligibleModelError, reestimate, route_node
 

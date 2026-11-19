@@ -43,9 +43,7 @@ def isolated_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "contract_call_floors", False)
     monkeypatch.setattr(settings, "platform_self_repair", False)
     monkeypatch.setattr(settings, "skill_reuse_first", False)
-    monkeypatch.setattr(settings, "adaptive_refinement", False)
     monkeypatch.setattr(settings, "employee_teams", False)
-    monkeypatch.setattr(settings, "direct_task_planning", False)
     monkeypatch.setattr(settings, "team_reasoning_effort", "")
     monkeypatch.setattr(settings, "planning_reasoning_effort", "")
     monkeypatch.setattr(settings, "planning_call_timeout", 0)
@@ -115,7 +113,8 @@ def own_codex_home(monkeypatch, tmp_path):
 # without them, as before, and a test of one turns it on. test_profiles checks the defaults.
 ON_BY_DEFAULT = {"quick_tasks": False, "solo_tasks": False, "resume_after_restart": False, "chat_tools": False,
                  "chat_tools_network": False, "chat_action_tools": False, "user_memory": False, "web_fetch": False,
-                 "engineer_repairs": False, "preflight_cache_minutes": 0, "chat_tool_seconds": 120, "chat_tool_turns": 20,
+                 "engineer_repairs": False, "preflight_cache_minutes": 0, "head_start": False,
+                 "capability_proposals": False, "capability_packages": False, "chat_tool_seconds": 120, "chat_tool_turns": 20,
                  # Nothing taken from keys a test machine may have in its environment.
                  "image_models": [], "web_search_models": []}
 

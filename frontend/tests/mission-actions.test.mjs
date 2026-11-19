@@ -1068,22 +1068,20 @@ test("a plan made in parts shows its major parts as stages; each opens in place,
   assert.equal(document.querySelectorAll(".part-task").length, 0);
 });
 
-test("a task planned as major parts says they are split once it runs, and what each provides", async t => {
+test("an old plan's major parts that were never split say so, and what each provides", async t => {
   const run = mission("outlined", "awaiting_confirmation");
   run.plan.parts = [
     { id: "api", title: "后端", goal: "提供待办接口", provides: "GET /todos -> [{id, title, done}]", size: 3, status: "planned", dependencies: [] },
     { id: "ui", title: "前端", goal: "待办页面", size: 2, status: "failed", error: "回复不是计划", dependencies: ["api"] },
   ];
   const { document, click } = await setup(t, [run]);
-  assert.match(document.querySelector(".plan-summary").textContent, /2 个大项.*0 个任务（另有 2 个大项待细化，预计约 5 个任务）/);
+  assert.match(document.querySelector(".plan-summary").textContent, /2 个大项.*0 个任务（另有 2 个大项没有细化，原预计约 5 个任务）/);
   const cards = [...document.querySelectorAll(".part-card")];
-  assert.match(cards[0].textContent, /后端待细化.*预计 3 个任务/);
-  assert.match(cards[1].textContent, /前端细化失败/);
+  assert.match(cards[0].textContent, /后端未细化.*预计 3 个任务/);
+  assert.match(cards[1].textContent, /前端未细化/);
   await click(cards[0].querySelector(".part-card-head"));
   assert.match(cards[0].querySelector(".part-provides").textContent, /对外提供（接口约定）GET \/todos/);
-  assert.match(cards[0].querySelector(".part-split").textContent, /确认执行后，这一项会和其他大项同时细化成任务/);
-  await click(cards[1].querySelector(".part-card-head"));
-  assert.match(cards[1].querySelector(".part-split.failed").textContent, /原因：回复不是计划/);
+  assert.match(cards[0].querySelector(".part-split").textContent, /不会再细化成任务.*需求变更/);
 });
 
 test("parts show the lead's chosen refinement effort and its reason", async t => {
