@@ -412,3 +412,10 @@ async def test_a_chat_model_is_told_which_model_it_is_and_that_earlier_replies_w
     model, _, prompt = sent[1]
     assert model == "x:best" and "X:BEST (x:best, through its API)" in prompt
     assert "x:other" in prompt and "我是 X:OTHER。" in prompt and "not yours" in prompt
+    # The same model again, in a conversation of its own: its earlier replies are named too.
+    run = api.db.get_run(chat["id"])
+    run.supervisor = supervisor.new_session(BEST, run.supervisor)
+    api.db.save_run(run)
+    assert (await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "再说一次？"}, headers=ORIGIN)).status_code == 202
+    await api.executor.lead_tasks[chat["id"]]
+    assert "another model (x:other, x:best)" in sent[2][2]

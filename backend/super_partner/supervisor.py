@@ -123,8 +123,10 @@ def handover(run: ExecutionRun, current: Optional[str] = None) -> str:
     if run.kind == "chat":
         earlier = chat_transcript(run)
         session = run.supervisor
-        others = [item for item in dict.fromkeys([*(session.previous if session else []), session.model_id if session else None])
-                  if item and item != current]
+        # The models of earlier sessions (the same model included, in a conversation of its own);
+        # the session in ``run`` is either the new one (``current``) or the one before it.
+        others = [item for item in dict.fromkeys([*(session.previous if session else []),
+                                                  *([session.model_id] if session and session.model_id != current else [])]) if item]
         who = f" ({', '.join(others)})" if others else ""
         return (f"This conversation continues one the user had with another model{who}; the 助手 replies below "
                 "are that model's, not yours, and what it said about itself is not about you. The messages so far:\n"
