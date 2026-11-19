@@ -9,6 +9,7 @@ import { TeamPage, type Employee } from "./team";
 import { ResultPage, type ChangeOptions } from "./result-page";
 import { MarkdownView } from "./markdown";
 import { ProblemsPage } from "./problems";
+import { MemoryPage, ProfilePicker } from "./memory";
 import { DiagnosisPanel, type Diagnosis } from "./diagnosis";
 import { LeadPanel, hasLead, leadRepairIds, type AskLead, type Decision, type LeadMessage, type LeadThinking } from "./lead";
 import { ProjectField, rememberProject } from "./project-picker";
@@ -57,7 +58,7 @@ function savedTheme():Theme{try{const t=localStorage.getItem(THEME_KEY);return t
 function applyTheme(theme:Theme){document.documentElement.style.colorScheme=theme==="system"?"light dark":theme}
 
 /** 设置 at the foot of the sidebar: the theme, and the common failures page. */
-function SettingsMenu({active,onProblems}:{active:boolean;onProblems:()=>void}) {
+function SettingsMenu({active,onProblems,onMemory}:{active:boolean;onProblems:()=>void;onMemory:()=>void}) {
   const [theme,setTheme]=useState<Theme>(savedTheme);
   useEffect(()=>{applyTheme(theme);try{localStorage.setItem(THEME_KEY,theme)}catch{}},[theme]);
   const menu=useRef<HTMLDetailsElement>(null);
@@ -67,6 +68,8 @@ function SettingsMenu({active,onProblems}:{active:boolean;onProblems:()=>void}) 
     <div className="settings-items" role="group" aria-label="设置">
       <p>界面主题</p>
       <div className="settings-themes">{THEMES.map(item=><button key={item.id} type="button" aria-pressed={theme===item.id} onClick={()=>setTheme(item.id)}><Icon name={item.icon} size={14}/>{item.label}</button>)}</div>
+      <ProfilePicker apiBase={API}/>
+      <button type="button" className="settings-link" onClick={()=>{onMemory();if(menu.current)menu.current.open=false}}><Icon name="chat" size={14}/>记住的事</button>
       <button type="button" className="settings-link" onClick={()=>{onProblems();if(menu.current)menu.current.open=false}}><Icon name="alert" size={14}/>常见故障</button>
     </div>
   </details>;
@@ -419,7 +422,7 @@ const NOTICE: Record<string,{text:string;tone:Toast["tone"]}> = {
 
 function App() {
   const [runs,setRuns]=useState<Run[]>([]),[models,setModels]=useState<Model[]>([]),[providerList,setProviderList]=useState<Provider[]>([]);
-  const [view,setView]=useState<"missions"|"models"|"engineer"|"problems">("missions"),[engineerFocus,setEngineerFocus]=useState<string|null>(null),[platformVisit,setPlatformVisit]=useState(0),[selectedModelId,setSelectedModelId]=useState("");
+  const [view,setView]=useState<"missions"|"models"|"engineer"|"problems"|"memory">("missions"),[engineerFocus,setEngineerFocus]=useState<string|null>(null),[platformVisit,setPlatformVisit]=useState(0),[selectedModelId,setSelectedModelId]=useState("");
   const [selected,setSelected]=useState<Run|null>(null),[selectedProvider,setSelectedProvider]=useState<Provider|null>(null),[prompt,setPrompt]=useState(""),[budget,setBudget]=useState(2),[useCli,setUseCli]=useState(true),[allowNetwork,setAllowNetwork]=useState(false),[busy,setBusy]=useState(false),[projectDir,setProjectDir]=useState(savedProjectDir);
   // The composer starts a task (planned, then run), a chat (only a conversation with one model), or
   // leaves it to the platform to tell which ("auto", the default: POST /api/start).
@@ -577,13 +580,13 @@ function App() {
       <nav className="app-nav" aria-label="页面导航">
         <button type="button" aria-pressed={view==="models"} title="模型" onClick={()=>setView("models")}><Icon name="cpu"/><span>模型</span></button>
         <button type="button" aria-pressed={view==="engineer"} title="平台：能力和平台工程师" onClick={()=>{setEngineerFocus(null);setView("engineer");setPlatformVisit(visit=>visit+1)}}><Icon name="wrench"/><span>平台</span></button>
-        <SettingsMenu active={view==="problems"} onProblems={()=>setView("problems")}/>
+        <SettingsMenu active={view==="problems"||view==="memory"} onProblems={()=>setView("problems")} onMemory={()=>setView("memory")}/>
       </nav>
     </aside>
     <main className={`app-content${view==="models"?" profiles-view":""}${view==="missions"&&composerOpen?" composing":""}`}>
     {quota.length>0&&<QuotaBanner quota={quota} models={models} onReset={id=>loadQuota({method:"DELETE"},`/${encodeURIComponent(id)}`)}/>}
     {offline&&<p className="offline" role="status">无法连接本地 API（{API}），正在重试…</p>}
-    {view==="problems"?<ProblemsPage apiBase={API} runs={runs} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="engineer"?<EngineerPage apiBase={API} runs={runs} focusId={engineerFocus} visit={platformVisit} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="models"?<ModelProfiles apiBase={API} models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} onToggle={toggleModel} onConfigure={configureModel}/>:<>
+    {view==="memory"?<MemoryPage apiBase={API}/>:view==="problems"?<ProblemsPage apiBase={API} runs={runs} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="engineer"?<EngineerPage apiBase={API} runs={runs} focusId={engineerFocus} visit={platformVisit} onOpenRun={id=>{const run=runs.find(item=>item.id===id);if(run){autoSelected.current=true;setSelected(run);setView("missions")}}}/>:view==="models"?<ModelProfiles apiBase={API} models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} onToggle={toggleModel} onConfigure={configureModel}/>:<>
     <div className="workbench-main">
     {composerOpen&&<section className={`composer composer-home${mode==="chat"?" chat-mode":""}`} aria-label="新建">
       {runs.length>0&&<button type="button" className="modal-close composer-close" onClick={()=>setComposerOpen(false)} aria-label="收起">×</button>}

@@ -166,6 +166,38 @@ npm run dev
 
 运行 `npm --prefix frontend test` 执行 DOM 交互测试。测试会挂载真实的应用并使用隔离的任务数据，覆盖从列表或详情页删除、取消运行中的任务、关闭确认框、重试、网络错误和过期的轮询响应。测试中关闭了浏览器原生确认框，以模拟内嵌浏览器的情况。不会访问真实的任务记录。
 
+## 工作方式
+
+侧栏 **设置 → 工作方式** 一次设好一组开关，选了立刻生效，重启后也保留。也可以在 `.env` 里写 `SUPER_PARTNER_PROFILE`；单独写了的开关，以单独写的为准。
+
+| 档位 | 打开的开关 |
+|---|---|
+| 不设 | 每个开关按各自的设置（默认） |
+| 快 | `QUICK_TASKS`、`SOLO_TASKS`、`PREFLIGHT_CACHE_MINUTES=60`、`RESUME_AFTER_RESTART`、`CHAT_TOOLS`、`CHAT_ACTION_TOOLS`；关掉 `REVIEW_EASY_STEPS` |
+| 平衡 | `QUICK_TASKS`、`PREFLIGHT_CACHE_MINUTES=30`、`RESUME_AFTER_RESTART`、`CHAT_TOOLS`、`CHAT_ACTION_TOOLS` |
+| 稳妥 | 每件都排计划（关掉 `QUICK_TASKS`、`SOLO_TASKS`），每步都另请模型验收（`ACCEPTANCE`、`REVIEW_EASY_STEPS`），不缓存执行前检查 |
+
+各个开关（都以 `SUPER_PARTNER_` 开头，默认都关）：
+
+- **`QUICK_TASKS`**：排计划前，先让最便宜的模型看一眼。一个模型几分钟就能做完的事（画一张图、写一篇短文、查个资料）直接排成一步，跳过负责人排计划。
+- **`SOLO_TASKS`**：一个强模型带着工具就能连续做完的事（修一个 bug、加一个功能、写一份调研），也只排一步，在项目里也可以。拿不准的照常排计划。
+- **`PREFLIGHT_CACHE_MINUTES`**：执行前检查通过后，同样的工具、联网设置和模型，在这段时间内不再重查。
+- **`REVIEW_EASY_STEPS=false`**：简单步骤按它自己的结果验收，不再另请模型审。
+- **`RESUME_AFTER_RESTART`**：服务重启打断的任务，启动后从已完成的步骤接着做。在项目里的任务仍然暂停，等你确认。
+- **`CHAT_TOOLS`**（`CHAT_TOOLS_NETWORK` 允许联网）：对话里的 API 模型可以在自己的文件夹里动手做小事，大的事排成任务。
+- **`CHAT_ACTION_TOOLS`**：对话要排任务、发文件、请平台工程师时，用工具调用，不再写文字行。
+- **`USER_MEMORY`**：对话会记住人说过的长期偏好（网页对话和飞书这类自动化的会话分开记），新开的对话先知道这些。记住了什么，在 **设置 → 记住的事** 里能看到，也能删；看着像密码或密钥的不记。
+- **`WEB_SEARCH_MODELS`**（例如 `["glm:search_std"]`，用智谱的密钥，按次计费）和 **`WEB_FETCH`**：给允许联网的步骤和对话加上 `WebSearch` 和 `WebFetch` 工具。`WebFetch` 只读公网地址。
+- **`MCP_SERVERS`**：MCP 服务器的工具交给 API 模型使用，每次调用都在这一步自己的沙箱里启动服务器。例如：
+  ```
+  SUPER_PARTNER_MCP_SERVERS='{"github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
+  ```
+  密钥存在系统 keyring 里，名字是 `capability/mcp-<服务器>/<变量>`。
+
+### 评测
+
+`super-partner eval` 把 `evals/basic.json` 里的固定任务在运行中的服务上跑一遍，打印每个任务有没有通过、用时和花费。`--out` 保存报告，`--against` 和之前的报告比较，`--only` 只跑指定的任务。这些任务会真的花钱，也会留在任务列表里。
+
 ## 命令行
 
 ```bash
@@ -174,6 +206,7 @@ super-partner plan "Research and implement a health endpoint" --budget 2
 super-partner plan "Use APIs only" --no-use-cli
 super-partner plan "Fix the flaky test" --project ~/prj/my-app
 super-partner run TASK_ID
+super-partner eval --out report.json --against old.json
 ```
 
 ## 在已有项目上工作

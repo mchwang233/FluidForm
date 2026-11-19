@@ -946,7 +946,7 @@ async def test_an_automations_chat_remembers_what_people_tell_it_for_its_next_ch
     # The person sees the answer without its lines; the fact is kept, the secret is not.
     assert reply["reply"] == "好，以后简短回答。"
     state = runner.get("fake-bot")
-    assert state.state["memory"] == {"c1": ["成员1: 喜欢简短的回答"]}
+    assert remembering.facts("fake-bot:c1") == ["成员1: 喜欢简短的回答"] and "memory" not in state.state
     assert api.db.get_run(state.state["chats"]["c1"]).lead_messages[-1].text == "好，以后简短回答。"
     assert "REMEMBER:" in sent[0][2] or "REMEMBER:" in supervisor.chat_guide(api.db.get_run(state.state["chats"]["c1"]))
     # A new chat of that conversation (another day, another model) is told it first.
@@ -954,7 +954,11 @@ async def test_an_automations_chat_remembers_what_people_tell_it_for_its_next_ch
     await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(conversation="c1", text="你好"), state)
     assert "你记得的" in sent[-1][2] and "喜欢简短的回答" in sent[-1][2]
     await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(conversation="c1", text="还是详细点吧"), state)
-    assert state.state["memory"] == {"c1": []}
+    assert remembering.facts("fake-bot:c1") == []
+    # Facts kept the earlier way, in the automation's state, move to the shared place.
+    state.state["memory"] = {"c9": ["成员2: 用 Go"]}
+    await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(conversation="c9", text="嗨"), state)
+    assert remembering.facts("fake-bot:c9") == ["成员2: 用 Go"] and "memory" not in state.state
 
 
 def test_memory_lines_are_read_and_kept_within_bounds():

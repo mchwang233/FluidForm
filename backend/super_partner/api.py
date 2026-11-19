@@ -11,7 +11,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -42,7 +42,7 @@ from . import diagnosis as diagnosis_module
 from . import secrets as secret_store
 from .benchmarks import BenchmarkCatalog
 from .catalog_sync import CatalogSync, seed_catalog
-from .config import settings
+from .config import PROFILES, settings
 from .contracts import ContractError
 from .db import Database
 from .executor import Executor
@@ -163,6 +163,7 @@ def resumes_by_itself(run: ExecutionRun) -> bool:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.interrupt_model_calls()
+    settings.load_saved_profile()
     catalog_sync.start()
     resuming = []
     for run in db.list_runs():
@@ -262,6 +263,59 @@ def health():
 def model_quota():
     """Models out of quota and when they come back; routing skips them until then."""
     return providers.quota.public()
+
+
+class ProfileChoice(BaseModel):
+    profile: Literal["", "fast", "balanced", "careful"]
+
+
+def _profile_view() -> dict:
+    """The profile in use, and for each one the settings it would not change (given alone)."""
+    return {"profile": settings.profile,
+            "given_alone": {name: settings.given_alone(name) for name in PROFILES}}
+
+
+@app.get("/api/settings/profile")
+def get_profile():
+    return _profile_view()
+
+
+@app.put("/api/settings/profile")
+def set_profile(body: ProfileChoice):
+    """Pick how FluidForm works (config.PROFILES), now and after a restart."""
+    settings.use_profile(body.profile)
+    settings.profile_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.profile_path.write_text(json.dumps({"profile": body.profile}))
+    return _profile_view()
+
+
+def _memory_place(key: str) -> str:
+    """Where facts were said, for the owner: their own chats, or an automation's conversation."""
+    if key == remembering.WEB:
+        return "网页对话"
+    capability_id, _, conversation = key.partition(":")
+    capability = capabilities.load(capability_id)
+    return f"{capability.name if capability else capability_id} · 会话 {conversation[-6:]}"
+
+
+@app.get("/api/memory")
+def list_memory():
+    """What chats remember (remembering.py), by where it was said."""
+    return {"enabled": settings.user_memory,
+            "places": [{"key": key, "label": _memory_place(key), "facts": facts}
+                       for key, facts in sorted(remembering.load().items(), key=lambda item: item[0] != remembering.WEB)]}
+
+
+class Forget(BaseModel):
+    key: str = Field(min_length=1, max_length=300)
+    fact: str = Field(min_length=1, max_length=remembering.MAX_FACT_CHARS + 10)
+
+
+@app.post("/api/memory/forget")
+def forget_memory(body: Forget):
+    if not remembering.delete(body.key, body.fact):
+        raise HTTPException(404, "没有这条记忆")
+    return list_memory()
 
 
 @app.get("/api/recovery")
@@ -1465,6 +1519,11 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     the owner's confirmation. Returns the reply and what it cost."""
     configured = providers.configured_models(list(models))
     cheapest = brief_writer(list(models.values()), configured)
+    if earlier_memory := automation.state.pop("memory", None):
+        # Facts kept in the automation's state before they had a place of their own (remembering.py).
+        for conversation, kept in earlier_memory.items():
+            remembering.adopt(remembering.automation_key(capability.id, conversation), kept)
+        automation.save()
     # What was said where it was not called on (a group chat): kept, and told with the next
     # message it answers, so it knows what the group was talking about.
     heard = automation.state.setdefault("heard", {})
@@ -1518,7 +1577,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             # The answer's lead runs in a task started here, which takes this context along.
             listening = streaming.listener.set(asked.on_text)
             # A new chat of this conversation is told what was kept about its people.
-            remembered = automation.state.setdefault("memory", {}).get(asked.conversation, []) \
+            remembered = remembering.facts(remembering.automation_key(capability.id, asked.conversation)) \
                 if settings.user_memory and asked.conversation else []
             try:
                 run = _start_chat(remembering.told(remembered) + said, max(automation.remaining(), 0.01), True, None,
@@ -1589,7 +1648,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     cost = round(latest.actual_cost_usd - before + extra, 6)
     sent: list[str] = []
     if answer and answer.status == "done":
-        text = _remember(automation, asked, latest, answer.id, text or "")
+        text = _remember(capability, automation, asked, latest, answer.id, text or "")
         text, names = supervisor.split_sends(text or "")
         if names:
             sent = _send_files(capability, automation, latest, names)
@@ -1600,20 +1659,19 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     return text, cost, sent
 
 
-def _remember(automation: capability_runner.Automation, asked: capability_runner.Asked, chat: ExecutionRun,
-              answer_id: str, text: str) -> str:
+def _remember(capability: Capability, automation: capability_runner.Automation, asked: capability_runner.Asked,
+              chat: ExecutionRun, answer_id: str, text: str) -> str:
     """An answer without its REMEMBER and FORGET lines, which update what is kept about this
     conversation's people (remembering.py; settings.user_memory). Without the setting the lines
     are only taken out."""
-    shown, remembered, forgotten = remembering.split(text)
+    shown, remembered, _ = remembering.split(text)
     if shown == text:
         return text
-    if settings.user_memory and asked.conversation:
-        memory = automation.state.setdefault("memory", {})
-        memory[asked.conversation] = remembering.apply(memory.get(asked.conversation, []), remembered, forgotten)
-        automation.save()
-        for fact in remembered:
-            automation.note(f"记下：{fact[:60]}")
+    if asked.conversation:
+        remembering.take(remembering.automation_key(capability.id, asked.conversation), text)
+        if settings.user_memory:
+            for fact in remembered:
+                automation.note(f"记下：{fact[:60]}")
     _record_answer(chat.id, answer_id, shown)
     return shown
 

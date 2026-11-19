@@ -227,6 +227,38 @@ isolated task fixtures and cover deletion from the list/detail, cancelling activ
 dismissing confirmations, retries, network errors, and stale polling responses. Native confirmation dialogs are disabled in
 the tests to exercise the embedded-browser case. No live task records are accessed.
 
+## How it works: profiles and speed
+
+**Settings → 工作方式** in the sidebar sets a group of switches at once. A pick applies right away and is kept after a restart. You can also set `SUPER_PARTNER_PROFILE` in `.env`. A switch you set on its own keeps your value.
+
+| Profile | What it turns on |
+|---|---|
+| (none) | every switch keeps its own setting (the default) |
+| fast | `QUICK_TASKS`, `SOLO_TASKS`, `PREFLIGHT_CACHE_MINUTES=60`, `RESUME_AFTER_RESTART`, `CHAT_TOOLS`, `CHAT_ACTION_TOOLS`; turns off `REVIEW_EASY_STEPS` |
+| balanced | `QUICK_TASKS`, `PREFLIGHT_CACHE_MINUTES=30`, `RESUME_AFTER_RESTART`, `CHAT_TOOLS`, `CHAT_ACTION_TOOLS` |
+| careful | every task planned (turns off `QUICK_TASKS` and `SOLO_TASKS`), every step reviewed by another model (`ACCEPTANCE`, `REVIEW_EASY_STEPS`), no preflight cache |
+
+The switches all start with `SUPER_PARTNER_` and are off by default:
+
+- **`QUICK_TASKS`**: before planning, the cheapest model looks at the request. Work one model can finish in a few minutes (one picture, a short text, a lookup) gets a one-step plan, without the lead's planning.
+- **`SOLO_TASKS`**: work one strong model can carry through alone with its tools (fixing a bug, adding a feature, a research report) also gets one step, in a project too. When it is unclear, the task is planned as usual.
+- **`PREFLIGHT_CACHE_MINUTES`**: once the check before a task's first step passes, it is reused for this long by tasks with the same tools, network and models.
+- **`REVIEW_EASY_STEPS=false`**: easy steps stand on their own result, without another model reviewing them.
+- **`RESUME_AFTER_RESTART`**: a task cut off by a service restart goes on from its finished steps. A task in a project still waits for you.
+- **`CHAT_TOOLS`** (with `CHAT_TOOLS_NETWORK` for the internet): an API model in a chat does small jobs itself in its own folder. Bigger work becomes a task.
+- **`CHAT_ACTION_TOOLS`**: a chat starts a task, sends a file or calls the platform engineer with tool calls instead of text lines.
+- **`USER_MEMORY`**: chats remember lasting preferences people tell them. Your own web chats and each automation conversation (Feishu, say) are kept apart, and a new chat is told them first. **Settings → 记住的事** lists them and deletes them. Anything that looks like a password or key is never kept.
+- **`WEB_SEARCH_MODELS`** (for example `["glm:search_std"]`, which uses the Zhipu key and is charged per search) and **`WEB_FETCH`** give steps and chats allowed the internet the `WebSearch` and `WebFetch` tools. `WebFetch` reads public addresses only.
+- **`MCP_SERVERS`**: tools from MCP servers go to API models. Each call starts the server in the step's own sandbox. For example:
+  ```
+  SUPER_PARTNER_MCP_SERVERS='{"github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
+  ```
+  The secrets live in the system keyring as `capability/mcp-<server>/<VARIABLE>`.
+
+### Evals
+
+`super-partner eval` runs the fixed tasks in `evals/basic.json` on the running service and prints, for each one, whether it passed, how long it took and what it cost. `--out` saves the report, `--against` compares it with an earlier one, and `--only` runs just the cases you name. The tasks cost real money and stay in the task list.
+
 ## CLI
 
 ```bash
@@ -235,6 +267,7 @@ super-partner plan "Research and implement a health endpoint" --budget 2
 super-partner plan "Use APIs only" --no-use-cli
 super-partner plan "Fix the flaky test" --project ~/prj/my-app
 super-partner run TASK_ID
+super-partner eval --out report.json --against old.json
 ```
 
 ## Working on an existing project

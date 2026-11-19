@@ -135,11 +135,42 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def apply_profile(self):
-        """The profile's settings, except those given on their own."""
+        """The profile's settings, except those given on their own. Written past __setattr__, so
+        model_fields_set still says which were given."""
         for name, value in PROFILES.get(self.profile, {}).items():
             if name not in self.model_fields_set:
-                setattr(self, name, value)
+                self.__dict__[name] = value
         return self
+
+    def given_alone(self, profile: str) -> list[str]:
+        """The settings of ``profile`` given on their own, which it does not change."""
+        return [name for name in PROFILES.get(profile, {}) if name in self.model_fields_set]
+
+    def use_profile(self, profile: str) -> None:
+        """Switch to another profile while running (the 设置 menu; api.set_profile): the old one's
+        settings go back to their defaults, the new one's apply; those given alone stay."""
+        if profile not in PROFILES and profile != "":
+            raise ValueError(f"unknown profile {profile}")
+        for name in PROFILES.get(self.profile, {}):
+            if name not in self.model_fields_set:
+                self.__dict__[name] = type(self).model_fields[name].get_default(call_default_factory=True)
+        self.__dict__["profile"] = profile
+        self.apply_profile()
+
+    @property
+    def profile_path(self) -> Path:
+        # The profile picked on the page, which outlasts a restart and wins over SUPER_PARTNER_PROFILE.
+        return self.data_dir / "profile.json"
+
+    def load_saved_profile(self) -> None:
+        import json
+
+        try:
+            saved = json.loads(self.profile_path.read_text()).get("profile")
+        except (OSError, ValueError, AttributeError):
+            return
+        if saved in PROFILES or saved == "":
+            self.use_profile(saved)
 
     @field_validator("provider_limits")
     @classmethod

@@ -222,9 +222,8 @@ def chat_action_names(run: ExecutionRun) -> list[str]:
     if not settings.chat_action_tools:
         return []
     automation = bool((run.origin or {}).get("capability"))
-    if not automation:
-        return ["CallEngineer"]
-    return ["StartTask", "SendFile", "CallEngineer", *(["Remember", "Forget"] if settings.user_memory else [])]
+    memory = ["Remember", "Forget"] if settings.user_memory else []
+    return ["StartTask", "SendFile", "CallEngineer", *memory] if automation else ["CallEngineer", *memory]
 
 
 def tool_skills(message: str) -> str:
@@ -267,7 +266,11 @@ def chat_tools_note(run: ExecutionRun, model: Optional[ModelProfile]) -> str:
 def chat_role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
     """What a chat's model is told first: its role, who it is, what it may do itself, and how to
     talk where it is."""
-    return CHAT_ROLE + identity(model) + chat_tools_note(run, model) + chat_guide(run)
+    from . import remembering
+
+    # The owner's own chats remember too (an automation's are told in chat_guide).
+    own = remembering.GUIDE if settings.user_memory and not (run.origin or {}).get("capability") else ""
+    return CHAT_ROLE + identity(model) + chat_tools_note(run, model) + chat_guide(run) + own
 
 
 def chat_opening(run: ExecutionRun, text: str, model: Optional[ModelProfile] = None) -> str:
@@ -275,11 +278,16 @@ def chat_opening(run: ExecutionRun, text: str, model: Optional[ModelProfile] = N
     there, and the folder it may read."""
     if run.supervisor and run.supervisor.calls:
         return text
+    from . import remembering
+
+    # A new conversation on the web page is told what the owner's chats remember.
+    known = (remembering.told(remembering.facts(remembering.WEB))
+             if settings.user_memory and not (run.origin or {}).get("capability") else "")
     if run.supervisor and run.supervisor.previous:
         # A deliberate model change starts a fresh native/API session, as a lost session does.
-        return chat_role(run, model) + handover(run, model.id if model else None) + text
+        return chat_role(run, model) + handover(run, model.id if model else None) + known + text
     folder = f"The user's project folder, which you may read: {run.project_dir}\n\n" if run.project_dir else ""
-    return chat_role(run, model) + folder + text
+    return chat_role(run, model) + folder + known + text
 
 
 def handover(run: ExecutionRun, current: Optional[str] = None) -> str:

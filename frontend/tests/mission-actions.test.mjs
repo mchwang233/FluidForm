@@ -184,6 +184,17 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       return json(state.calls ?? { calls: [], limit: 1000, summary: { calls: 0 } });
     }
     if (path === "/api/retrospectives/topics") return json(state.topics ?? []);
+    if (path === "/api/settings/profile") {
+      if (options.method === "PUT") state.profile = JSON.parse(options.body).profile;
+      return json({ profile: state.profile ?? "", given_alone: { fast: ["chat_tools"], balanced: [], careful: [] } });
+    }
+    if (path === "/api/memory") return json(state.memory ?? { enabled: true, places: [] });
+    if (path === "/api/memory/forget") {
+      const { key, fact } = JSON.parse(options.body);
+      state.forgotten = [...(state.forgotten ?? []), fact];
+      state.memory = { ...state.memory, places: state.memory.places.map(place => place.key === key ? { ...place, facts: place.facts.filter(item => item !== fact) } : place).filter(place => place.facts.length) };
+      return json(state.memory);
+    }
     if (/^\/api\/tasks\/[^/]+\/choices$/.test(path)) {
       const id = path.split("/")[3], body = JSON.parse(options.body);
       state.choicePicks = [...(state.choicePicks ?? []), body.picks];
@@ -2499,6 +2510,34 @@ test("the sidebar's foot is 模型 · 平台 · 设置, the theme and common fai
   assert.equal(button("深色", settings).getAttribute("aria-pressed"), "true");
   await click(button("常见故障", settings));
   assert.ok(document.querySelector('[aria-label="常见故障"]'));
+});
+
+test("设置 picks how FluidForm works, saved as it is picked", async t => {
+  const { state, document, button, click } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  const settings = document.querySelector(".settings-menu");
+  await click(settings.querySelector("summary"));
+  const group = settings.querySelector('[aria-label="工作方式"]');
+  assert.equal(button("不设", group).getAttribute("aria-pressed"), "true");
+  await click(button("快", group));
+  assert.equal(state.profile, "fast");
+  assert.equal(button("快", group).getAttribute("aria-pressed"), "true");
+  assert.match(settings.textContent, /已保存/);
+  assert.match(settings.querySelector(".settings-hint").textContent, /小事直接做.*1 项单独设过/);
+});
+
+test("记住的事 lists what chats remember, by where, and deletes one", async t => {
+  const { state, document, button, click } = await setup(t, [mission("finished-task", "succeeded")], [], { openComposer: false });
+  state.memory = { enabled: true, places: [{ key: "web", label: "网页对话", facts: ["用户: 写代码用 TypeScript", "用户: 回答要短"] }] };
+  const settings = document.querySelector(".settings-menu");
+  await click(settings.querySelector("summary"));
+  await click(button("记住的事", settings));
+  const page = document.querySelector('[aria-label="记住的事"]');
+  assert.ok(page);
+  assert.match(page.textContent, /网页对话.*2 条/);
+  await click(page.querySelector('[aria-label="删除：用户: 回答要短"]'));
+  assert.deepEqual(state.forgotten, ["用户: 回答要短"]);
+  assert.doesNotMatch(page.textContent, /回答要短/);
+  assert.match(page.textContent, /TypeScript/);
 });
 
 

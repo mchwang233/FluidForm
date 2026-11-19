@@ -94,7 +94,8 @@
   - `fast`：轻量任务和一个模型连续做、简单步骤不另审、检查缓存 60 分钟、重启后接着做、聊天里做小事并用工具调用。
   - `balanced`：轻量任务、检查缓存 30 分钟、重启后接着做、聊天里做小事并用工具调用。
   - `careful`：每个任务都排计划，每一步都另请模型验收。
+- **在页面上选**：侧栏 **设置 → 工作方式**（`frontend/memory.tsx` 的 `ProfilePicker`，照"界面主题"那排按钮的样子做）。选了立刻生效（`Settings.use_profile`：旧档位的开关先回到默认值，再套上新的），保存在 `<data_dir>/profile.json`，启动时读回（`load_saved_profile`），比 `SUPER_PARTNER_PROFILE` 优先。单独设过、不跟着档位变的开关，在页面上显示有几项（`given_alone`）。
 
 ### 测试
 
-`test_durable.py`（不在项目里的接着做；在项目里的、在等回答的、没开开关的都暂停），`test_quick.py`（solo 在项目里只排一步困难步骤；回答按防御的方式读），`test_profiles.py`（档位生效，单独设的优先，档位里只有真实存在的设置）。
+`test_durable.py`（不在项目里的接着做；在项目里的、在等回答的、没开开关的都暂停），`test_quick.py`（solo 在项目里只排一步困难步骤；回答按防御的方式读），`test_profiles.py`（档位生效，单独设的优先，档位里只有真实存在的设置），`test_memory.py`（页面上切换档位立刻生效、换档时旧的回到默认、重启后读回），前端 `mission-actions.test.mjs`（选了档位就保存）。

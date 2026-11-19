@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from . import capabilities, contracts, quality, replan, supervisor
+from . import capabilities, contracts, quality, remembering, replan, supervisor
 from .attachments import attach
 from .budget import BudgetExceeded
 from .config import settings
@@ -429,6 +429,9 @@ class Leading:
             # The files sent with this message (and a chat's first ones) are among the task's
             # attachments the lead has not seen yet; ask_lead gives them to it.
             answer, status = await self.ask_lead(run_id, prompt), "done"
+            if run.kind == "chat" and not (run.origin or {}).get("capability"):
+                # What the owner's chat keeps about them (an automation's chat: api._remember).
+                answer = remembering.take(remembering.WEB, answer)
             # The lead may bring the platform engineer in at once.
             answer, call = supervisor.split_engineer(answer)
             if call:
