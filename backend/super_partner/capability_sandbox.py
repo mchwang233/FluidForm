@@ -205,10 +205,13 @@ async def launched(folder: Path, data: Path, command: str, *, secrets: Optional[
     async with contextlib.AsyncExitStack() as stack:  # contextlib.nullcontext is not async before 3.10
         if proxy:
             await stack.enter_async_context(proxy)
+        from .agent import without_env_args
+
         env = environment_for(folder, data, secrets or {}, bool(proxy))
+        # Its secrets reach it as its environment, never on a command line others can read.
+        args, env = without_env_args(wrap(folder, data, command, env, proxy.folder if proxy else None, writable))
         process = await asyncio.create_subprocess_exec(
-            *wrap(folder, data, command, env, proxy.folder if proxy else None, writable),
-            stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True, limit=1 << 20)
+            *args, env=env, stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True, limit=1 << 20)
         try:
             yield process
         finally:

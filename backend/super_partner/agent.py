@@ -406,6 +406,30 @@ def project_map(root: Path, summaries: dict[str, str] | None = None) -> str:
     return "Files in the working directory (hidden folders not listed):\n" + "\n".join(lines)
 
 
+def without_env_args(args: list[str]) -> tuple[list[str], dict[str, str]]:
+    """The command with bwrap's ``--clearenv`` and ``--setenv`` taken out, and the environment
+    they set, to start it with instead: every user of the machine can read a command line
+    (/proc/<pid>/cmdline), only its own user its environment, and a value may be a secret (a
+    capability's, a proxy's password). bwrap, and pasta before it, pass their environment on.
+    The programs are found on this process's PATH, not the one given to the command."""
+    if "--clearenv" not in args:
+        return args, dict(os.environ)
+    kept, env, index = [], {}, 0
+    end = args.index("--") if "--" in args else len(args)
+    while index < len(args):
+        arg = args[index]
+        if index < end and arg == "--clearenv":
+            index += 1
+        elif index < end and arg == "--setenv" and index + 2 < end:
+            env[args[index + 1]] = args[index + 2]
+            index += 3
+        else:
+            kept.append(arg)
+            index += 1
+    kept[0] = shutil.which(kept[0]) or kept[0]
+    return kept, env
+
+
 def hide_homes() -> list[str]:
     """bwrap arguments hiding the user's home (keys, tokens, other projects). HOME can be
     overridden by a launcher or validation environment, so the account's real home is hidden too."""
@@ -869,9 +893,9 @@ class Workspace:
         # A file also keeps everything a timed-out compilation or simulation printed.
         with tempfile.TemporaryFile() as captured:
             async with port_bridge(ports) as ports_dir:
+                args, env = without_env_args(self.host_args(command) if self.host else self.sandbox_args(command, ports_dir, ports))
                 process = await asyncio.create_subprocess_exec(
-                    *(self.host_args(command) if self.host else self.sandbox_args(command, ports_dir, ports)),
-                    stdin=asyncio.subprocess.DEVNULL, stdout=captured, stderr=captured, start_new_session=True,
+                    *args, env=env, stdin=asyncio.subprocess.DEVNULL, stdout=captured, stderr=captured, start_new_session=True,
                 )
                 timed_out = False
                 try:

@@ -2,6 +2,7 @@
 docs/design/capability-packages.md): uploaded and uninstalled on their own, run in a sandbox that
 reaches only declared hosts, and automations that ask Super Partner and hear how tasks ended."""
 import asyncio
+import contextlib
 import io
 import json
 import os
@@ -671,6 +672,36 @@ async def test_in_the_real_sandbox_it_writes_only_its_data_and_reaches_only_the_
         output, ok = await capability_sandbox.run(folder, data, f"{python} probe.py", 30, domains=["localhost"])
     assert ok, output
     assert json.loads(output.splitlines()[-1]) == {"folder": False, "data": True, "direct": False, "proxied": True}
+
+
+def test_the_environment_leaves_the_command_line():
+    from super_partner.agent import without_env_args
+    args = ["bwrap", "--ro-bind", "/", "/", "--clearenv", "--setenv", "TOKEN", "s3cret", "--setenv", "PATH", "/usr/bin",
+            "--chdir", "/x", "--", "/bin/bash", "-c", "echo --setenv A b", "--clearenv"]
+    kept, env = without_env_args(args)
+    assert env == {"TOKEN": "s3cret", "PATH": "/usr/bin"}
+    assert "s3cret" not in kept and "--clearenv" not in kept[:kept.index("--")]
+    # The command itself is left as it was.
+    assert kept[kept.index("--"):] == ["--", "/bin/bash", "-c", "echo --setenv A b", "--clearenv"]
+    assert kept[0].endswith("bwrap")
+
+
+@pytest.mark.skipif(bool(capability_sandbox.missing()), reason="needs bwrap and socat")
+async def test_in_the_real_sandbox_its_secrets_are_in_its_environment_not_on_any_command_line(tmp_path, monkeypatch):
+    # Regression: secrets were bwrap --setenv arguments, readable by every user in /proc/<pid>/cmdline.
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
+    folder, data = tmp_path / "data" / "tools" / "capabilities" / "x", tmp_path / "data" / "capability-data" / "x"
+    folder.mkdir(parents=True)
+    secret = "s3cret-" + os.urandom(6).hex()
+    async with capability_sandbox.launched(folder, data, 'echo "inside=$TOKEN"; sleep 30',
+                                           secrets={"TOKEN": secret}) as process:
+        line = await asyncio.wait_for(process.stdout.readline(), 10)
+        assert line.decode().strip() == f"inside={secret}"
+        lines = []
+        for pid in [process.pid, *[int(p) for p in Path(f"/proc/{process.pid}/task/{process.pid}/children").read_text().split()]]:
+            with contextlib.suppress(OSError):
+                lines.append(Path(f"/proc/{pid}/cmdline").read_bytes())
+        assert lines and not any(secret.encode() in item for item in lines)
 
 
 async def test_a_command_reaching_no_host_runs_without_a_proxy(tmp_path, unsandboxed):

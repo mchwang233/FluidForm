@@ -784,3 +784,16 @@ def test_profiles_come_from_the_setting_and_the_machines_record(monkeypatch):
     assert environment.profiles() == ["/opt/tools/setup.sh", "/eda/env.sh"]
     assert "if [ -r /eda/env.sh ]; then . /eda/env.sh" in environment.shell_setup()
     assert "Each command first loads /opt/tools/setup.sh, /eda/env.sh" in agent.agent_instructions()
+
+
+@needs_bwrap
+async def test_a_steps_environment_is_not_on_its_command_line(command_workspace, monkeypatch):
+    """Regression: the step's variables (a proxy with its password, say) were bwrap --setenv
+    arguments, which every user of the machine can read; now they are its environment."""
+    secret = "pw-" + os.urandom(6).hex()
+    monkeypatch.setenv("SP_TEST_SECRET", secret)
+    monkeypatch.setattr(settings, "sandbox_env", [*settings.sandbox_env, "SP_TEST_SECRET"])
+    output = await command_workspace.call("Bash", {"command": (
+        'echo "inside=$SP_TEST_SECRET"; for f in /proc/[0-9]*/cmdline; do tr "\\0" " " < $f; echo; done')})
+    assert f"inside={secret}" in output
+    assert output.count(secret) == 1, output

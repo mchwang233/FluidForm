@@ -45,7 +45,9 @@ unpacked and `MAX_PACKAGE_FILES` files.
     (`HTTPS_PROXY`). It lets a connection through only to a declared host, on port 443 or 80,
     and through the user's own proxy when the service has one. A refused host is written to the
     capability's log.
-  - Its secrets are given to it as environment variables, only to it.
+  - Its secrets are given to it as environment variables, only to it: the environment of the
+    sandbox process, never bwrap `--setenv` arguments, which every user can read in its command line
+    (`agent.without_env_args`, used for the steps' sandbox too).
 - **`capability_runner.py`** (new): runs enabled automations. Each one is a process speaking
   JSON lines:
   - **From the automation** (stdout):
