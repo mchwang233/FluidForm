@@ -661,8 +661,9 @@ class Workspace:
             path = path.with_suffix(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
-        return (f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). It is a real picture of "
-                "what you described; Read it to look at it if you can see images.", True)
+        saved = (f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). It is a real picture "
+                 "of what you described; Read it to look at it if you can see images.")
+        return saved, True
 
     def write(self, args: dict) -> str:
         self._require_write()
