@@ -150,7 +150,7 @@ function defaultTab(status:string,waiting=false):Tab{return waiting?"chat":statu
 /** What the task's conversation waits for you to answer, if anything: the lead's question, or a component to approve. */
 function waitingForYou(run:Run):string|null{
   const question=(run.diagnoses??[]).find(item=>item.id===run.waiting_diagnosis_id);
-  if(question)return `${question.trigger==="lead"||question.trigger==="lead_repair"?"负责人":"诊断"}在问你：${question.question||"需要你回复"}`;
+  if(question)return `${question.trigger==="lead"||question.trigger==="lead_repair"?"负责人":"平台工程师"}在问你：${question.question||"需要你回复"}`;
   if(run.engineer_job_id)return "任务在等平台工程师的组件：请看过方案后批准";
   return null;
 }
@@ -207,8 +207,8 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "node.head_started":(data,title)=>`${title(data.node_id)}：${data.skipped?"目录正被其他步骤使用，这次不先行准备":data.error?`先行准备结束：${data.error}`:"先行准备完成，等前置步骤完成后正式执行"}`,
   "node.model_switched":(data,title)=>`${title(data.node_id)}：${data.model_id} ${data.reason==="model_configuration_changed"?"配置已变更":data.reason==="model_unavailable"?"服务暂时不可用":"额度用完"}，换用 ${data.next_model_id}`,
   "node.superseded":(data,title)=>`${title(data.node_id)}：上游已返工，旧结果失效，将重新执行`,
-  "run.recovered":data=>data.reason==="lead"?"负责人已处理你的回答，任务继续":"诊断已处理阻碍，任务自动继续",
-  "run.decision":(data,title)=>`负责人决定${data.node_id?`（${title(data.node_id)}）`:""}：${({retry:"按要求重试",switch_model:`换成 ${data.model_id??"其它模型"}`,accept:"接受当前结果",unable:"判定无法完成",ask_user:"需要问你",repair_environment:"修复环境",repair_platform:"修复平台",request_component:"请平台工程师添加组件",rework:`返工 ${(data.targets??[]).map(title).join("、")}`,replan:"调整计划",done:"确认任务完成",fallback:"暂时无法决策，交给诊断"} as Record<string,string>)[data.action]??data.action}${data.reason?` · ${data.reason}`:""}`,
+  "run.recovered":data=>data.reason==="lead"?"负责人已处理你的回答，任务继续":"平台工程师已处理阻碍，任务自动继续",
+  "run.decision":(data,title)=>`负责人决定${data.node_id?`（${title(data.node_id)}）`:""}：${({retry:"按要求重试",switch_model:`换成 ${data.model_id??"其它模型"}`,accept:"接受当前结果",unable:"判定无法完成",ask_user:"需要问你",repair_environment:"请平台工程师修环境",repair_platform:"请平台工程师修平台",request_component:"请平台工程师添加组件",call_engineer:"请平台工程师",rework:`返工 ${(data.targets??[]).map(title).join("、")}`,replan:"调整计划",done:"确认任务完成",fallback:"暂时无法决策，交给平台工程师"} as Record<string,string>)[data.action]??data.action}${data.reason?` · ${data.reason}`:""}`,
   "run.plan_changed":data=>`负责人调整了计划：${[data.added?.length?`新增 ${data.added.join("、")}`:"",data.removed?.length?`删除 ${data.removed.join("、")}`:"",data.updated?.length?`修改 ${data.updated.join("、")}`:""].filter(Boolean).join("；")}`,
   "run.lead_thinking":(data,title)=>`负责人开始判断${data.node_id?`（${title(data.node_id)}）`:""}：${({attempt_failed:"尝试失败后怎么处理",verify_failed:"验证没通过是否返工",user_answer:"根据你的回答下一步做什么",all_done:"整体结果是否满足需求",repair_done:"修复是否真的生效",engineer_done:"平台工程师的结果如何处理",overrun:"超出预计轮数是否继续",critical_overrun:"运行时间远超预计是否继续"} as Record<string,string>)[data.event]??data.event}`,
   "node.delegated":(data,title)=>`${title(data.node_id)} 委派了 ${data.children?.length??0} 个子任务，等待验收结果`,
@@ -220,7 +220,7 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "node.retry":(data,title)=>data.reason==="environment_fixed"?`${title(data.node_id)}：环境已修复，重新执行`:`${title(data.node_id)}：未通过，${data.reason==="lead"?"负责人决定重试":`准备重试（${data.reason??""}）`}`,
   "node.failed":(data,title)=>`${title(data.node_id)}：失败（${data.error??""}）`,
   "run.rework":(data,title)=>`${title(data.verifier)} 发现问题，第 ${data.round} 轮返工：${data.problems??""}`,
-  "approval.required":data=>`暂停：${({budget_insufficient:"预算不足以启动下一步",budget_exceeded:"花费超过预算",interrupted:"服务重启打断了执行",user_paused:"你手动暂停了任务",quota_exhausted:"模型额度用完，且没有其它可用模型",model_unavailable:"模型服务不可用，且没有其它可用模型",diagnosis_unresolved:"诊断后仍无法自动解决，请查看诊断报告",preflight_failed:"执行前检查没有通过，缺少任务需要的工具或环境",decision_limit:"负责人决策次数已用完，等你查看后继续"} as Record<string,string>)[data.reason]??data.reason}`,
+  "approval.required":data=>`暂停：${({budget_insufficient:"预算不足以启动下一步",budget_exceeded:"花费超过预算",interrupted:"服务重启打断了执行",user_paused:"你手动暂停了任务",quota_exhausted:"模型额度用完，且没有其它可用模型",model_unavailable:"模型服务不可用，且没有其它可用模型",diagnosis_unresolved:"平台工程师没能自动解决，请看它的报告",preflight_failed:"执行前检查没有通过，缺少任务需要的工具或环境",decision_limit:"负责人决策次数已用完，等你查看后继续"} as Record<string,string>)[data.reason]??data.reason}`,
   "run.succeeded":data=>`任务完成，共花费 ${formatUsd(data.actual_cost_usd??0)}`,
   "run.incomplete":data=>`任务结束，有 ${(data.unable??[]).length} 个步骤无法完成 · 共花费 ${formatUsd(data.actual_cost_usd??0)}`,
   "run.cancelled":()=>"任务已取消",
@@ -229,11 +229,11 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "run.lead_message":data=>data.role==="user"?`你给负责人留言：${data.text??""}`:data.status==="failed"?"负责人没能回复":"负责人回复了留言",
   "run.failed":data=>`任务失败：${data.error??""}`,
   "run.published":data=>`已上传到 ${data.url}`,
-  "run.diagnosis_started":(data,title)=>data.trigger==="auto"?`${data.model_id??"—"} 开始排查${data.node_id?`「${title(data.node_id)}」`:""}卡住的原因，并尝试修复环境`:`开始诊断${data.node_id?`（${title(data.node_id)}）`:""}，由 ${data.model_id??"—"} 分析`,
+  "run.diagnosis_started":(data,title)=>data.trigger==="auto"?`平台工程师（${data.model_id??"—"}）开始排查${data.node_id?`「${title(data.node_id)}」`:""}卡住的原因，并尝试修好`:`平台工程师（${data.model_id??"—"}）开始查${data.node_id?`「${title(data.node_id)}」`:"任务"}`,
   "run.diagnosis_fallback":data=>`${data.model_id} 无法使用（${String(data.error??"").slice(0,120)}），改由 ${data.next_model_id} 继续`,
-  "run.diagnosed":data=>data.status!=="done"?"诊断失败":({fixed:"诊断：环境已修复",retry:"诊断：继续自动处理并重试",quota_exhausted:"诊断：执行模型额度耗尽，自动选择备用模型",model_unavailable:"诊断：模型服务不可用，自动选择备用模型",blocked:"诊断：需要你处理，已输出诊断报告",unable:"诊断：这一步在当前环境中无法完成"} as Record<string,string>)[data.verdict]??"诊断完成",
+  "run.diagnosed":data=>data.status!=="done"?"平台工程师没有查完":({fixed:"平台工程师：环境已修好",retry:"平台工程师：继续自动处理并重试",quota_exhausted:"平台工程师：执行模型额度耗尽，自动选择备用模型",model_unavailable:"平台工程师：模型服务不可用，自动选择备用模型",blocked:"平台工程师：需要你处理，已写出报告",unable:"平台工程师：这一步在当前环境中无法完成"} as Record<string,string>)[data.verdict]??"平台工程师查完了",
   "run.repair_shared":data=>`公共环境修复已保存，供其他项目复用：${(data.files??[]).join("、")}`,
-  "run.diagnosis_question":data=>`诊断等待你的回复：${data.question}`,
+  "run.diagnosis_question":data=>`平台工程师在等你回复：${data.question}`,
   "run.diagnosis_reply":data=>`收到你的回复：${[data.choice,data.text].filter(Boolean).join("；")}`,
   "run.platform_repair":data=>data.phase==="validating"?"正在验证 平台修复":"开始修复平台自身问题",
   "run.platform_waiting":()=>"平台修复已验证，等待在途步骤结束后自动生效",
@@ -371,7 +371,7 @@ function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cance
         {(run.status==="succeeded"||run.status==="incomplete")&&tab!=="result"&&<button type="button" className="primary" onClick={()=>pick("result")}>查看结果</button>}
         {canPause&&<button type="button" className="ghost" disabled={busy} onClick={()=>act(onPause)} title="不再启动新步骤；正在运行的步骤会跑完">暂停</button>}
         <MoreMenu>
-          {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="排查原因；对已停止的失败步骤执行修复或切换模型，并在现有预算内继续"><Icon name="activity"/>{diagnosing?"诊断中…":"诊断"}</button>}
+          {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="查原因并修好，在预算内继续"><Icon name="wrench"/>{diagnosing?"平台工程师在查…":"请平台工程师"}</button>}
           {canCancelRun(run)&&<button type="button" className="danger" disabled={cancellingId!==null} onClick={()=>onCancel(run)}>{cancellingId===run.id?"取消中…":"取消任务"}</button>}
           <DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>
         </MoreMenu>
@@ -611,7 +611,7 @@ function App() {
     <p className="composer-hint">{mode==="auto"?"问题直接回答；要动手的事先给你看计划和预算，你点头再开工。":mode==="chat"?"直接聊，不规划也不执行；选了项目时，会员 CLI 能读项目文件（只读）。":"我先拆成几个大项、算好预算，你确认后才开始执行。"}</p>
     {suggestions.length>0&&<div className="composer-suggestions">{suggestions.map(item=><button key={item.label} type="button" className="ghost" onClick={item.act}>{item.label}</button>)}</div>}
     {formError&&<p className="form-error" role="alert">{formError}</p>}</section>}
-      <MissionDetail run={selected} models={models} onUpdated={replaceRun} onPromote={promoteChat} onToChat={taskToChat} onOpenModel={openModelProfile} deletingId={deletingRunId} cancellingId={cancellingRunId} onConfirm={confirmRun} onChoose={chooseForPlan} onResume={resumeRun} onPause={run=>postAction(run,"pause","暂停")} onDiagnose={run=>postAction(run,"diagnose","诊断")} onReply={replyToDiagnosis} onAsk={askLead} onOpenEngineer={id=>{setEngineerFocus(id);setView("engineer");window.scrollTo({top:0})}} onChange={changeRequirement} onNetwork={setNetwork} parent={selected?.parent_run_id?runs.find(item=>item.id===selected.parent_run_id):undefined} onOpenRun={run=>{autoSelected.current=true;setSelected(run)}} onCancel={requestCancelRun} onDelete={requestDeleteRun}/>
+      <MissionDetail run={selected} models={models} onUpdated={replaceRun} onPromote={promoteChat} onToChat={taskToChat} onOpenModel={openModelProfile} deletingId={deletingRunId} cancellingId={cancellingRunId} onConfirm={confirmRun} onChoose={chooseForPlan} onResume={resumeRun} onPause={run=>postAction(run,"pause","暂停")} onDiagnose={run=>postAction(run,"diagnose","请平台工程师")} onReply={replyToDiagnosis} onAsk={askLead} onOpenEngineer={id=>{setEngineerFocus(id);setView("engineer");window.scrollTo({top:0})}} onChange={changeRequirement} onNetwork={setNetwork} parent={selected?.parent_run_id?runs.find(item=>item.id===selected.parent_run_id):undefined} onOpenRun={run=>{autoSelected.current=true;setSelected(run)}} onCancel={requestCancelRun} onDelete={requestDeleteRun}/>
     </div>
     </>}
     {!!toasts.length&&<div className="toasts" role="status">{toasts.map(toast=><div key={toast.id} className={`toast ${toast.tone}`}>

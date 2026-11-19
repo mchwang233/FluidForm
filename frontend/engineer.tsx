@@ -37,7 +37,7 @@ const CHECKS: Record<string, string> = {
   "Python syntax": "语法检查", "Existing database compatibility": "旧数据兼容", "Backend tests": "后端测试",
   "Frontend tests": "前端测试", "Frontend build": "前端构建",
 };
-const ORIGIN = { user: "你提出", lead: "负责人请求", diagnosis: "任务诊断发起", retrospective: "任务复盘改进" } as const;
+const ORIGIN = { user: "你提出", lead: "负责人请求", diagnosis: "任务里请来", retrospective: "任务复盘改进" } as const;
 const SPEAKER: Record<string, string> = { user: "你", engineer: "平台工程师", lead: "负责人", system: "系统" };
 
 /** A job's title as plain text: titles come from the first line of a request or report, which may be Markdown. */

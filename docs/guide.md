@@ -4,7 +4,7 @@
 
 FluidForm gives each task a small team of AI models and lets them work it through on your
 machine. A lead plans the work and makes the calls, workers do the steps, a reviewer checks every
-result, and when something goes wrong a diagnostician or a platform engineer steps in. You describe
+result, and when something goes wrong the platform engineer steps in. You describe
 the task and confirm the plan and budget once; after that the team comes back to you only when it
 needs you.
 
@@ -23,7 +23,7 @@ The model with the best planning scores takes the task and keeps it until the en
 conversation (a CLI session that is resumed, or an API history stored with the task). It writes
 the plan. After every failed attempt it gets the evidence and makes one decision, with its reason:
 retry with instructions, switch to another model, accept the result, mark the step as not possible
-here, ask you, change the plan, or call in the diagnostician or the platform engineer. When every
+here, ask you, change the plan, or call in the platform engineer. When every
 step is done it checks the whole result against your request before the task ends. You can talk
 to it at any time in the task's **负责人** (lead) panel.
 More: [The task's lead](#the-tasks-lead) · [design](design/supervisor.md)
@@ -54,29 +54,33 @@ model's latest tool calls, or the files a CLI changed and the processes it runs.
 moving goes on; only an attempt that is stuck (repeating itself, waiting for something that will
 not come) is stopped.
 
-### Diagnostician
-
-When a step is blocked by something outside the task (missing software, a license, sandbox limits,
-an unreachable service), the diagnostician looks into it on the host, without sudo. It installs
-tools into a shared folder every step can use, records the variables and local ports that step
-sandboxes need, and reports with one status line: `FIXED`, `RETRY`, `UNABLE`, `BLOCKED` (needs you)
-and others. It also recognizes a model that is out of quota or down, so the step moves to another
-model. Without a lead able to decide, it handles failures on its own.
-More: [Environment repair](#how-nodes-hand-off-and-check-work)
-
 ### Platform engineer
 
-The platform engineer works on FluidForm itself, not on any one task. It takes two kinds of
-job: a **repair** (a defect) or a **component** (a new model channel, tool, skill, page or step in
-the flow). Work reaches it three ways: you ask it (the 🛠 bubble at the bottom right, or
-`@平台工程师` in a task's lead chat), the lead asks it, or a diagnosis finds a defect in the
-platform. It edits an isolated copy of the source and must add tests; independent checks then run
-the syntax check, database compatibility, backend and frontend tests and the build. A repair that
-passes is applied on its own; a component first shows you a plan to approve, and waits for you to
-apply it. Applying waits for running model calls, restarts the service, rolls back if the health
-check fails, and commits the changed files to git (without pushing). Its own budget is
-`SUPER_PARTNER_ENGINEER_BUDGET_USD` (default $2).
-More: [Repairing FluidForm itself](#how-nodes-hand-off-and-check-work) · [design](design/platform-engineer.md)
+Every repair is the platform engineer's. It is called in when you press **请平台工程师** on a task,
+when the lead asks for it (with `SUPER_PARTNER_ENGINEER_REPAIRS=true` the lead just calls it, without
+choosing between an environment and a platform repair), or when the check before the first step
+fails. It first finds where the fault is, then picks how to repair it:
+
+- **This machine** (missing software, a license, sandbox limits, an unreachable service): it repairs
+  it on the host, without sudo. It installs tools into a shared folder every step can use, records
+  the variables and local ports that step sandboxes need, and reports with one status line:
+  `FIXED`, `RETRY`, `UNABLE`, `BLOCKED` (needs you) and others. It also recognizes a model that is
+  out of quota or down, so the step moves to another model. This takes minutes while the task
+  waits. Without a lead able to decide, it handles failures on its own.
+- **FluidForm itself**: it changes the source. It takes two kinds of job: a **repair** (a defect)
+  or a **component** (a new model channel, tool, skill, page or step in the flow). You can also ask
+  it directly (the 🛠 bubble at the bottom right, or `@平台工程师` in a task's lead chat). It edits
+  an isolated copy of the source and must add tests; independent checks then run the syntax check,
+  database compatibility, backend and frontend tests and the build. A repair that passes is
+  applied on its own; a component first shows you a plan to approve, and waits for you to apply
+  it. Applying waits for running model calls, restarts the service, rolls back if the health check
+  fails, and commits the changed files to git (without pushing). Its own budget is
+  `SUPER_PARTNER_ENGINEER_BUDGET_USD` (default $2).
+
+The two kinds of repair keep their own permissions: a repair of the machine may change this host
+but not the source; a source change happens only in the copy. What it found and did on a step is
+shown to the lead when it decides next.
+More: [Environment repair](#how-nodes-hand-off-and-check-work) · [Repairing FluidForm itself](#how-nodes-hand-off-and-check-work) · [design](design/platform-engineer.md), [one engineer](design/one-engineer.md)
 
 ### Retrospective
 

@@ -185,7 +185,7 @@ async def lifespan(_: FastAPI):
             db.save_run(run)
         interrupted = [item for item in run.diagnoses if item.status == "running"]
         for item in interrupted:
-            item.status, item.error = "failed", "服务重启打断了诊断。"
+            item.status, item.error = "failed", "服务重启打断了平台工程师的排查。"
         if interrupted:
             db.save_run(run)
     executor.restore_platform()
@@ -1054,12 +1054,12 @@ def reopen_node(run: ExecutionRun, node) -> None:
 async def confirm_task(run_id: str, body: ConfirmTask):
     run = get_task(run_id)
     if run.waiting_diagnosis_id or run.maintenance_id:
-        raise HTTPException(409, "请先回复诊断问题，或等待平台修复自动生效。")
+        raise HTTPException(409, "请先回复平台工程师的问题，或等待平台修复自动生效。")
     if run.engineer_job_id:
         raise HTTPException(409, "任务在等平台工程师添加组件：请在负责人对话里的平台工程师卡片上批准或放弃这项工作。")
     diagnosis = executor.diagnosing.get(run_id)
     if diagnosis and not diagnosis.done():
-        raise HTTPException(409, "诊断或修复仍在进行，完成后会自动继续；也可以取消任务。")
+        raise HTTPException(409, "平台工程师还在查或修，完成后会自动继续；也可以取消任务。")
     if run.status not in {RunStatus.AWAITING_CONFIRMATION, RunStatus.PAUSED}:
         raise HTTPException(409, f"Cannot confirm task in {run.status} status")
     budget = body.budget_usd if body.budget_usd is not None else run.budget_usd
@@ -1133,14 +1133,14 @@ async def diagnose_task(run_id: str):
     """Ask a strong model (a membership CLI when possible) why the task is stuck."""
     async with executor.locks.setdefault(run_id, asyncio.Lock()):
         if executor.platform_pending:
-            raise HTTPException(409, "平台修复正在自动生效，请稍候再开始新的诊断。")
+            raise HTTPException(409, "平台修复正在自动生效，请稍候再请平台工程师。")
         run = get_task(run_id)
         failed = next((node.id for node in run.plan.nodes if node.status in {NodeStatus.FAILED, NodeStatus.UNABLE}), None)
         if failed is None:
             failed = next((node.id for node in run.plan.nodes if node.status == NodeStatus.PENDING and node.attempts), None)
         diagnosis_id = executor.begin_diagnosis(run, "manual", failed)
         if diagnosis_id is None and (not run.diagnoses or run.diagnoses[-1].status != "failed"):
-            raise HTTPException(409, "诊断正在进行中，请稍候。")
+            raise HTTPException(409, "平台工程师正在查，请稍候。")
         db.save_run(run)
     if diagnosis_id:
         executor.start_diagnosis(run.id, diagnosis_id)
@@ -1359,14 +1359,14 @@ async def reply_to_diagnosis(run_id: str, diagnosis_id: str, body: DiagnosisRepl
         run = get_task(run_id)
         previous = next((d for d in run.diagnoses if d.id == diagnosis_id), None)
         if not previous:
-            raise HTTPException(404, "诊断记录不存在。")
+            raise HTTPException(404, "没有这条记录。")
         busy = executor.diagnosing.get(run_id)
         if (busy and not busy.done()) or executor.platform_pending:
-            raise HTTPException(409, "当前诊断或平台修复仍在进行，请完成后提交补充。")
+            raise HTTPException(409, "平台工程师这次还没做完，请完成后再补充。")
         text, choice = body.text.strip(), body.choice.strip() if body.choice else None
         attached = _attached(body.attachments)
         if choice and choice not in previous.choices:
-            raise HTTPException(422, "所选方案不属于这次诊断，请重新选择。")
+            raise HTTPException(422, "所选方案不在这次给出的方案里，请重新选择。")
         if not text and not choice and not attached:
             raise HTTPException(422, "请选择一个方案或填写你的想法。")
         try:
@@ -1406,12 +1406,12 @@ async def resume_task(run_id: str, body: ConfirmTask):
     keep their results; the others run again with fresh attempts and rework rounds."""
     run = get_task(run_id)
     if run.waiting_diagnosis_id or run.maintenance_id:
-        raise HTTPException(409, "请先回复诊断问题，或等待平台修复自动生效。")
+        raise HTTPException(409, "请先回复平台工程师的问题，或等待平台修复自动生效。")
     if run.engineer_job_id:
         raise HTTPException(409, "任务在等平台工程师添加组件：请在负责人对话里的平台工程师卡片上批准或放弃这项工作。")
     diagnosis = executor.diagnosing.get(run_id)
     if diagnosis and not diagnosis.done():
-        raise HTTPException(409, "诊断或修复仍在进行，完成后会自动继续；也可以取消任务。")
+        raise HTTPException(409, "平台工程师还在查或修，完成后会自动继续；也可以取消任务。")
     if run.status not in {RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.INCOMPLETE}:
         raise HTTPException(409, f"Cannot resume task in {run.status} status")
     task = executor.tasks.get(run_id)

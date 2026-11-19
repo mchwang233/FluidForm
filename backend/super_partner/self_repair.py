@@ -82,7 +82,7 @@ class SelfRepair:
                     job.update(status="awaiting_input", report=result.text)
                     self.platform.save(job)
                     record_job.status, record_job.report = "failed", parse_diagnosis(result.text)[0]
-                    record_job.error = "修复需要你回答问题，已交回任务的诊断处理。"
+                    record_job.error = "修复需要你回答问题，已交回任务里的平台工程师。"
                     record_job.cost_usd = round(cost, 6)
                     self._engineer_end(record_job)
                     return result.text, cost
@@ -133,7 +133,7 @@ class SelfRepair:
             retrospective = (engineer and engineer.origin == "retrospective" and engineer.status == "applying"
                              and engineer.run_id == job.get("run_id") and engineer.repair_id == job["id"])
             if job.get("run_id") and (not initiating or (initiating.status == RunStatus.CANCELLED and not retrospective)):
-                job.update(status="cancelled", error="发起诊断的任务已取消或删除，未应用平台改动。")
+                job.update(status="cancelled", error="请平台工程师的任务已取消或删除，未应用平台改动。")
                 self.platform.save(job)
                 self._finish_platform(job)
                 return

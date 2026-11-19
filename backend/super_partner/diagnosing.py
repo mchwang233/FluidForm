@@ -148,14 +148,14 @@ class Diagnosing:
             if model.id != diagnosis.model_id
         ])[:MAX_DIAGNOSERS]
         if not candidates:
-            raise RepairError("没有当前可用且具备所需能力的诊断模型。")
+            raise RepairError("没有当前可用、能做这次修复的模型。")
         if candidates[0] != diagnosis.model_id:
             latest = self.db.get_run(run_id)
             record = next(d for d in latest.diagnoses if d.id == diagnosis_id)
             record.model_id = candidates[0]
             self._save(latest)
             self.emit(run_id, "run.diagnosis_fallback", diagnosis_id=diagnosis_id, model_id=diagnosis.model_id,
-                      next_model_id=candidates[0], error="原诊断模型已不可用或不具备此次修复需要的工具能力。")
+                      next_model_id=candidates[0], error="原来用的模型已不可用，或做不了这次修复需要的事。")
         cost = 0.0
         for index, model_id in enumerate(candidates):
             model = self.model_lookup.get(model_id)
@@ -282,7 +282,7 @@ class Diagnosing:
                 # The diagnosis could not lift the limit (or needs the user to): the step ends as
                 # one that cannot be done here, with why, and the rest of the task goes on.
                 self._mark_unable(run, node, verdict.unable or (
-                    verdict.reason if outcome == Outcome.UNABLE else "诊断判断：这一步在当前环境中无法完成。"), diagnosis)
+                    verdict.reason if outcome == Outcome.UNABLE else "平台工程师判断：这一步在当前环境中无法完成。"), diagnosis)
             elif action == "pause":
                 node.status = NodeStatus.FAILED
                 self._pause_for_diagnosis(run, node, diagnosis, "遇到需要你处理的问题")
@@ -294,7 +294,7 @@ class Diagnosing:
                     node.feedback = f"{node.feedback}{quality.ADVICE_NOTE}{diagnosis.advice}"
                 elif node.status == NodeStatus.FAILED:
                     why = f"重试 {node.failed_attempts} 次仍未通过" + (
-                        f"（诊断没有完成：{diagnosis.error or '没有可用的诊断模型'}）" if diagnosis.status != "done" else "")
+                        f"（平台工程师没有查完：{diagnosis.error or '没有可用的模型'}）" if diagnosis.status != "done" else "")
                     self._pause_for_diagnosis(run, node, diagnosis, why)
             self._save(run)
         if handover and not await self._after_repair(run_id, node_id, diagnosis_id, verdict, outcome):
@@ -302,7 +302,7 @@ class Diagnosing:
                                     shared_files, consult=False)
 
     def _pause_for_diagnosis(self, run: ExecutionRun, node, diagnosis: Diagnosis, why: str) -> None:
-        run.error = f"步骤「{node.title}」{why}，任务已暂停。请查看诊断报告，处理后点“按此预算继续”。"
+        run.error = f"步骤「{node.title}」{why}，任务已暂停。请看平台工程师的报告，处理后点“按此预算继续”。"
         if run.status == RunStatus.RUNNING:
             run.status = RunStatus.PAUSED
         self.emit(run.id, "approval.required", reason="diagnosis_unresolved",
@@ -316,7 +316,7 @@ class Diagnosing:
         model = pick_diagnoser(list(self.model_lookup.values()), self._configured(run))
         diagnosis = Diagnosis(id=uuid4().hex[:8], trigger=trigger, node_id=node_id, model_id=model.id if model else None)
         if not model:
-            diagnosis.status, diagnosis.error = "failed", "没有可用的诊断模型：请启用一个会员 CLI 或 API 模型。"
+            diagnosis.status, diagnosis.error = "failed", "平台工程师没有可用的模型：请启用一个会员 CLI 或 API 模型。"
             diagnosis.finished_at = datetime.now(timezone.utc)
         run.diagnoses.append(diagnosis)
         self.emit(run.id, "run.diagnosis_started", diagnosis_id=diagnosis.id, trigger=trigger,
@@ -334,7 +334,7 @@ class Diagnosing:
                 latest = self.db.get_run(run_id)
                 record = next((d for d in latest.diagnoses if d.id == diagnosis_id), None) if latest else None
                 if record and record.status == "running":
-                    record.status, record.error = "failed", str(exc) or "诊断被中断。"
+                    record.status, record.error = "failed", str(exc) or "平台工程师的排查被中断。"
                     record.cost_usd = round(getattr(exc, "accounted_cost_usd", 0.0), 6)
                     record.finished_at = datetime.now(timezone.utc)
                 if latest:
@@ -415,7 +415,7 @@ class Diagnosing:
                 latest = self.db.get_run(run_id)
                 target = next((d for d in latest.diagnoses if d.id == diagnosis_id), None) if latest else None
                 if target:
-                    target.status, target.error = "failed", "诊断被中断（任务取消或服务重启）。"
+                    target.status, target.error = "failed", "平台工程师的排查被中断（任务取消或服务重启）。"
                     target.cost_usd = round(getattr(exc, "accounted_cost_usd", 0.0), 6)
                     target.finished_at = datetime.now(timezone.utc)
                     self._save(latest)

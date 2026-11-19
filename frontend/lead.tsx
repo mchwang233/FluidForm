@@ -55,9 +55,9 @@ const TONES: Record<string, string> = { unable: "warn", ask_user: "warn", fallba
 function actionLabel(item: Decision, title: (id: string) => string, model: (id?: string | null) => string) {
   const labels: Record<string, string> = {
     retry: "按要求重试", switch_model: `换成 ${model(item.model_id)}`, accept: "接受结果", unable: "判定无法完成",
-    ask_user: "问你", repair_environment: "修复环境", repair_platform: "修复平台",
-    request_component: "请平台工程师添加组件",
-    rework: `返工 ${(item.targets ?? []).map(title).join("、")}`, fallback: "交给诊断处理",
+    ask_user: "问你", repair_environment: "请平台工程师修环境", repair_platform: "请平台工程师修平台",
+    request_component: "请平台工程师添加组件", call_engineer: "请平台工程师",
+    rework: `返工 ${(item.targets ?? []).map(title).join("、")}`, fallback: "交给平台工程师处理",
     replan: "调整计划", done: "确认完成",
   };
   return labels[item.action] ?? item.action;

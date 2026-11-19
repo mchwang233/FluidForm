@@ -84,7 +84,7 @@ async def test_answer_to_a_general_diagnosis_resumes_or_leaves_budget_controls_a
 
     class GeneralDiagnosis(Providers):
         async def complete(self, model_id, prompt, workspace=None, **kwargs):
-            if prompt.startswith("You are diagnosing"):
+            if "You were asked to find out why" in prompt:
                 if "User's reply:" in prompt:
                     if out_of_budget:
                         raise BudgetExceeded("剩余预算不足")

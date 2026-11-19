@@ -297,6 +297,10 @@ class Settings(BaseSettings):
     # A task cut off by a service restart goes on by itself from its finished steps when it works
     # in no project and waits for nobody (api.resumes_by_itself). Off: it waits for the user.
     resume_after_restart: bool = False
+    # The lead asks for any repair or component with one call_engineer decision, and the platform
+    # engineer's repair session finds whether the machine or FluidForm is at fault
+    # (docs/design/one-engineer.md). Off: repair_environment, repair_platform, request_component.
+    engineer_repairs: bool = False
     # A chat with tools asks FluidForm to start a task, send a file or call the platform engineer
     # through tool calls (chat_actions.py) besides the lines it can write. Off: lines only.
     chat_action_tools: bool = False

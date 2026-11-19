@@ -486,9 +486,9 @@ class Preflighting:
         printed and what the diagnosis found; what to tell the user."""
         run = self.db.get_run(run_id)
         found = next((item.report for item in reversed(run.diagnoses) if item.trigger == "preflight" and item.report), "")
-        request = ("执行前检查里，FluidForm 自己的沙箱检查没通过；诊断员修过环境后复查仍然失败，像是平台本身的缺陷。\n"
+        request = ("执行前检查里，FluidForm 自己的沙箱检查没通过；修过环境后复查仍然失败，像是平台本身的缺陷。\n"
                    + "\n".join(f"- {check.name}，输出：\n{check.output[:1500]}" for check in failed)
-                   + (f"\n\n诊断员的报告：\n{found[:2000]}" if found else ""))
+                   + (f"\n\n修环境时的报告：\n{found[:2000]}" if found else ""))
         job, why = self.engineer_join(run_id, {"request": request, "kind": "repair"}, "diagnosis")
         return f"已请平台工程师修这个检查（工作 {job.id}）。" if job else f"想请平台工程师来修，但{why}"
 

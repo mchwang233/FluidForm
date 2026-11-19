@@ -1599,10 +1599,10 @@ test("a running task can be paused and diagnosed, and the report shows its advic
   assert.match(document.querySelector(".action-bar").textContent, /正在运行的 1 个步骤会跑完/);
   assert.equal(action("暂停"), undefined);
 
-  await click(action("诊断"));
+  await click(action("请平台工程师"));
   assert.deepEqual(state.actions[1], ["diagnose", "build-task"]);
-  assert.ok(action("诊断中…").disabled);
-  assert.match(document.querySelector(".diagnosis-card").textContent, /正在由 Claude Code CLI 分析/);
+  assert.ok(action("平台工程师在查…").disabled);
+  assert.match(document.querySelector(".diagnosis-card").textContent, /Claude Code CLI 正在查任务的计划/);
 
   state.records[0] = { ...state.records[0], status: "failed", diagnoses: [
     { id: "d1", trigger: "auto", node_id: "a", model_id: "cli:claude", status: "done", report: "## 根本原因\n缺少 node", advice: "先确认 node 可用", created_at: "2026-10-14T06:00:00Z" },
@@ -1610,9 +1610,9 @@ test("a running task can be paused and diagnosed, and the report shows its advic
   ] };
   await act(async () => state.poll());
   const card = () => document.querySelector(".diagnosis-card");
-  assert.match(card().textContent, /诊断没有完成：CLI timed out/);
-  await click(card().querySelector('[aria-label="上一次诊断"]'));
-  assert.match(card().textContent, /自动诊断 · Check/);
+  assert.match(card().textContent, /平台工程师没有查完：CLI timed out/);
+  await click(card().querySelector('[aria-label="上一次"]'));
+  assert.match(card().textContent, /失败后请来 · Check/);
   assert.equal(card().querySelector(".markdown-body h2").textContent, "根本原因");
   assert.match(card().querySelector(".diagnosis-advice").textContent, /先确认 node 可用.*从失败处继续/);
 
@@ -1733,27 +1733,27 @@ async function fillDiagnosisReply(context, value) {
 test("diagnosis accepts both a deliberate choice and Chinese free text, then continues", async t => {
   const context = await setup(t, [interactiveDiagnosis()], [], { openComposer: false });
   const { document, state, click, button } = context;
-  const form = document.querySelector('[aria-label="回复诊断"]');
+  const form = document.querySelector('[aria-label="回复平台工程师"]');
   assert.match(form.textContent, /旧版接口是否需要继续兼容/);
   assert.equal(form.querySelector('input:checked'), null);
-  assert.equal(button("发送并继续诊断").disabled, true);
+  assert.equal(button("发送并继续").disabled, true);
   assert.equal(button("按此预算继续"), undefined);
   await click(form.querySelector('input[value="保留兼容"]'));
   await fillDiagnosisReply(context, "已有三个项目依赖旧接口，不要改调用方。中文与 emoji ✅");
-  await click(button("发送并继续诊断"));
+  await click(button("发送并继续"));
   assert.deepEqual(state.diagnosisReplies, [{ id: "interactive-task", diagnosisId: "question-1", choice: "保留兼容", text: "已有三个项目依赖旧接口，不要改调用方。中文与 emoji ✅" }]);
   // The reply and the follow-up diagnosis join the same conversation, with no reply box meanwhile.
-  assert.match(document.querySelector(".diagnosis-running").textContent, /你的回复继续诊断/);
-  assert.match(document.querySelector('[aria-label="你的诊断回复"]').textContent, /保留兼容.*已有三个项目/s);
-  assert.equal(document.querySelector('[aria-label="上一次诊断"]'), null);
-  assert.equal(document.querySelector('[aria-label="回复诊断"]'), null);
+  assert.match(document.querySelector(".diagnosis-running").textContent, /你的回复继续查/);
+  assert.match(document.querySelector('[aria-label="你的回复"]').textContent, /保留兼容.*已有三个项目/s);
+  assert.equal(document.querySelector('[aria-label="上一次"]'), null);
+  assert.equal(document.querySelector('[aria-label="回复平台工程师"]'), null);
   assert.match(document.querySelector(".dx-chip").textContent, /分析中/);
 });
 
 test("diagnosis permits a free-text alternative without selecting a proposed option", async t => {
   const context = await setup(t, [interactiveDiagnosis()], [], { openComposer: false });
   await fillDiagnosisReply(context, "我希望增加兼容开关，由每个项目自己选择。");
-  await context.click(context.button("发送并继续诊断"));
+  await context.click(context.button("发送并继续"));
   assert.equal(context.state.diagnosisReplies[0].choice, undefined);
   assert.equal(context.state.diagnosisReplies[0].text, "我希望增加兼容开关，由每个项目自己选择。");
 });
@@ -1764,7 +1764,7 @@ test("a failed reply keeps the selected option and text for retry", async t => {
   state.replyResponse = async () => new Response(JSON.stringify({ detail: "当前诊断仍在进行" }), { status: 409 });
   await click(document.querySelector('input[value="保留兼容"]'));
   await fillDiagnosisReply(context, "补充的要求不要丢失");
-  await click(button("发送并继续诊断"));
+  await click(button("发送并继续"));
   assert.equal(document.querySelector('[aria-label="补充你的想法"]').value, "补充的要求不要丢失");
   assert.equal(document.querySelector('input[value="保留兼容"]').checked, true);
   assert.match(document.querySelector('[role="alert"]').textContent, /当前诊断仍在进行/);
@@ -1780,7 +1780,7 @@ test("diagnosis reply remains available for legacy reports without choices", asy
   await context.click([...context.document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
   assert.equal(context.document.querySelectorAll('.diagnosis-choices input').length, 0);
   await fillDiagnosisReply(context, "这个权限已经配置好了，请继续检查。");
-  await context.click(context.button("发送并继续诊断"));
+  await context.click(context.button("发送并继续"));
   assert.equal(context.state.diagnosisReplies.length, 1);
 });
 
@@ -1794,10 +1794,10 @@ test("the diagnosis waiting for an answer is highlighted, and a picked option ca
   const option = () => document.querySelector('input[value="允许升级接口"]');
   await click(option());
   assert.equal(option().checked, true);
-  assert.equal(button("发送并继续诊断").disabled, false);
+  assert.equal(button("发送并继续").disabled, false);
   await click(option());
   assert.equal(option().checked, false);
-  assert.equal(button("发送并继续诊断").disabled, true);
+  assert.equal(button("发送并继续").disabled, true);
 });
 
 

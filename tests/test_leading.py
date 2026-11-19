@@ -6,6 +6,7 @@ from super_partner import quality
 from super_partner.config import settings
 from super_partner.executor import Executor
 from super_partner.models import (
+    Diagnosis,
     DiagnosisMessage,
     NodeStatus,
     RunStatus,
@@ -374,3 +375,60 @@ async def test_a_blocked_step_without_a_decision_stops_as_declared(tmp_path, mon
     await executor._finish("artifacts", "report", None, Verdict(False, "BLOCKED: 缺少 VDB"), [], [], 0.0, Outcome.BLOCKED)
     assert len(asked) == 1
     assert db.get_run("artifacts").plan.nodes[1].status == NodeStatus.BLOCKED
+
+
+# --- one platform engineer for every repair (docs/design/one-engineer.md) ----------------------
+
+async def test_the_lead_calls_the_platform_engineer_which_finds_where_to_repair(database, monkeypatch):
+    monkeypatch.setattr(settings, "engineer_repairs", True)
+    team = Team([decision("call_engineer", kind="repair", instructions="iverilog: command not found")])
+    _, result = await run(database, team)
+    assert result.status == RunStatus.SUCCEEDED and len(team.diagnoses) == 1
+    # It decides where the fault is, with the lead's evidence.
+    assert team.diagnoses[0].startswith("You are FluidForm's platform engineer")
+    assert "whether this machine or FluidForm itself is at fault" in team.diagnoses[0]
+    assert "iverilog: command not found" in team.diagnoses[0]
+    assert result.decisions[0].action == "call_engineer"
+    # The lead is offered the one action, not the three it replaces.
+    assert "call_engineer" in team.lead[0] and "repair_environment" not in team.lead[0]
+
+
+def test_call_engineer_and_the_old_actions_are_read(monkeypatch):
+    from super_partner import supervisor
+    assert supervisor.parse_decision(decision("call_engineer", kind="component", instructions="加一个飞书工具"),
+                                     set())["kind"] == "component"
+    assert supervisor.parse_decision(decision("call_engineer", instructions="x"), set())["kind"] == "repair"
+    # Old decisions, and leads answering the old way, still read.
+    monkeypatch.setattr(settings, "engineer_repairs", True)
+    assert supervisor.parse_decision(decision("repair_environment", instructions="x"), set())["action"] == "repair_environment"
+    # Off: the three actions as before, and no call_engineer offered.
+    monkeypatch.setattr(settings, "engineer_repairs", False)
+    offered = supervisor.decision_format()
+    assert "repair_environment" in offered and "call_engineer" not in offered
+
+
+async def test_a_component_asked_for_with_call_engineer_waits_for_the_engineer(database, monkeypatch):
+    monkeypatch.setattr(settings, "engineer_repairs", True)
+    asked = []
+    team = Team([decision("call_engineer", kind="component", instructions="需要一个读飞书文档的工具")])
+    executor = Executor(database, team, MODELS)
+
+    def engineer_for_lead(run, node, request, decision_id):
+        asked.append(request)  # None back: the engineer cannot take it here, the step ends as unable
+
+    monkeypatch.setattr(executor, "_engineer_for_lead", engineer_for_lead)
+    await executor.execute("r")
+    assert asked == ["需要一个读飞书文档的工具"] and not team.diagnoses
+
+
+async def test_the_lead_hears_what_the_engineer_found_when_the_user_called_it(database):
+    # Regression: a look the user asked for (or one before the first step) was never told to the
+    # lead, which then sent the engineer to repair the same thing again.
+    run_record = database.get_run("r")
+    run_record.diagnoses.append(Diagnosis(id="d1", trigger="manual", node_id="a", status="done", verdict="fixed",
+                                          report="许可证服务器没启动，已重启 lmgrd 并记入 sandbox.json"))
+    database.save_run(run_record)
+    team = Team([decision("retry", instructions="再跑一次")])
+    await run(database, team)
+    assert "What the platform engineer (平台工程师) found and did here so far:" in team.lead[0]
+    assert "the user asked: fixed. 许可证服务器没启动" in team.lead[0]

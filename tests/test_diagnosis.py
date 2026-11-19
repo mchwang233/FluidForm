@@ -43,7 +43,7 @@ class Providers:
 
     async def complete(self, model_id, prompt, workspace=None, **_kwargs):
         self.calls.append(model_id)
-        if prompt.startswith("You are diagnosing"):
+        if "You were asked to find out why" in prompt:
             return ProviderResult(REPORT, 0, 0, model_id)
         raise RuntimeError("node is not installed")
 
@@ -317,7 +317,7 @@ async def test_without_any_model_the_diagnosis_says_so(tmp_path):
     run = ExecutionRun(id="r", prompt="p", status=RunStatus.FAILED, budget_usd=1, plan=TaskPlan(summary="s", nodes=[]))
     executor = Executor(database, Providers(), {})
     assert executor.begin_diagnosis(run, "manual") is None
-    assert run.diagnoses[0].status == "failed" and "没有可用的诊断模型" in run.diagnoses[0].error
+    assert run.diagnoses[0].status == "failed" and "平台工程师没有可用的模型" in run.diagnoses[0].error
 
 
 def running_run(status=RunStatus.RUNNING) -> ExecutionRun:

@@ -11,6 +11,7 @@ from typing import Optional
 from uuid import uuid4
 
 from . import capabilities, contracts, quality, remembering, replan, supervisor
+from . import diagnosis as diagnosis_module
 from .attachments import attach
 from .budget import BudgetExceeded
 from .config import settings
@@ -81,7 +82,7 @@ class Leading:
         if limited:
             prompt += "\n" + supervisor.limit_note(node, contracts.extension(node))
         if blocked:
-            prompt += "\n" + supervisor.BLOCKED_NOTE
+            prompt += "\n" + supervisor.blocked_note()
         limited = limited or blocked
         event = "verify_failed" if verifying else "attempt_failed"
         decision = await self._ask_for_decision(run_id, node_id, prompt, {item.id for item in choices}, targets,
@@ -245,10 +246,10 @@ class Leading:
         async with self.locks.setdefault(run_id, asyncio.Lock()):
             run = self.db.get_run(run_id)
             run.decisions.append(Decision(node_id=node_id, event="attempt_failed", action="fallback",
-                                          reason="负责人暂时无法决策，改由诊断处理这次失败。"))
+                                          reason="负责人暂时无法决策，改由平台工程师处理这次失败。"))
             self._save(run)
         self.emit(run_id, "run.decision", node_id=node_id, action="fallback",
-                  reason="负责人暂时无法决策，改由诊断处理这次失败。")
+                  reason="负责人暂时无法决策，改由平台工程师处理这次失败。")
 
     async def _apply_decision(self, run_id: str, node_id: str, decision: dict, verdict: quality.Verdict,
                               outcome: str, event: str) -> None:
@@ -256,6 +257,10 @@ class Leading:
         action, reason = decision["action"], decision.get("reason", "")
         instructions = decision.get("instructions")
         repair = changes = None
+        # call_engineer: a component is asked for as before; a repair goes to the engineer's repair
+        # session, which finds whether the machine or FluidForm is at fault (one-engineer.md).
+        does = (("request_component" if decision.get("kind") == "component" else "call_engineer")
+                if action == "call_engineer" else action)
         async with self.locks.setdefault(run_id, asyncio.Lock()):
             run = self.db.get_run(run_id)
             node = next(item for item in run.plan.nodes if item.id == node_id)
@@ -310,7 +315,7 @@ class Leading:
             elif action == "unable":
                 self._mark_unable(run, node, reason or verdict.unable or verdict.reason,
                                   user_action=decision.get("user_action"))
-            elif action == "request_component":
+            elif does == "request_component":
                 job = self._engineer_for_lead(run, node, instructions or reason, made.id)
                 if job:
                     made.engineer_job_id = job.id
@@ -332,17 +337,18 @@ class Leading:
                 run.error, run.waiting_diagnosis_id = question.question, question.id
                 self.emit(run_id, "run.diagnosis_question", diagnosis_id=question.id,
                           question=question.question, choices=question.choices)
-            if (call := decision.get("engineer")) and action not in {"request_component", "repair_platform"}:
+            if (call := decision.get("engineer")) and does not in {"request_component", "repair_platform", "call_engineer"}:
                 # Something in Super Partner itself the lead found on the way: the engineer takes it
                 # in the background, whatever this decision does with the step.
                 job, _ = self.engineer_join(run_id, call, "lead", node_id, made.id)
                 made.engineer_job_id = job.id if job else None
-            if action in {"repair_environment", "repair_platform"}:
+            if does in {"repair_environment", "repair_platform", "call_engineer"}:
                 # A repair session with access to this machine (or a platform source repair) does
                 # the work; its outcome comes back to the lead (_after_repair) before the step runs.
                 node.status = NodeStatus.RUNNING
-                what = ("FluidForm itself is at fault; make a platform repair (STATUS: PLATFORM_REPAIR)"
-                        if action == "repair_platform" else "the environment needs a repair")
+                what = {"repair_platform": "FluidForm itself is at fault; make a platform repair (STATUS: PLATFORM_REPAIR)",
+                        "repair_environment": "the environment needs a repair",
+                        "call_engineer": diagnosis_module.ENGINEER_CALLED}[does]
                 repair = (verdict, f"{what}: {instructions or reason}")
             self._save(run)
         self.emit(run_id, "run.decision", node_id=node_id, action=action, reason=reason,

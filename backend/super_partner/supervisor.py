@@ -396,7 +396,16 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
 # --- deciding what to do after a failed attempt -------------------------------------------------
 
 ACTIONS = ("retry", "switch_model", "accept", "unable", "ask_user", "repair_environment", "repair_platform",
-           "request_component", "rework", "replan", "done")
+           "request_component", "call_engineer", "rework", "replan", "done")
+# The three ways of asking for a repair or a component, which settings.engineer_repairs folds into
+# call_engineer: the platform engineer then decides how to repair (docs/design/one-engineer.md).
+SEPARATE_REPAIRS = ("repair_environment", "repair_platform", "request_component")
+
+
+def offered_actions() -> tuple[str, ...]:
+    """The actions the lead is offered; every one in ACTIONS is still read (old decisions)."""
+    left_out = SEPARATE_REPAIRS if settings.engineer_repairs else ("call_engineer",)
+    return tuple(action for action in ACTIONS if action not in left_out)
 # What the lead may answer when every step has finished.
 FINAL_ACTIONS = ("done", "rework", "replan")
 ACTION_RULES = {
@@ -424,6 +433,13 @@ ACTION_RULES = {
                          "give it. Say in instructions what to add and why. FluidForm's platform engineer "
                          "(平台工程师) plans it, the user approves, and it is built, checked and applied; the task waits, "
                          "then you decide again.\n",
+    "call_engineer": "- call_engineer: bring in FluidForm's platform engineer (平台工程师) with the evidence in "
+                     "instructions. kind \"repair\" when something outside the step's own work blocks it: the "
+                     "machine (missing software, sandbox or machine limits, configuration, licences) or FluidForm "
+                     "itself (its scheduler, tools or sandbox); the engineer finds which and repairs it, here or "
+                     "in FluidForm's source, then you decide again. kind \"component\" when the task needs a "
+                     "capability FluidForm does not have and no repair would give it; the user approves its plan "
+                     "first and the task waits.\n",
     "replan": "- replan: change the plan in \"plan\": add steps, remove steps that have not finished, or rewrite "
               "the instructions of steps that have not finished (splitting a step that is too big, adding a "
               "missing prerequisite, dropping one the task does not need). Finished steps stay as they are.\n",
@@ -448,13 +464,17 @@ def decision_format(rework: bool = False, final: bool = False) -> str:
     """How to answer; a failed verification may also send steps back (``rework``), and when
     every step has finished (``final``) the lead says whether the task is done."""
     actions = list(FINAL_ACTIONS) if final else [
-        action for action in ACTIONS if action != "done" and (rework or action != "rework")]
+        action for action in offered_actions() if action != "done" and (rework or action != "rework")]
+    engineer = "call_engineer" in actions
     return (
         "Reply with only a JSON object:\n"
         f'{{"action": "{" | ".join(actions)}", '
         '"reason": "one or two sentences in Chinese, shown to the user", '
         '"instructions": "for retry / switch_model / rework: exactly what must be done differently; '
-        'for repair_*: what to repair; for request_component: what to add and why", "model_id": "switch_model only: one of the models listed", '
+        + ('for call_engineer: what blocks the step and the evidence, or what to add and why", '
+           '"kind": "call_engineer only: repair | component", ' if engineer else
+           'for repair_*: what to repair; for request_component: what to add and why", ')
+        + '"model_id": "switch_model only: one of the models listed", '
         + ('"targets": ["rework only: ids of the steps to redo"], ' if rework or final else "")
         + (PLAN_FORMAT + ", " if "replan" in actions else "")
         + '"question": "ask_user only, in Chinese", "options": ["ask_user only: up to 4 answers"], '
@@ -485,13 +505,36 @@ def _models(choices: list[ModelProfile], node) -> list[str]:
             f"reliability {model.scores.reliability:g})" for model in choices]
 
 
-BLOCKED_NOTE = (
-    "This step stopped as BLOCKED: something it needs is missing or a target it must meet was not "
-    "reached (see why above). Decide what unblocks it: rework the steps it builds on (targets) with "
-    "instructions saying exactly what to add or fix, which redoes them and then this step; "
-    "repair_environment or repair_platform when the machine or FluidForm is at fault; retry when "
-    "something has changed; accept when what it delivered is enough for the request; ask_user when "
-    "only the user can decide (for example whether a target can be relaxed); unable to stop.")
+def blocked_note() -> str:
+    repair = ("call_engineer (kind repair)" if settings.engineer_repairs
+              else "repair_environment or repair_platform")
+    return (
+        "This step stopped as BLOCKED: something it needs is missing or a target it must meet was not "
+        "reached (see why above). Decide what unblocks it: rework the steps it builds on (targets) with "
+        "instructions saying exactly what to add or fix, which redoes them and then this step; "
+        f"{repair} when the machine or FluidForm is at fault; retry when "
+        "something has changed; accept when what it delivered is enough for the request; ask_user when "
+        "only the user can decide (for example whether a target can be relaxed); unable to stop.")
+
+
+# Who brought the platform engineer to a step (Diagnosis.trigger), as the lead is told.
+ENGINEER_CALLERS = {"lead_repair": "you asked", "manual": "the user asked", "auto": "after a failure",
+                    "preflight": "before the first step"}
+MAX_ENGINEER_LOOKS = 3
+
+
+def engineer_looks(run: ExecutionRun, node) -> list[str]:
+    """What the platform engineer found and did on this step (or the whole task) so far, so the
+    lead does not send it to repair what it has already repaired, or decide against what it found."""
+    looks = [item for item in run.diagnoses if item.trigger in ENGINEER_CALLERS and item.status != "running"
+             and item.node_id in {node.id, None}][-MAX_ENGINEER_LOOKS:]
+    lines = []
+    for item in looks:
+        found = (item.report or item.error or "").strip().replace("\n", " ")[:400]
+        lines.append(f"- {ENGINEER_CALLERS[item.trigger]}: {item.verdict or item.status}"
+                     + (f"; to do for the user: {item.user_action[:200]}" if item.user_action else "")
+                     + (f". {found}" if found else ""))
+    return ["What the platform engineer (平台工程师) found and did here so far:", *lines] if lines else []
 
 
 def failure_message(run: ExecutionRun, node, attempt, verdict, choices: list[ModelProfile],
@@ -510,6 +553,7 @@ def failure_message(run: ExecutionRun, node, attempt, verdict, choices: list[Mod
         *([_tool_summary(attempt, True)] if attempt.tool_calls else []),
         f"Files this step has changed: {', '.join(node.changed_files[:30]) or '(none)'}",
         *(["Earlier attempts of this step:", *earlier] if earlier else []),
+        *engineer_looks(run, node),
         "Where the steps stand:", *_steps(run),
         "Models that can take this step:", *_models(choices, node),
         *([f"Steps it builds on, which rework may send back: {', '.join(sorted(upstream))}"] if upstream else []),
@@ -765,8 +809,10 @@ def parse_decision(text: str, model_ids: set[str], targets: Optional[set[str]] =
         return None
     if clean["action"] == "ask_user" and not clean.get("question"):
         return None
-    if clean["action"] == "request_component" and not (clean.get("instructions") or clean.get("reason")):
+    if clean["action"] in {"request_component", "call_engineer"} and not (clean.get("instructions") or clean.get("reason")):
         return None
+    if clean["action"] == "call_engineer":
+        clean["kind"] = "component" if payload.get("kind") == "component" else "repair"
     if call := read_engineer(payload.get("engineer")):
         clean["engineer"] = call
     if clean["action"] == "rework":

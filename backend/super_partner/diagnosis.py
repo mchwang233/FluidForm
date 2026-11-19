@@ -144,12 +144,23 @@ def platform_instructions(context: str) -> str:
     )
 
 
+# What the lead's call_engineer asks of the repair session (settings.engineer_repairs).
+ENGINEER_CALLED = (
+    "find whether this machine or FluidForm itself is at fault, and repair it: this machine's "
+    "environment here, with the tools below; FluidForm's own code (its scheduler, tools or sandbox "
+    "behaving wrongly on any machine, not only here) by ending with STATUS: PLATFORM_REPAIR at once, "
+    "without working around it here. The lead's evidence"
+)
+# Who does the looking and repairing, to the user and to the model (docs/design/one-engineer.md).
+ENGINEER = "You are FluidForm's platform engineer (平台工程师)."
+
+
 def prompt(run: ExecutionRun, node_id: Optional[str], workspace: str, events: list[str],
            platform: str = "") -> str:
     """Analysis only: why the task is stuck, for the 诊断 button."""
     lines = [
-        ("You are diagnosing a multi-model task that is not completing. Investigate, but do not "
-         "modify any files: only read them and run read-only checks."),
+        (f"{ENGINEER} You were asked to find out why a multi-model task is not completing. Investigate, "
+         "but do not modify any files: only read them and run read-only checks."),
         f"Working directory of the task: {workspace}",
         "",
         *_history(run, events),
@@ -172,7 +183,7 @@ def repair_prompt(run: ExecutionRun, node: TaskNode, workspace: str, tools: str,
     port_note = f"local ports {', '.join(map(str, ports))} only" if ports else "nothing"
     last = node.attempts[-1] if node.attempts else None
     return "\n".join([
-        (f"Attempt {len(node.attempts)} of step '{node.title}' in a multi-model task just failed"
+        (f"{ENGINEER} Attempt {len(node.attempts)} of step '{node.title}' in a multi-model task just failed"
          + (f" ({last.outcome}: {(last.reason or '')[:300]})" if last else "") + ". Find out why, "
          "and repair whatever blocks it outside the task itself: missing software, sandbox or "
          "machine limits, configuration, licenses, unreachable services. Do not do the step's work "
