@@ -1493,6 +1493,8 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .lead-panel .dx-thread{gap:14px}
 .lead-panel .lead-said+.lead-said .dx-meta>.dx-avatar,.lead-panel .lead-said+.lead-said .dx-meta>b{display:none}
 .lead-panel .lead-said+.lead-said{margin-top:-4px}
+.reply-activity{margin:8px 0 0}
+.reply-activity .tool-log ol{max-height:240px}
 .lead-panel .dx-meta{flex-wrap:nowrap;min-width:0}
 .lead-panel .dx-meta small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lead-panel .lead-instructions summary{list-style:none;display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:12px}

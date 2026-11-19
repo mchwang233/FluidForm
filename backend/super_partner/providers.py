@@ -649,6 +649,9 @@ class ProviderRegistry:
                             if conversation:
                                 conversation.save()
                             raise
+                    if starting := getattr(agent.log, "starting", None):
+                        # Someone shows the work as it happens (a chat's quick job, supervisor.ChatActivity).
+                        starting(name, agent_tools.describe_call(name, args))
                     output, ok = (memory.recall(conversation, args) if name == "RecallHistory" and conversation
                                   else await agent.run(name, args))
                     results.append((call_id, name, output))

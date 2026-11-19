@@ -33,6 +33,10 @@
   - 大事怎么办：飞书等自动化的聊天里写 TASK 行（见 capability-packages.md），网页聊天里告诉用户可以转成任务。
   - 没查过的东西不许说查过。
   - 机器上已有的能力（`capabilities.section()`）一并列出；每条消息点到的工具对应的技能（`skills.for_step`）附在那条消息后面，和步骤的做法一样。
+- **做的时候看得到**（`supervisor.ChatActivity`，`CHAT_ACTIVITY[run_id]`，只在回答期间存在）：
+  - 每个工具调用开始时记一条"运行中"（`providers._loop` 在执行前调用记录对象的 `starting`），做完换成结果。
+  - 网页：聊天正在回复时，用 `GET /api/tasks/{id}/lead/activity` 显示"正在做"（`lead.tsx` 的 `ReplyActivity`，复用 `ToolLog`），每 3 秒刷新。
+  - 飞书等自动化：正在等文字的一方（`streaming.listener`）收到"（正在运行命令：…）"这样一行，卡片里先显示它，回答开始写时被替换。
 - **发文件**（飞书等自动化的聊天）：模型把做好的图片或文件存在自己的文件夹里，在回答末尾每个文件写一行 `SEND: 文件名`，由飞书包发出去（见 capability-packages.md）。
 - **花费**：照常记在这段聊天上。飞书聊天的花费计入自动化当天的额度。
 

@@ -175,3 +175,27 @@ def test_the_reply_text_of_each_providers_stream_events():
     assert text_piece({"type": "content_block_delta", "delta": {"type": "thinking_delta", "thinking": "t"}}) == ""
     assert text_piece({"candidates": [{"content": {"parts": [{"text": "c"}, {"text": "x", "thought": True}]}}]}) == "c"
     assert text_piece({"usage": {}}) == ""
+
+
+async def test_who_shows_the_work_hears_each_tool_call_as_it_starts(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test")
+    first = sse({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "Write", "arguments": WRITE}}]},
+                              "finish_reason": "tool_calls"}]}, {"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}, "[DONE]")
+    second = sse({"choices": [{"delta": {"content": "写好了"}, "finish_reason": "stop"}]},
+                 {"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 2}}, "[DONE]")
+    registry = registry_with([streamed(first), streamed(second)], [])
+
+    started = []
+
+    class Shown(list):
+        def starting(self, name, detail):
+            started.append((name, detail, (tmp_path / "a.txt").exists()))
+
+    log = Shown()
+    try:
+        await registry.complete("deepseek:deepseek-flash", "work", tmp_path, act=True, tool_log=log)
+    finally:
+        await registry.client.aclose()
+    # Told before the tool ran, then given its result.
+    assert started == [("Write", "a.txt (2 bytes)", False)]
+    assert [entry["tool"] for entry in log] == ["Write"] and log[0]["ok"] is True

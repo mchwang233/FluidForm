@@ -506,3 +506,48 @@ async def test_a_quick_job_past_its_time_stops_and_says_so(monkeypatch, tmp_path
     assert "秒内没做完" in result.text and "排成任务" in result.text
     assert called[0]["act"] is True and called[0]["max_turns"] == 20 and called[0]["network"] is True
     assert called[0]["workspace"] == tmp_path and session.history[-1]["content"] == result.text
+
+
+async def test_a_chats_quick_job_shows_what_it_is_doing_while_it_answers(task_api, monkeypatch, tmp_path):
+    import asyncio
+
+    from super_partner import streaming
+    from super_partner.config import settings
+    api, client = task_api
+    monkeypatch.setattr(settings, "chat_tools", True)
+    monkeypatch.setattr(settings, "workspace_root", tmp_path / "ws")
+    chatting(api, monkeypatch)
+    working, go_on, heard = asyncio.Event(), asyncio.Event(), []
+
+    async def converse(session, prompt, timeout=None, spend_ok=None, attachments=(), tools=None):
+        log = tools["log"]
+        log.starting("Bash", "curl -s wttr.in/Beijing")
+        working.set()
+        await go_on.wait()
+        log.append({"turn": 1, "tool": "Bash", "detail": "curl -s wttr.in/Beijing", "ok": True, "output": "晴 5°C"})
+        session.calls += 1
+        return ProviderResult("北京：晴 5°C", 10, 10)
+
+    monkeypatch.setattr(api.providers, "converse", converse)
+    token = streaming.listener.set(heard.append)
+    try:
+        chat = (await client.post("/api/chats", json={"message": "北京天气？", "model_id": "x:other"}, headers=ORIGIN)).json()
+    finally:
+        streaming.listener.reset(token)
+    await asyncio.wait_for(working.wait(), 5)
+    shown = (await client.get(f"/api/tasks/{chat['id']}/lead/activity")).json()
+    assert shown["running"] and shown["calls"][0]["tool"] == "Bash" and shown["calls"][0]["running"]
+    # Whoever waits for the answer (an automation's card) is told what it is doing.
+    assert heard == ["（正在运行命令：curl -s wttr.in/Beijing）"]
+    go_on.set()
+    await api.executor.lead_tasks[chat["id"]]
+    # Done: the running call was replaced by its result, and nothing is shown any more.
+    assert (await client.get(f"/api/tasks/{chat['id']}/lead/activity")).json() == {"running": False, "total": 0, "calls": []}
+
+
+def test_a_running_call_is_replaced_by_its_result():
+    log = supervisor.ChatActivity()
+    log.starting("GenerateImage", "海边的女孩")
+    log.starting("Read", "a.txt")
+    log.append({"turn": 1, "tool": "GenerateImage", "detail": "海边的女孩", "ok": True})
+    assert [(item["tool"], item.get("running", False)) for item in log] == [("GenerateImage", False), ("Read", True)]

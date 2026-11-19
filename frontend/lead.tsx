@@ -5,6 +5,7 @@ import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type 
 import { Composer, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
 import type { EngineerJob, EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, JoinEngineer, MENTION, tellEngineer, useEngineerJobs, type Act } from "./lead-engineer";
+import { ToolLog, type ToolCall } from "./plan-graph";
 
 export type Decision = {
   id: string; node_id?: string | null; event: string; action: string; reason?: string;
@@ -130,7 +131,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
       : entry.kind === "engineer"
         ? <EngineerEntry key={`${entry.job.id}-${entry.at}-${entry.first}`} job={entry.job} message={entry.message} first={entry.first}
             last={entry.last} act={act} onOpenEngineer={onOpenEngineer} />
-        : <ChatMessage key={entry.item.id} item={entry.item} who={chat} />;
+        : <ChatMessage key={entry.item.id} item={entry.item} who={chat} activityUrl={chat ? `${apiBase}/api/tasks/${encodeURIComponent(run.id)}/lead/activity` : undefined} />;
   return <section className={`diagnosis-card dx-panel lead-panel${waiting ? " waiting" : ""}`} aria-label="负责人">
     <div className="diagnosis-head">
       {chat ? <span className="lead-who"><span className="dx-avatar" aria-hidden="true"><Icon name="chat" size={14} /></span><b>{chat}</b>{run.project_dir && <span className="lead-model">{run.supervisor?.model_id?.startsWith("cli:") ? "可读项目，不改动文件" : "API 模型看不到项目文件"}</span>}</span>
@@ -265,15 +266,38 @@ function QuestionMessage({ item, step, waiting, onReply }: { item: Diagnosis; st
   </>;
 }
 
-function ChatMessage({ item, who }: { item: LeadMessage; who?: string | null }) {
+function ChatMessage({ item, who, activityUrl }: { item: LeadMessage; who?: string | null; activityUrl?: string }) {
   if (item.role === "user") return <UserMessage message={{ text: item.text, created_at: item.created_at, attachments: item.attachments }} />;
   return <article className="dx-msg dx-ai lead-said">
     <LeadMeta note="回复" at={item.created_at} who={who} />
     {item.status === "pending"
-      ? <p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{who ? "正在思考…" : "负责人正在看任务的情况…"}</p>
+      ? <><p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{who ? "正在思考…" : "负责人正在看任务的情况…"}</p>
+        {activityUrl && <ReplyActivity url={activityUrl} />}</>
       : item.status === "failed" ? <p className="error">{item.text}</p>
       : <div className="dx-report"><MarkdownView text={item.text} /></div>}
   </article>;
+}
+
+/** What a chat does while it answers with tools (a quick job): its calls as they happen, as a
+ * running step's page shows them. Nothing until it uses a tool. Refreshed every 3 seconds. */
+function ReplyActivity({ url }: { url: string }) {
+  const [calls, setCalls] = useState<ToolCall[]>([]);
+  useEffect(() => {
+    let live = true;
+    async function load() {
+      try {
+        const response = await fetch(url);
+        if (response.ok && live) setCalls((await response.json()).calls ?? []);
+      } catch { /* the next refresh tries again */ }
+    }
+    void load();
+    const timer = setInterval(load, 3000);
+    return () => { live = false; clearInterval(timer); };
+  }, [url]);
+  if (!calls.length) return null;
+  return <div className="reply-activity" aria-live="polite" aria-label="正在做">
+    <ToolLog calls={calls} open title="正在做" />
+  </div>;
 }
 
 function AskBox({ disabled, onAsk, engineer, chat = false }: { disabled: boolean; onAsk: AskLead; engineer: boolean; chat?: boolean }) {

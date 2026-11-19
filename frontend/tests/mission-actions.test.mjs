@@ -408,6 +408,10 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     if (path === "/api/models/sync") return json(state.catalogSync ?? { last_checked_at: null, providers: [] });
     if (path === "/api/models") return json(state.models);
     if (path === "/api/providers") return json(state.providers);
+    if (path.startsWith("/api/tasks/") && path.endsWith("/lead/activity")) {
+      state.chatActivityReads = (state.chatActivityReads ?? 0) + 1;
+      return json(state.chatActivity ?? { running: false, total: 0, calls: [] });
+    }
     if (path.startsWith("/api/engineer/jobs/") && path.endsWith("/activity")) {
       state.activityReads = (state.activityReads ?? 0) + 1;
       return json(state.engineerActivity ?? { running: false, total: 0, calls: [] });
@@ -2327,6 +2331,11 @@ test("the composer starts a chat with the chosen model instead of planning a tas
   assert.equal(page.querySelector(".task-metrics, .task-tabs"), null);
   assert.match(page.querySelector(".lead-panel").textContent, /WAL 是什么.*正在思考/s);
   assert.ok(page.querySelector('[aria-label="消息"]'));
+  // Answering without tools: nothing more. Doing a quick job: what it is doing, as it goes.
+  assert.equal(page.querySelector('.lead-panel [aria-label="正在做"]'), null);
+  state.chatActivity = { running: true, total: 1, calls: [{ turn: 0, tool: "Bash", detail: "curl -s wttr.in/Beijing", ok: null, running: true }] };
+  await act(async () => { state.pollAll(); for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.match(document.querySelector('.lead-panel [aria-label="正在做"]').textContent, /运行命令.*curl -s wttr\.in\/Beijing.*运行中/s);
 });
 
 test("chats sit in their own sidebar group, can be deleted, and turn into a task in place", async t => {

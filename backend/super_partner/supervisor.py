@@ -7,6 +7,7 @@ a new conversation when the old one is lost or its model runs out of quota."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 from pathlib import Path
@@ -165,6 +166,38 @@ def for_person(text: str) -> str:
     return text[:found.start()].rstrip() if found else text
 
 
+# A chat's quick job as it goes, by chat, while it answers (ChatActivity); GET .../lead/activity.
+CHAT_ACTIVITY: dict[str, list] = {}
+# What each tool is doing, said to the person waiting.
+TOOL_DOING = {"Bash": "运行命令", "Read": "读文件", "Write": "写文件", "Edit": "改文件", "MultiEdit": "改文件",
+              "Glob": "找文件", "Grep": "搜索", "LS": "看目录", "GenerateImage": "画图"}
+
+
+class ChatActivity(list):
+    """A chat's tool calls as they happen: each starts as running and is replaced by its result
+    (providers._loop), for the chat's page; whoever waits for the answer as it is written (an
+    automation, streaming.listener) is told what it is doing."""
+
+    def __init__(self):
+        super().__init__()
+        from . import streaming
+
+        self.hear = streaming.listener.get()
+
+    def starting(self, name: str, detail: str) -> None:
+        super().append({"turn": 0, "tool": name, "detail": detail, "ok": None, "running": True, "status": "running"})
+        if self.hear:
+            with contextlib.suppress(Exception):
+                self.hear(f"（正在{TOOL_DOING.get(name, name)}：{detail[:80]}）")
+
+    def append(self, entry) -> None:
+        for index in range(len(self) - 1, -1, -1):
+            if self[index].get("running") and (self[index]["tool"], self[index]["detail"]) == (entry.get("tool"), entry.get("detail")):
+                self[index] = entry
+                return
+        super().append(entry)
+
+
 def chat_tools(run: ExecutionRun) -> Optional[dict]:
     """What a chat may use for quick jobs (settings.chat_tools): its own scratch folder, the
     internet if allowed, and its limits per message. None: only talk (the setting is off, or it
@@ -311,8 +344,14 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
         try:
             model = by_id.get(session.model_id)
             tools = chat_tools(run) if model is not None and model.channel != "cli" else None
-            return await converse(providers, session, message + (tool_skills(message) if tools else ""), charged,
-                                  attachments, tools)
+            if tools:
+                tools["log"] = CHAT_ACTIVITY[run.id] = ChatActivity()
+            try:
+                return await converse(providers, session, message + (tool_skills(message) if tools else ""), charged,
+                                      attachments, tools)
+            finally:
+                if tools:
+                    CHAT_ACTIVITY.pop(run.id, None)
         except SessionLost as exc:
             # The model is fine; only its conversation is gone. Brief a new one.
             last_error = exc

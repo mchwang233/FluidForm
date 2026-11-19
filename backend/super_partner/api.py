@@ -1940,6 +1940,14 @@ def task_timeline(run_id: str, after: int = 0):
     return [event.model_dump(mode="json") for event in db.events(run_id, after)]
 
 
+@app.get("/api/tasks/{run_id}/lead/activity")
+def chat_activity(run_id: str):
+    """What a chat is doing while it answers with tools (supervisor.ChatActivity): empty otherwise."""
+    get_task(run_id)
+    calls = list(supervisor.CHAT_ACTIVITY.get(run_id) or [])
+    return {"running": run_id in supervisor.CHAT_ACTIVITY, "total": len(calls), "calls": calls[-200:]}
+
+
 @app.get("/api/tasks/{run_id}/nodes/{node_id}/activity")
 def node_activity(run_id: str, node_id: str, limit: int = 200):
     """What a running step has done so far in this attempt (activity.py): an API model's tool
