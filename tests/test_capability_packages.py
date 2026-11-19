@@ -13,7 +13,14 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from super_partner import capabilities, capability_packages, capability_runner, capability_sandbox
+from super_partner import (
+    capabilities,
+    capability_packages,
+    capability_runner,
+    capability_sandbox,
+    remembering,
+    supervisor,
+)
 from super_partner import secrets as secret_store
 from super_partner.config import settings
 from super_partner.models import Capability, LeadMessage, RunStatus
@@ -926,3 +933,34 @@ async def test_its_environment_is_built_in_the_sandbox_reaching_only_the_package
 def test_records_saved_before_packages_load():
     old = Capability.model_validate({"id": "x", "name": "x", "status": "active"})
     assert (old.source, old.entry, old.version) == ("task", "", "")
+
+
+async def test_an_automations_chat_remembers_what_people_tell_it_for_its_next_chats(packages, monkeypatch):
+    api, client, runner, _ = packages
+    monkeypatch.setattr(settings, "user_memory", True)
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}', [
+        "好，以后简短回答。\nREMEMBER: 成员1: 喜欢简短的回答\nREMEMBER: 成员1: 密码是 hunter2", "嗯。", "好的。\nFORGET: 简短"])
+    await upload(client, package([{"conversation": "c1", "text": "以后回答短一点"}]))
+    await enable(client)
+    [reply] = await eventually(lambda: lines("replies.jsonl"))
+    # The person sees the answer without its lines; the fact is kept, the secret is not.
+    assert reply["reply"] == "好，以后简短回答。"
+    state = runner.get("fake-bot")
+    assert state.state["memory"] == {"c1": ["成员1: 喜欢简短的回答"]}
+    assert api.db.get_run(state.state["chats"]["c1"]).lead_messages[-1].text == "好，以后简短回答。"
+    assert "REMEMBER:" in sent[0][2] or "REMEMBER:" in supervisor.chat_guide(api.db.get_run(state.state["chats"]["c1"]))
+    # A new chat of that conversation (another day, another model) is told it first.
+    state.state["chats"].pop("c1")
+    await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(conversation="c1", text="你好"), state)
+    assert "你记得的" in sent[-1][2] and "喜欢简短的回答" in sent[-1][2]
+    await api.automation_message(capabilities.load("fake-bot"), capability_runner.Asked(conversation="c1", text="还是详细点吧"), state)
+    assert state.state["memory"] == {"c1": []}
+
+
+def test_memory_lines_are_read_and_kept_within_bounds():
+    shown, remembered, forgotten = remembering.split("好的\nREMEMBER: a: 用 Python\nFORGET: Java")
+    assert (shown, remembered, forgotten) == ("好的", ["a: 用 Python"], ["Java"])
+    assert remembering.split("没有") == ("没有", [], [])
+    facts = remembering.apply([f"f{i}" for i in range(remembering.MAX_FACTS)], ["new", "f3", "我的 API key 是 x"], ["f0"])
+    assert len(facts) == remembering.MAX_FACTS and facts[-1] == "new" and "f0" not in facts and facts.count("f3") == 1
+    assert remembering.told([]) == ""

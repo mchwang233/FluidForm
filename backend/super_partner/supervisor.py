@@ -118,7 +118,10 @@ def chat_guide(run: ExecutionRun) -> str:
     guide = package_guide(str(origin["capability"]))
     where = {"p2p": "This is a private chat with one person.",
              "group": "This is a group chat: several people, who mostly talk among themselves."}.get(origin.get("chat_type"), "")
-    return "".join(f"{part}\n\n" for part in (where, f"How to talk here:\n{guide}" if guide else "") if part) + AUTOMATION_WORK
+    from .remembering import GUIDE as remembering
+
+    return ("".join(f"{part}\n\n" for part in (where, f"How to talk here:\n{guide}" if guide else "") if part)
+            + AUTOMATION_WORK + (remembering if settings.user_memory else ""))
 
 
 # What a chat an automation brings messages to is told about work (automation_message reads it).
@@ -135,7 +138,7 @@ AUTOMATION_WORK = (
 )
 TASK_LINE = re.compile(r"^\s*TASK:\s*(\{.*\})\s*$", re.MULTILINE)
 # Lines an answer ends with for FluidForm, not the person (TASK, ENGINEER): kept from what they see.
-ACTION_LINE = re.compile(r"^\s*(TASK|ENGINEER|SEND):", re.MULTILINE)
+ACTION_LINE = re.compile(r"^\s*(TASK|ENGINEER|SEND|REMEMBER|FORGET):", re.MULTILINE)
 # A file an automation chat's answer sends the person, one per line: its name in the chat's folder.
 SEND_LINE = re.compile(r"^\s*SEND:\s*(.+?)\s*$", re.MULTILINE)
 
@@ -170,7 +173,10 @@ def for_person(text: str) -> str:
 CHAT_ACTIVITY: dict[str, list] = {}
 # What each tool is doing, said to the person waiting.
 TOOL_DOING = {"Bash": "运行命令", "Read": "读文件", "Write": "写文件", "Edit": "改文件", "MultiEdit": "改文件",
-              "Glob": "找文件", "Grep": "搜索", "LS": "看目录", "GenerateImage": "画图"}
+              "Glob": "找文件", "Grep": "搜索", "LS": "看目录", "GenerateImage": "画图",
+              "WebSearch": "搜索网页", "WebFetch": "读网页",
+              "StartTask": "安排任务", "SendFile": "准备发送文件", "CallEngineer": "请平台工程师",
+              "Remember": "记下来", "Forget": "忘掉"}
 
 
 class ChatActivity(list):
@@ -207,7 +213,18 @@ def chat_tools(run: ExecutionRun) -> Optional[dict]:
     folder = Path(settings.workspace_root) / run.folder_id
     folder.mkdir(parents=True, exist_ok=True)
     return {"folder": folder, "network": settings.chat_tools_network, "turns": settings.chat_tool_turns,
-            "seconds": settings.chat_tool_seconds}
+            "seconds": settings.chat_tool_seconds, "actions": chat_action_names(run)}
+
+
+def chat_action_names(run: ExecutionRun) -> list[str]:
+    """The lines this chat may write, as tools (chat_actions.py; settings.chat_action_tools): an
+    automation's chat also starts tasks and sends files."""
+    if not settings.chat_action_tools:
+        return []
+    automation = bool((run.origin or {}).get("capability"))
+    if not automation:
+        return ["CallEngineer"]
+    return ["StartTask", "SendFile", "CallEngineer", *(["Remember", "Forget"] if settings.user_memory else [])]
 
 
 def tool_skills(message: str) -> str:
@@ -233,6 +250,9 @@ def chat_tools_note(run: ExecutionRun, model: Optional[ModelProfile]) -> str:
             "one line per file, SEND: <its name in your folder> (at most 5; a picture as png or jpg)."
             if automation else "")
     built = capabilities.section()
+    names = chat_action_names(run)
+    as_tools = (f" Instead of writing the TASK, SEND, ENGINEER, REMEMBER or FORGET lines described here, call the tools "
+                f"{', '.join(names)}: they do the same, and nothing you write as a line is needed." if names else "")
     return ("Quick jobs you do yourself, right away, without asking: this overrides \"nothing is run\" "
             f"above. You have tools (Bash, Read, Write, Edit, Glob, Grep, LS) in this chat's own folder, "
             f"{tools['folder']}.{online} Use them for what takes a minute: look something up online (the "
@@ -241,7 +261,7 @@ def chat_tools_note(run: ExecutionRun, model: Optional[ModelProfile]) -> str:
             f"{tools['turns']} tool calls and {tools['seconds']} seconds: keep it small, and answer with "
             "what you found. Anything bigger (a program, a document of several parts, the user's own "
             f"project, long research) is a task: {bigger}. Never say you looked something up when you "
-            f"did not.{send}\n\n" + (f"{built}\n\n" if built else ""))
+            f"did not.{send}{as_tools}\n\n" + (f"{built}\n\n" if built else ""))
 
 
 def chat_role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:

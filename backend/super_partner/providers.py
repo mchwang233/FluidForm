@@ -17,8 +17,8 @@ import httpx
 from . import agent as agent_tools
 from . import attachments as files
 from . import calls as call_records
+from . import chat_actions, mcp, progress, streaming
 from . import conversation as memory
-from . import progress, streaming
 from .budget import BudgetExceeded, ProviderError, StepLimitExceeded
 from .call_control import ProviderGate, input_bound, retry_after
 from .cli_channels import CLI_SPECS, CliChannelRegistry, InputTooLarge, SessionLost, input_too_large
@@ -275,12 +275,18 @@ class ProviderRegistry:
                 # folder, bounded in tool calls and in time.
                 extra.update(act=True, workspace=tools["folder"], max_turns=tools["turns"], network=tools["network"],
                              tool_log=tools.get("log"))
+            # What it asks FluidForm to do as tool calls becomes the lines it would have written.
+            noted: list[str] = []
+            asked = chat_actions.pending.set((noted, frozenset(tools.get("actions") or ())) if tools else None)
             call = self.complete(model_id, _transcript(session.history, prompt), spend_ok=spend_ok, effort=effort, **extra)
             try:
                 result = await (asyncio.wait_for(call, tools["seconds"]) if tools else call)
             except asyncio.TimeoutError:
                 result = ProviderResult(f"（这件事 {tools['seconds']} 秒内没做完，我先停下了。要继续的话，可以把它排成任务。）",
                                         0, 0, model_id)
+            finally:
+                chat_actions.pending.reset(asked)
+            result.text = chat_actions.with_actions(result.text, noted)
             session.history += [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.text}]
         session.calls += 1
         return result
@@ -521,6 +527,10 @@ class ProviderRegistry:
             from .images import available as image_models
             if not agent.read_only and not agent.host and image_models():
                 tools = [*tools, agent_tools.IMAGE_TOOL]
+            if not agent.read_only and not agent.host:
+                from . import web
+                tools = [*tools, *web.tools_for(agent), *chat_actions.offered(), *await mcp.definitions(agent)]
+                # Pictures and searches are paid by the piece, from the same budget as the call.
                 agent.budget = spend_ok
         if conversation and conversation.recall and agent:
             tools = [*tools, memory.RECALL_TOOL]

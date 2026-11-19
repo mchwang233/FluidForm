@@ -30,7 +30,7 @@ import weakref
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
-from . import environment
+from . import chat_actions, environment, mcp
 from .config import settings
 from .quality import SKIP_DIRS, private_paths, review_path
 from .secrets import SECRET_ENV
@@ -583,6 +583,12 @@ class Workspace:
                 return await self.bash(args.get("command"), args.get("timeout"))
             if name == IMAGE_TOOL["name"] and not self.read_only and not self.host:
                 return await self.generate_image(args)
+            if name in chat_actions.TOOLS and not self.read_only and not self.host:
+                return chat_actions.run(name, args)
+            if name.startswith(mcp.PREFIX) and not self.read_only and not self.host:
+                return await mcp.call(self, name, args)
+            if name in {"WebSearch", "WebFetch"} and not self.read_only and not self.host and self.network:
+                return await (self.web_search(args) if name == "WebSearch" else self.web_fetch(args))
             if name in settings.api_tool_extensions and not self.read_only and not self.host:
                 from .extensions import execute
                 return await execute(self, name, args)
@@ -664,6 +670,37 @@ class Workspace:
         saved = (f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). It is a real picture "
                  "of what you described; Read it to look at it if you can see images.")
         return saved, True
+
+    async def web_search(self, args: dict) -> tuple[str, bool]:
+        """WebSearch: results from a search service (web.search), charged to the call's budget."""
+        from . import web
+
+        services = web.search_services()
+        if not services:
+            raise ToolError("no search service is set up on this machine")
+        budget = self.budget
+        if budget is not None and hasattr(budget, "can_spend") and not budget.can_spend(web.price(services[0])):
+            raise ToolError("the budget left cannot pay for a search")
+        try:
+            count = int(args.get("count") or 5)
+        except (TypeError, ValueError):
+            count = 5
+        try:
+            results, service = await web.search(str(args.get("query") or ""), count)
+        except web.WebError as exc:
+            raise ToolError(str(exc)) from exc
+        if budget is not None and hasattr(budget, "record_usd"):
+            await budget.record_usd(web.price(service))
+        return web.format_results(results), True
+
+    async def web_fetch(self, args: dict) -> tuple[str, bool]:
+        """WebFetch: a public page as text (web.fetch)."""
+        from . import web
+
+        try:
+            return await web.fetch(args.get("url")), True
+        except web.WebError as exc:
+            raise ToolError(str(exc)) from exc
 
     def write(self, args: dict) -> str:
         self._require_write()

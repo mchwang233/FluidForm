@@ -30,6 +30,7 @@ from . import (
     folders,
     learning,
     publish,
+    remembering,
     retrospect,
     skills,
     streaming,
@@ -152,16 +153,31 @@ catalog_sync = CatalogSync(
 )
 
 
+def resumes_by_itself(run: ExecutionRun) -> bool:
+    """A task cut off by a restart goes on by itself when resume_after_restart is on and it
+    touches nobody's project and waits for nobody; otherwise it waits for the user."""
+    return (settings.resume_after_restart and not run.project_dir and not run.waiting_diagnosis_id
+            and not run.maintenance_id and not run.engineer_job_id)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.interrupt_model_calls()
     catalog_sync.start()
+    resuming = []
     for run in db.list_runs():
-        # An interrupted run may have left a project half-edited; resume only once confirmed.
         if run.status in {RunStatus.QUEUED, RunStatus.RUNNING}:
-            run.status = RunStatus.PAUSED
-            db.save_run(run)
-            db.add_event(Event(run_id=run.id, kind="approval.required", data={"reason": "interrupted"}))
+            if resumes_by_itself(run):
+                # Finished steps keep their results; the one cut off runs again (Executor.execute).
+                run.status = RunStatus.QUEUED
+                db.save_run(run)
+                db.add_event(Event(run_id=run.id, kind="run.restart_resumed", data={}))
+                resuming.append(run.id)
+            else:
+                # An interrupted run may have left a project half-edited; resume only once confirmed.
+                run.status = RunStatus.PAUSED
+                db.save_run(run)
+                db.add_event(Event(run_id=run.id, kind="approval.required", data={"reason": "interrupted"}))
         if run.lead_thinking:
             # The restart cut the lead off mid-decision.
             run.lead_thinking = None
@@ -174,6 +190,8 @@ async def lifespan(_: FastAPI):
     executor.restore_platform()
     executor.restore_engineer()
     executor.restore_learning()
+    for run_id in resuming:
+        executor.start(run_id)
     # Automation packages, when switched on: tasks asked for through them hear how they ended.
     executor.end_listeners.append(automation_task_ended)
     start_automations()
@@ -642,7 +660,7 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
         writer = brief_writer(list(models.values()), configured) if settings.project_brief else None
         brief, brief_cost = await briefing.planning_brief(root, settings.data_dir, providers, writer)
     session = SupervisorSession()
-    plan = await _quick_plan(body, request, background, configured) if not (parent or project_dir or decided) else None
+    plan = await _quick_plan(body, request, background, configured, project_dir) if not (parent or decided) else None
     try:
         plan = plan or await autonomous_plan(
             f"{background}\n\n新需求：\n{request}" if background else request, list(models.values()), configured, providers,
@@ -675,19 +693,26 @@ async def _make_plan(body: CreateTask, parent: Optional[ExecutionRun] = None, de
     return plan, session, attached, project_dir, background, lessons
 
 
-async def _quick_plan(body: CreateTask, request: str, background: Optional[str], configured: set[str]) -> Optional[TaskPlan]:
+async def _quick_plan(body: CreateTask, request: str, background: Optional[str], configured: set[str],
+                      project_dir: Optional[str] = None) -> Optional[TaskPlan]:
     """With settings.quick_tasks, a task one model can do in one go (triage.quick) as a one-step
-    plan, without the lead's planning (minutes saved); None: plan it as usual."""
-    if not settings.quick_tasks:
+    plan, without the lead's planning (minutes saved); with settings.solo_tasks also one a strong
+    model carries through alone, in a project too. None: plan it as usual."""
+    if not settings.quick_tasks and not settings.solo_tasks:
         return None
-    step, judged = await triage.quick(body.prompt, providers, brief_writer(list(models.values()), configured))
-    if not step:
+    step, judged = await triage.quick(body.prompt, providers, brief_writer(list(models.values()), configured),
+                                      solo=settings.solo_tasks, project=bool(project_dir))
+    if not step or (step["shape"] == "quick" and not settings.quick_tasks):
         return None
-    node = TaskNode(id=uuid4().hex[:8], title=step["title"], capability=step["capability"], difficulty="easy",
+    solo = step["shape"] == "solo"
+    node = TaskNode(id=uuid4().hex[:8], title=step["title"], capability=step["capability"],
+                    difficulty="hard" if solo else "easy", needs_workspace=bool(project_dir),
                     instructions=f"{background}\n\n新需求：\n{request}" if background else request,
                     needs_images=step["needs_images"], acceptance_criteria=step["acceptance"])
+    note = ("一个模型连续做完：没有拆成多步，交给一个强模型带着工具一路做到底" if solo
+            else "一步就能做完：没有排详细计划，直接交给一个模型做")
     return TaskPlan(summary=step["title"], title=step["title"], nodes=[node], planning_cost_usd=round(judged, 6),
-                    planning_note="一步就能做完：没有排详细计划，直接交给一个模型做")
+                    planning_note=note, in_project=bool(project_dir))
 
 
 class ChoiceAnswers(BaseModel):
@@ -1492,8 +1517,12 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             requested, pick = automation.state["model_id"], _automation_chat_model(automation, needs_vision=needs_vision)
             # The answer's lead runs in a task started here, which takes this context along.
             listening = streaming.listener.set(asked.on_text)
+            # A new chat of this conversation is told what was kept about its people.
+            remembered = automation.state.setdefault("memory", {}).get(asked.conversation, []) \
+                if settings.user_memory and asked.conversation else []
             try:
-                run = _start_chat(said, max(automation.remaining(), 0.01), True, None, pick.id, attached,
+                run = _start_chat(remembering.told(remembered) + said, max(automation.remaining(), 0.01), True, None,
+                                  pick.id, attached,
                                   auto_routed=True, spent=spent)
             finally:
                 streaming.listener.reset(listening)
@@ -1560,6 +1589,7 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     cost = round(latest.actual_cost_usd - before + extra, 6)
     sent: list[str] = []
     if answer and answer.status == "done":
+        text = _remember(automation, asked, latest, answer.id, text or "")
         text, names = supervisor.split_sends(text or "")
         if names:
             sent = _send_files(capability, automation, latest, names)
@@ -1568,6 +1598,24 @@ async def automation_message(capability: Capability, asked: capability_runner.As
             _record_answer(latest.id, answer.id, text)
         text = await _automation_task(capability, asked, automation, latest, answer.id, text, origin)
     return text, cost, sent
+
+
+def _remember(automation: capability_runner.Automation, asked: capability_runner.Asked, chat: ExecutionRun,
+              answer_id: str, text: str) -> str:
+    """An answer without its REMEMBER and FORGET lines, which update what is kept about this
+    conversation's people (remembering.py; settings.user_memory). Without the setting the lines
+    are only taken out."""
+    shown, remembered, forgotten = remembering.split(text)
+    if shown == text:
+        return text
+    if settings.user_memory and asked.conversation:
+        memory = automation.state.setdefault("memory", {})
+        memory[asked.conversation] = remembering.apply(memory.get(asked.conversation, []), remembered, forgotten)
+        automation.save()
+        for fact in remembered:
+            automation.note(f"记下：{fact[:60]}")
+    _record_answer(chat.id, answer_id, shown)
+    return shown
 
 
 # Files an automation chat's answer may send (SEND lines): how many, each at most the attachment size.

@@ -187,6 +187,7 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "plan.created":data=>`生成执行计划（${data.planning_method==="model"?`由 ${modelLabel(data.planner_model_id)} 规划`:"规则规划"}）`,
   "run.network_changed":data=>data.allow?"允许本任务联网":"关闭本任务联网",
   "run.confirmed":data=>`确认执行，预算 ${formatUsd(data.budget_usd??0)}`,
+  "run.restart_resumed":()=>"服务重启后接着做，已完成的步骤保留",
   "run.resumed":data=>`从中断处继续，预算 ${formatUsd(data.budget_usd??0)}`,
   "run.started":()=>"开始执行",
   "run.preflight_started":()=>"执行前检查：沙箱、工具、网络和模型",

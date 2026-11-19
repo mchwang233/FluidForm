@@ -86,3 +86,35 @@ def status(task_id: str, as_json: bool = False):
     response.raise_for_status()
     data = response.json()
     typer.echo(json.dumps(data, ensure_ascii=False, indent=2) if as_json else f"{data['status']} ${data['actual_cost_usd']:.6f}")
+
+
+SUITE = typer.Argument(Path("evals/basic.json"), help="The cases to run (JSON)")
+OUT = typer.Option(None, help="Write the report here (JSON)")
+AGAINST = typer.Option(None, help="An earlier report to compare with")
+ONLY = typer.Option(None, help="Run only these cases, by name")
+
+
+@app.command("eval")
+def run_eval(suite: Path = SUITE, out: Optional[Path] = OUT, against: Optional[Path] = AGAINST,
+             only: Optional[list[str]] = ONLY):
+    """Run a fixed set of tasks on the running service and report passes, time and cost."""
+    import asyncio
+
+    from . import evals
+
+    async def go():
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=60) as client:
+            return await evals.run_suite(client, evals.load(suite), only)
+
+    report = asyncio.run(go())
+    for row in report["cases"]:
+        mark = "通过" if row["passed"] else "没通过"
+        typer.echo(f"{row['name']:<16} {mark:<4} 排计划 {row['plan_seconds']:>5.0f}s  执行 {row.get('run_seconds', 0):>5.0f}s  "
+                   f"${row.get('cost_usd', 0):.4f}  {'；'.join(row.get('problems') or [])}")
+    total = report["summary"]
+    typer.echo(f"通过 {total['passed']}/{total['cases']}，中位耗时 {total['median_seconds']} 秒，总花费 ${total['total_cost_usd']}")
+    if against:
+        for line in evals.compare(report, json.loads(against.read_text())):
+            typer.echo(line)
+    if out:
+        out.write_text(json.dumps(report, ensure_ascii=False, indent=2))

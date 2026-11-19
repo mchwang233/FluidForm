@@ -148,3 +148,44 @@ async def test_a_failed_check_is_not_remembered(tmp_path, monkeypatch):
     run = ExecutionRun(id="r", prompt="p", status=RunStatus.QUEUED, budget_usd=1,
                        plan=TaskPlan(summary="s", nodes=[TaskNode(id="n", title="t", instructions="i", capability="coding")]))
     assert preflight.passed_before(preflight.cache_key(run)) is None
+
+
+SOLO = ('{"shape": "solo", "title": "修登录报错", "capability": "coding", "needs_images": false, '
+        '"acceptance": "登录不再报错，测试通过"}')
+
+
+async def test_work_one_model_carries_through_alone_gets_one_hard_step_in_a_project_too(task_api, monkeypatch, tmp_path):
+    api, client = task_api
+    monkeypatch.setattr(settings, "solo_tasks", True)
+    asked, planned = judging(api, monkeypatch, SOLO)
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.setattr(settings, "project_roots", [tmp_path])
+    created = await client.post("/api/tasks", json={"prompt": "修一下登录报错", "project_dir": str(project)}, headers=ORIGIN)
+    assert created.status_code == 201, created.text
+    plan = created.json()["plan"]
+    [node] = plan["nodes"]
+    assert not planned and asked[0].startswith("How should this request be done?") and "project folder" in asked[0]
+    assert (node["difficulty"], node["needs_workspace"], plan["in_project"]) == ("hard", True, True)
+    assert plan["planning_note"].startswith("一个模型连续做完")
+
+
+async def test_shapes_are_read_defensively():
+    class Model:
+        id = "x:cheap"
+        input_per_million = output_per_million = cached_input_per_million = 0
+
+    class Providers:
+        def __init__(self, text):
+            self.text = text
+
+        async def complete(self, *args, **kwargs):
+            return ProviderResult(self.text, 1, 1)
+
+    assert (await triage.quick("x", Providers(SOLO), Model(), solo=True))[0]["shape"] == "solo"
+    assert (await triage.quick("x", Providers('{"shape": "plan"}'), Model(), solo=True))[0] is None
+    # A project's task is never "quick" (it touches their files), and without solo never judged.
+    assert (await triage.quick("x", Providers('{"shape": "quick"}'), Model(), solo=True, project=True))[0] is None
+    assert (await triage.quick("x", Providers(SOLO), Model(), project=True))[0] is None
+    # Without solo, the old question and answer.
+    assert (await triage.quick("x", Providers(SOLO), Model()))[0] is None

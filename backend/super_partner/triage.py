@@ -73,17 +73,36 @@ QUICK_PROMPT = (
     '"capability": "coding | research | chinese | tool_use | structured_output | planning", '
     '"needs_images": true or false, "acceptance": "how to tell it is done, one sentence"}}\n\nRequest:\n{text}'
 )
+# With settings.solo_tasks: also work one model can carry through by itself with tools, at length.
+SHAPE_PROMPT = (
+    "How should this request be done? It goes to models with a sandbox, the internet, an image tool{project}.\n"
+    "- quick: one model in one go, a few minutes, without anyone's project files: one picture, one short "
+    "document, a conversion or calculation, look something up and summarise it.\n"
+    "- solo: one capable model carrying it through by itself with its tools, step after step, in up to an "
+    "hour: one coherent piece of work with one result, such as fixing a bug, adding one feature, writing "
+    "one script or one report from research{in_project}.\n"
+    "- plan: anything else: several separate deliverables, a system with several parts, work needing "
+    "several kinds of expertise in turn, or anything unclear. When unsure, plan.\n"
+    'Answer with only JSON: {{"shape": "quick | solo | plan", "title": "a short title in the request\'s language", '
+    '"capability": "coding | research | chinese | tool_use | structured_output | planning", '
+    '"needs_images": true or false, "acceptance": "how to tell it is done, one sentence"}}\n\nRequest:\n{text}'
+)
 QUICK_CAPABILITIES = {"coding", "research", "chinese", "tool_use", "structured_output", "planning"}
 
 
-async def quick(text: str, providers, model: Optional[ModelProfile]) -> tuple[Optional[dict], float]:
+async def quick(text: str, providers, model: Optional[ModelProfile], solo: bool = False,
+                project: bool = False) -> tuple[Optional[dict], float]:
     """Whether a task is quick (one step, no plan needed), and the step if so; what deciding cost.
-    Anything unclear, or going wrong, means it is planned as usual (None)."""
-    if model is None:
+    With ``solo``, also whether one model can carry it through alone (shape "solo"); a task in a
+    ``project`` can only be that. Anything unclear, or going wrong, means it is planned as usual (None)."""
+    if model is None or (project and not solo):
         return None, 0.0
+    prompt = (SHAPE_PROMPT.format(text=text[:MAX_REQUEST_CHARS],
+                                  project=" and the user's project folder" if project else "",
+                                  in_project=" in the user's project" if project else "")
+              if solo else QUICK_PROMPT.format(text=text[:MAX_REQUEST_CHARS]))
     try:
-        result = await asyncio.wait_for(providers.complete(
-            model.id, QUICK_PROMPT.format(text=text[:MAX_REQUEST_CHARS]), effort="low"), TIMEOUT_SECONDS)
+        result = await asyncio.wait_for(providers.complete(model.id, prompt, effort="low"), TIMEOUT_SECONDS)
     except Exception as exc:
         log.warning("judging whether a task is quick with %s failed: %s", model.id, exc)
         return None, 0.0
@@ -93,9 +112,12 @@ async def quick(text: str, providers, model: Optional[ModelProfile]) -> tuple[Op
         step = json.loads(found.group(0)) if found else None
     except ValueError:
         step = None
-    if not isinstance(step, dict) or step.get("quick") is not True:
+    if not isinstance(step, dict):
         return None, cost
-    return {"title": str(step.get("title") or text.splitlines()[0])[:80].strip() or "任务",
+    shape = step.get("shape") if solo else ("quick" if step.get("quick") is True else None)
+    if shape not in ({"solo"} if project else {"quick", "solo"}):
+        return None, cost
+    return {"shape": shape, "title": str(step.get("title") or text.splitlines()[0])[:80].strip() or "任务",
             "capability": step.get("capability") if step.get("capability") in QUICK_CAPABILITIES else "tool_use",
             "needs_images": step.get("needs_images") is True,
             "acceptance": str(step.get("acceptance") or "")[:500]}, cost

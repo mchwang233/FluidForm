@@ -3,12 +3,30 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Settings that go together, chosen with one name (SUPER_PARTNER_PROFILE); a setting given on
+# its own still wins. Empty: every setting keeps its own default.
+PROFILES: dict[str, dict] = {
+    # Small things done at once: one-step and one-model tasks without the lead's planning, easy
+    # steps on their own result, a passed check reused, tasks going on after a restart, chats
+    # doing small jobs themselves.
+    "fast": {"quick_tasks": True, "solo_tasks": True, "review_easy_steps": False, "preflight_cache_minutes": 60,
+             "resume_after_restart": True, "chat_tools": True, "chat_action_tools": True},
+    # Small tasks fast, everything else planned and reviewed as usual.
+    "balanced": {"quick_tasks": True, "preflight_cache_minutes": 30, "resume_after_restart": True,
+                 "chat_tools": True, "chat_action_tools": True},
+    # Every task planned, every step's result accepted by another model.
+    "careful": {"quick_tasks": False, "solo_tasks": False, "acceptance": True, "review_easy_steps": True,
+                "preflight_cache_minutes": 0},
+}
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SUPER_PARTNER_", env_file=".env")
+    # A set of settings by name (PROFILES): fast, balanced or careful; "" for none.
+    profile: Literal["", "fast", "balanced", "careful"] = ""
 
     data_dir: Path = Path(".super-partner")
     database_path: Optional[Path] = None
@@ -104,8 +122,24 @@ class Settings(BaseSettings):
     reasoning_fallback: Literal["report", "strict"] = "report"
     # Configured tools receive one JSON argv argument inside the ordinary task sandbox.
     api_tool_extensions: dict[str, dict] = Field(default_factory=dict)
+    # MCP servers whose tools the API models' steps and chats get (mcp.py): {name: {"command":
+    # [argv], "secrets": [VARIABLE], "timeout": seconds}}. Each runs in the step's sandbox.
+    mcp_servers: dict[str, dict] = Field(default_factory=dict)
+    # Search services for the WebSearch tool, first choice first (web.py), e.g. ["glm:search_std"];
+    # empty: no such tool. Offered only to steps and chats allowed the internet.
+    web_search_models: list[str] = Field(default_factory=list)
+    # The WebFetch tool: a public page as text, for steps and chats allowed the internet.
+    web_fetch: bool = False
     # before_tool / after_tool argv commands receive one JSON event. Empty: no hooks.
     api_tool_hooks: dict[str, list[list[str]]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def apply_profile(self):
+        """The profile's settings, except those given on their own."""
+        for name, value in PROFILES.get(self.profile, {}).items():
+            if name not in self.model_fields_set:
+                setattr(self, name, value)
+        return self
 
     @field_validator("provider_limits")
     @classmethod
@@ -223,9 +257,21 @@ class Settings(BaseSettings):
     # A task one model can do in one go (triage.quick) gets a one-step plan, without the lead's
     # planning; its step is easy (see review_easy_steps). Off: every task is planned.
     quick_tasks: bool = False
+    # A task one strong model can carry through alone with its tools (triage.SHAPE_PROMPT "solo"),
+    # in a project too, gets a one-step hard plan without the lead's planning. Off: planned.
+    solo_tasks: bool = False
     # A passed check before a task's first step stands this long for the next task with the same
     # tools, network, models and recorded environment (preflight.py). 0: every task is checked.
     preflight_cache_minutes: int = Field(default=0, ge=0, le=1440)
+    # A task cut off by a service restart goes on by itself from its finished steps when it works
+    # in no project and waits for nobody (api.resumes_by_itself). Off: it waits for the user.
+    resume_after_restart: bool = False
+    # A chat with tools asks FluidForm to start a task, send a file or call the platform engineer
+    # through tool calls (chat_actions.py) besides the lines it can write. Off: lines only.
+    chat_action_tools: bool = False
+    # An automation's chat keeps lasting facts people tell it (REMEMBER lines; remembering.py) by
+    # conversation, and a new chat there is told them. Off: nothing is kept.
+    user_memory: bool = False
     # Accepting each step's result: off, a step that finishes has passed. No reviewer, no declared
     # check or artifact acceptance command, no verification steps sending work back. The lead's
     # final check of the whole result stays (leading._final_review). A step saying it cannot do
