@@ -424,7 +424,8 @@ class Leading:
         try:
             run = self.db.get_run(run_id)
             # A chat is only a conversation; a task's lead answers as the lead who follows it.
-            prompt = supervisor.chat_opening(run, text) if run.kind == "chat" else supervisor.chat_message(text)
+            model = self.model_lookup.get(run.supervisor.model_id) if run.supervisor else None
+            prompt = supervisor.chat_opening(run, text, model) if run.kind == "chat" else supervisor.chat_message(text)
             # The files sent with this message (and a chat's first ones) are among the task's
             # attachments the lead has not seen yet; ask_lead gives them to it.
             answer, status = await self.ask_lead(run_id, prompt), "done"

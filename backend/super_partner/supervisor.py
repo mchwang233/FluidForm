@@ -95,23 +95,39 @@ def chat_transcript(run: ExecutionRun, limit: int = MAX_CHAT_HANDOVER_CHARS) -> 
     return "\n\n".join(reversed(lines))
 
 
-def chat_opening(run: ExecutionRun, text: str) -> str:
-    """A message in a chat: its first one carries the role and the folder it may read."""
+def identity(model: Optional[ModelProfile]) -> str:
+    """Who a chat's model is, told to it: it cannot know itself, and guesses (a model trained on
+    another's conversations takes itself for that one)."""
+    if model is None:
+        return ""
+    way = "a membership CLI" if model.channel == "cli" else "its API"
+    return (f"You are {model.display_name} ({model.id}, through {way}). If asked which model you are, "
+            "say so; do not guess another.\n\n")
+
+
+def chat_opening(run: ExecutionRun, text: str, model: Optional[ModelProfile] = None) -> str:
+    """A message in a chat: its first one carries the role, who ``model`` (its own) is, and the
+    folder it may read."""
     if run.supervisor and run.supervisor.calls:
         return text
     if run.supervisor and run.supervisor.previous:
         # A deliberate model change starts a fresh native/API session, as a lost session does.
-        return CHAT_ROLE + handover(run) + text
+        return CHAT_ROLE + identity(model) + handover(run, model.id if model else None) + text
     folder = f"The user's project folder, which you may read: {run.project_dir}\n\n" if run.project_dir else ""
-    return CHAT_ROLE + folder + text
+    return CHAT_ROLE + identity(model) + folder + text
 
 
-def handover(run: ExecutionRun) -> str:
+def handover(run: ExecutionRun, current: Optional[str] = None) -> str:
     """What a new lead needs to take over a running task: the request, the plan and where every
     step stands, and the latest problems."""
     if run.kind == "chat":
         earlier = chat_transcript(run)
-        return ("This conversation continues one the user had with another model; the messages so far:\n"
+        session = run.supervisor
+        others = [item for item in dict.fromkeys([*(session.previous if session else []), session.model_id if session else None])
+                  if item and item != current]
+        who = f" ({', '.join(others)})" if others else ""
+        return (f"This conversation continues one the user had with another model{who}; the 助手 replies below "
+                "are that model's, not yours, and what it said about itself is not about you. The messages so far:\n"
                 f"{earlier or '（none）'}\n\n" + (f"Project folder you may read: {run.project_dir}\n\n" if run.project_dir else ""))
     lines = [
         "You are taking over as the lead of a task that is already under way.",
@@ -144,8 +160,8 @@ def chat_folder(run: ExecutionRun) -> Optional[str]:
     return run.project_dir if run.kind == "chat" else None
 
 
-def role(run: ExecutionRun) -> str:
-    return CHAT_ROLE if run.kind == "chat" else ROLE
+def role(run: ExecutionRun, model: Optional[ModelProfile] = None) -> str:
+    return CHAT_ROLE + identity(model) if run.kind == "chat" else ROLE
 
 
 async def converse(providers, session: SupervisorSession, prompt: str, charged, attachments=()) -> tuple[str, SupervisorSession]:
@@ -173,7 +189,7 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
             if pick is None:
                 break
             session = new_session(pick, run.supervisor, chat_folder(run))
-            message = role(run) + handover(run) + prompt
+            message = role(run, pick) + handover(run, pick.id) + prompt
         try:
             return await converse(providers, session, message, charged, attachments)
         except SessionLost as exc:
@@ -181,7 +197,7 @@ async def ask(providers, models: list[ModelProfile], configured: set[str], run: 
             last_error = exc
             model = by_id.get(session.model_id)
             session = new_session(model, session, chat_folder(run)) if model else None
-            message = role(run) + handover(run) + prompt
+            message = role(run, model) + handover(run, model.id if model else None) + prompt
         except (ModelUnavailable, ProviderError, asyncio.TimeoutError) as exc:
             last_error = exc
             tried.add(session.model_id)

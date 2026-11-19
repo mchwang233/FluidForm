@@ -1,5 +1,6 @@
 """A chat: only a conversation with a model, which the user can later turn into a task."""
 import pytest
+from super_partner import supervisor
 from super_partner.config import settings
 from super_partner.models import (
     CapabilityScore,
@@ -392,3 +393,22 @@ async def test_the_models_page_gets_each_models_calls_spend_and_work(task_api):
     assert best["runs"] == [{"id": "ime", "title": "中文输入法", "kind": "task", "calls": 2}]
     assert body["models"]["x:other"]["runs"] == []
     assert (await client.get("/api/models/usage?days=60")).json()["models"]["x:best"]["calls"] == 3
+
+
+async def test_a_chat_model_is_told_which_model_it_is_and_that_earlier_replies_were_not_its_own(task_api, monkeypatch):
+    """Regression: told nothing about itself, a chat model guessed its identity, and after a model
+    change took the previous model's self-description from the transcript as its own."""
+    api, client = task_api
+    sent = chatting(api, monkeypatch, ["我是 X:OTHER。"])
+    chat = (await client.post("/api/chats", json={"message": "你是谁？", "model_id": "x:other"}, headers=ORIGIN)).json()
+    await api.executor.lead_tasks[chat["id"]]
+    assert "X:OTHER (x:other, through its API)" in sent[0][2]
+    # Another model takes the conversation over: told who it is, and whose the earlier replies were.
+    run = api.db.get_run(chat["id"])
+    run.supervisor = supervisor.new_session(BEST, run.supervisor)
+    api.db.save_run(run)
+    assert (await client.post(f"/api/tasks/{chat['id']}/lead", json={"message": "你到底是谁？"}, headers=ORIGIN)).status_code == 202
+    await api.executor.lead_tasks[chat["id"]]
+    model, _, prompt = sent[1]
+    assert model == "x:best" and "X:BEST (x:best, through its API)" in prompt
+    assert "x:other" in prompt and "我是 X:OTHER。" in prompt and "not yours" in prompt
