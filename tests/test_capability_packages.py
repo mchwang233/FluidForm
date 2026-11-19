@@ -2,7 +2,6 @@
 docs/design/capability-packages.md): uploaded and uninstalled on their own, run in a sandbox that
 reaches only declared hosts, and automations that ask Super Partner and hear how tasks ended."""
 import asyncio
-import importlib.util
 import io
 import json
 import os
@@ -18,8 +17,6 @@ from super_partner import secrets as secret_store
 from super_partner.config import settings
 from super_partner.models import Capability, RunStatus
 from test_chat import ORIGIN, triaging
-
-ROOT = Path(__file__).resolve().parents[1]
 
 # A fake automation: asks what asks.json lists, one at a time, and writes what it hears.
 FAKE = r'''
@@ -389,31 +386,3 @@ async def test_its_environment_is_built_in_the_sandbox_reaching_only_the_package
 def test_records_saved_before_packages_load():
     old = Capability.model_validate({"id": "x", "name": "x", "status": "active"})
     assert (old.source, old.entry, old.version) == ("task", "", "")
-
-
-# ---- the Feishu bot, the first package ----
-
-def test_the_feishu_package_answers_private_and_mentioned_text_once_started():
-    folder = ROOT / "capabilities" / "feishu-bot"
-    spec = importlib.util.spec_from_file_location("feishu_bot", folder / "bot.py")
-    bot = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(bot)  # the SDK is imported only when it runs
-    now = time.time()
-
-    def text(value, mentions=(), chat_type="p2p", message_type="text", sent=None):
-        return bot.wanted(message_type, chat_type, json.dumps({"text": value}, ensure_ascii=False), list(mentions),
-                          int((sent or now) * 1000), now)
-    assert text("你好") == "你好"
-    assert text("@_user_1 帮我看看", chat_type="group") is None
-    assert text("@_user_1 帮我看看", mentions=["@_user_1"], chat_type="group") == "帮我看看"
-    assert text("图", message_type="image") is None and text("早上的", sent=now - 3600) is None
-    assert bot.cut("长" * 5000).endswith(bot.CUT_NOTE)
-    # Its manifest installs: only Feishu's hosts, its two secrets.
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for path in folder.iterdir():
-            if path.is_file():
-                archive.write(path, f"feishu-bot/{path.name}")
-    manifest = capability_packages.read(buffer.getvalue())
-    assert manifest.kind == "automation" and manifest.secrets == ["FEISHU_APP_ID", "FEISHU_APP_SECRET"]
-    assert all(domain.endswith(("feishu.cn", "larksuite.com")) for domain in manifest.domains)

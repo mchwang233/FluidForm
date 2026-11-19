@@ -6,7 +6,7 @@ A capability (docs/design/capabilities.md) can be uploaded as a package and unin
 without changing Super Partner's source or restarting it. An automation package keeps running in
 the background (the runner capabilities.md left for later). Super Partner knows nothing of any one
 service: the Feishu bot, built into the core before, becomes the first package
-(`capabilities/feishu-bot/`), which can be uninstalled and uploaded again.
+(`feishu-bot/` on the `capabilities` branch), which can be uninstalled and uploaded again.
 
 ## The package
 
@@ -85,7 +85,8 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - **卸载.**
 - **Removed from the core:** `feishu.py`, the Feishu endpoints, settings, menu item and panel
   (`frontend/feishu.tsx`), and the optional dependency `lark-oapi`.
-- **`capabilities/feishu-bot/`:** the Feishu bot as a package.
+- **The `capabilities` branch:** packages are kept apart from Super Partner's source, on a branch
+  of their own with no shared history (`feishu-bot/`: the Feishu bot).
   - Its own `lark-oapi` in its `requirements.txt`.
   - Reaches `*.feishu.cn` and `*.larksuite.com`.
   - Answers private messages and @ in groups, once each, never the backlog.
@@ -116,7 +117,8 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - secrets go only to the keyring.
 - **Old records load.**
 
-`capabilities/feishu-bot/` has its own test of which messages it answers, run by the backend tests.
+A package checks itself (`check` in its manifest, run when installed): `feishu-bot` checks which
+messages it answers.
 `mission-actions.test.mjs` covers the shelf: uploading, the secrets form, the confirmation before
 enabling, and uninstalling.
 
