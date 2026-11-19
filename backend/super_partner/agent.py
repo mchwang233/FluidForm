@@ -196,8 +196,9 @@ IMAGE_TOOL = {
         "Makes a picture from a description with an image model and saves it in the working directory.\n"
         "- Describe what is in it, its style, light and composition; any language works.\n"
         "- shape: square, portrait (9:16) or landscape (16:9).\n"
-        "- It costs money per picture: make the ones asked for, and look at the result (Read it) before "
-        "making another.\n"
+        "- It costs money per picture: make the ones asked for. If you can see images, Read the result "
+        "to check it before making another; if you cannot, it is made as described: report it as done, "
+        "not as something you could not do.\n"
         "- This is the way to make real pictures; do not draw them with code instead."
     ),
     "parameters": {"type": "object", "properties": {
@@ -660,7 +661,8 @@ class Workspace:
             path = path.with_suffix(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
-        return f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). Read it to look at it.", True
+        return (f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). It is a real picture of "
+                "what you described; Read it to look at it if you can see images.", True)
 
     def write(self, args: dict) -> str:
         self._require_write()
