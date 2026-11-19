@@ -56,7 +56,7 @@ unpacked and `MAX_PACKAGE_FILES` files.
       outside that folder, a link, or a file over `MAX_ATTACHMENT_BYTES` is refused with a log
       line. The chat or task gets them as files the user attached; a chat whose chosen model
       cannot see images is answered by one that can, saying so. A message of files alone reads
-      "（见附件）".
+      "（见附件）" and goes to the chat without being classified: there are no words to tell work by.
   - **To the automation** (stdin):
     - `{"re": id, "reply": …}`;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.

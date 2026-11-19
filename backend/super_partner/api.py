@@ -1405,8 +1405,13 @@ async def automation_message(capability: Capability, asked: capability_runner.As
     """What a message to an automation becomes, decided as 新建's 自动 decides (triage.classify): a
     question is answered by the conversation's own chat; work is planned as a task that waits for
     the owner's confirmation. Returns the reply and what it cost."""
-    configured = providers.configured_models(list(models))
-    kind, spent = await triage.classify(asked.text, providers, brief_writer(list(models.values()), configured))
+    if asked.attachments and asked.text == capability_runner.FILES_ONLY:
+        # Files with no words (a picture sent alone): there is nothing to tell work from; it is
+        # asked about in the chat, as a picture sent to a person would be.
+        kind, spent = "chat", 0.0
+    else:
+        configured = providers.configured_models(list(models))
+        kind, spent = await triage.classify(asked.text, providers, brief_writer(list(models.values()), configured))
     origin = {**asked.origin, "capability": capability.id}
     attached = [item.id for item in asked.attachments]
     needs_vision = any(item.kind == "image" for item in asked.attachments)

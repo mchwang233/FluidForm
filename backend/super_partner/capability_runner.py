@@ -41,6 +41,8 @@ RESTART_PAUSE = 10.0
 STABLE_SECONDS = 120.0
 LOG_LINES = 200
 MAX_TEXT = 20_000
+# What a message of files alone says.
+FILES_ONLY = "（见附件）"
 # How long a line from an automation may be.
 LINE_LIMIT = 1 << 20
 
@@ -274,7 +276,7 @@ class Runner:
         if not text and not attached:
             await self._send(item, {"re": request, "reply": None})
             return
-        asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text or "（见附件）",
+        asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text or FILES_ONLY,
                       origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},
                       attachments=attached)
         async with item.lock:

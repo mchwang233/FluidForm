@@ -233,6 +233,18 @@ async def test_an_image_sent_to_an_automation_reaches_its_chat_and_leaves_its_da
     assert "outside.txt 没收下" in log and "../x 没收下" in log
 
 
+async def test_a_picture_sent_alone_is_answered_in_the_chat_not_planned_as_work(packages, monkeypatch):
+    # Regression: with no words, the classifier saw only "（见附件）" and planned a task.
+    api, client, _, _ = packages
+    sent, classified = triaging(api, monkeypatch, '{"kind": "task"}')
+    await upload(client, package([{"conversation": "c1", "text": "", "files": {"shot.png": b64(PNG)}}]))
+    await enable(client)
+    [reply] = await eventually(lambda: lines("replies.jsonl"))
+    assert reply["reply"] == "好的。" and not classified
+    assert not [run for run in api.db.list_runs() if run.kind == "task"]
+    assert sent.attached == [["shot.png"]]
+
+
 async def test_work_sent_with_an_image_is_planned_with_it(packages, monkeypatch):
     api, client, _, _ = packages
     triaging(api, monkeypatch, '{"kind": "task"}')
