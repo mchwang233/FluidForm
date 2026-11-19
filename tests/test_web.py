@@ -99,3 +99,10 @@ async def test_a_redirect_to_this_machine_is_refused(services, monkeypatch):
 
     with pytest.raises(web.WebError, match="not a public address"):
         await web.fetch("https://public.example/", client(handler))
+
+
+def test_the_log_says_what_was_searched_or_read():
+    assert agent.describe_call("WebSearch", {"query": "北京天气"}) == "北京天气"
+    assert agent.describe_call("WebFetch", {"url": "https://a.example/x"}) == "https://a.example/x"
+    assert agent.describe_call("StartTask", {"request": "做网站"}) == "做网站"
+    assert agent.describe_call("Read", {"file_path": "a.txt"}) == "a.txt"

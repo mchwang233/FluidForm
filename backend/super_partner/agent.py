@@ -343,6 +343,10 @@ def describe_call(name: str, args) -> str:
     if name in {"Glob", "Grep"}:
         where = " ".join(str(args[key]) for key in ("glob", "path") if args.get(key))
         return f"{args.get('pattern') or ''}" + (f" ({where})" if where else "")[:200]
+    # What the web, a chat action or a picture is about.
+    for key in ("query", "url", "request", "name", "fact", "words", "prompt"):
+        if name in {"WebSearch", "WebFetch", "GenerateImage", *chat_actions.TOOLS} and isinstance(args.get(key), str):
+            return args[key][:200]
     detail = str(args.get("file_path") or args.get("path") or ".")
     if name == "Read" and (args.get("offset") or args.get("limit")):
         detail += f" (from line {args.get('offset') or 1})"
