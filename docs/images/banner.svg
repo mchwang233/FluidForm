@@ -1,54 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="搭子 Super Partner: local-first multi-model task orchestration">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0b1220"/>
-      <stop offset="1" stop-color="#0d1b1a"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.78" cy="0.35" r="0.6">
-      <stop offset="0" stop-color="#1fbf86" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#1fbf86" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="edge" gradientUnits="userSpaceOnUse" x1="790" y1="0" x2="1234" y2="0">
-      <stop offset="0" stop-color="#3ddc97" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#3ddc97" stop-opacity="0.85"/>
-    </linearGradient>
-    <style>
-      .t { font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
-      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
-    </style>
-  </defs>
-  <rect width="1280" height="320" rx="24" fill="url(#bg)"/>
-  <rect width="1280" height="320" rx="24" fill="url(#glow)"/>
-
-  <!-- logo: the app's mark, two partners -->
-  <g fill="none" stroke="#3ddc97" stroke-width="4">
-    <circle cx="98" cy="120" r="27"/><circle cx="122" cy="120" r="27"/>
-  </g>
-
-  <text x="172" y="140" class="t" font-size="56" font-weight="700" fill="#f1f5f9">搭子</text>
-  <text x="300" y="138" class="t" font-size="34" font-weight="600" fill="#94a3b8">Super Partner</text>
-  <text x="74" y="200" class="t" font-size="24" fill="#cbd5e1">Local-first multi-model task orchestration</text>
-  <text x="74" y="236" class="t" font-size="22" fill="#94a3b8">本地优先的多模型自主任务编排</text>
-  <text x="74" y="276" class="mono" font-size="16" fill="#3ddc97" letter-spacing="1">plan → route → run → review → repair → learn</text>
-
-  <!-- dependency graph motif -->
-  <g fill="none" stroke="url(#edge)" stroke-width="2.5">
-    <path d="M846 110 C 900 110, 900 160, 954 160"/>
-    <path d="M846 210 C 900 210, 900 160, 954 160"/>
-    <path d="M1010 160 L 1066 160"/>
-    <path d="M1122 160 C 1150 160, 1150 110, 1178 110"/>
-    <path d="M1122 160 C 1150 160, 1150 210, 1178 210"/>
-  </g>
-  <g class="t" font-size="13" font-weight="600" text-anchor="middle">
-    <rect x="790" y="88" width="56" height="44" rx="10" fill="#10261f" stroke="#3ddc97" stroke-width="2"/>
-    <text x="818" y="115" fill="#3ddc97">✓</text>
-    <rect x="790" y="188" width="56" height="44" rx="10" fill="#10261f" stroke="#3ddc97" stroke-width="2"/>
-    <text x="818" y="215" fill="#3ddc97">✓</text>
-    <rect x="954" y="138" width="56" height="44" rx="10" fill="#10261f" stroke="#3ddc97" stroke-width="2"/>
-    <text x="982" y="165" fill="#3ddc97">✓</text>
-    <rect x="1066" y="138" width="56" height="44" rx="10" fill="#14213d" stroke="#60a5fa" stroke-width="2"/>
-    <circle cx="1094" cy="160" r="6" fill="#60a5fa"/>
-    <rect x="1178" y="88" width="56" height="44" rx="10" fill="#111827" stroke="#475569" stroke-width="2" stroke-dasharray="4 4"/>
-    <rect x="1178" y="188" width="56" height="44" rx="10" fill="#111827" stroke="#475569" stroke-width="2" stroke-dasharray="4 4"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="搭子 Super Partner：本地优先的多模型自主任务编排">
+  <style>
+    .bg { fill: #fbfaf8; } .frame { fill: none; stroke: #e8e6e1; }
+    .card { fill: #ffffff; stroke: #e6e3de; } .card.lead { stroke: #1d1d1f; stroke-width: 1.6; }
+    .ink { fill: #1d1d1f; } .muted { fill: #6e6e73; } .faint { fill: #a1a1a6; }
+    .ring { fill: none; stroke: #1d1d1f; }
+    .avatar { fill: #f1efea; } .avatar.lead { fill: #1d1d1f; } .glyph { fill: #3a3a3c; } .glyph.lead { fill: #ffffff; }
+    .line { fill: none; stroke: #cfccc6; stroke-width: 1.3; } .dash { stroke-dasharray: 4 5; }
+    .dot { fill: #cfccc6; } .ok { fill: #1f9d55; } .okline { stroke: #1f9d55; }
+    .pill { fill: #fbfaf8; } .chip { fill: #f4f2ee; stroke: #e6e3de; } .chip.run { fill: #ffffff; stroke: #1d1d1f; }
+    .group { fill: #f6f4f0; stroke: #ebe8e3; }
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0f0f10; } .frame { stroke: #232326; }
+      .card { fill: #18181a; stroke: #2a2a2e; } .card.lead { stroke: #ededed; }
+      .ink { fill: #ededed; } .muted { fill: #a1a1a6; } .faint { fill: #6e6e73; }
+      .ring { stroke: #ededed; }
+      .avatar { fill: #26262a; } .avatar.lead { fill: #ededed; } .glyph { fill: #d1d1d6; } .glyph.lead { fill: #111113; }
+      .line { stroke: #3a3a3f; } .dot { fill: #3a3a3f; } .ok { fill: #3ccb7f; } .okline { stroke: #3ccb7f; }
+      .pill { fill: #0f0f10; } .chip { fill: #1d1d20; stroke: #2e2e33; } .chip.run { fill: #18181a; stroke: #ededed; }
+      .group { fill: #141416; stroke: #222225; }
+    }
+  </style>
+  <rect class="bg frame" x="0.5" y="0.5" width="1279" height="319" rx="20"/>
+  <g class="ring" stroke-width="3.2"><circle cx="85.08" cy="118" r="26"/><circle cx="106.92" cy="118" r="26"/></g>
+  <text x="148" y="136" class="t ink" font-size="52" font-weight="650" text-anchor="start">搭子</text>
+  <text x="268" y="134" class="t muted" font-size="30" font-weight="500" text-anchor="start">Super Partner</text>
+  <text x="64" y="204" class="t ink" font-size="22" font-weight="500" text-anchor="start">你说要做什么，一群模型分工把它做完。</text>
+  <text x="64" y="238" class="t muted" font-size="17" font-weight="400" text-anchor="start">A local-first team of models that plans, works, checks and repairs.</text>
+  <text x="64" y="282" class="mono faint" font-size="14" letter-spacing="0.5">plan → route → run → review → repair → learn</text>
+  <path class="line" d="M878 104 C 923.0 104, 923.0 147, 968 147"/>
+  <path class="line" d="M878 190 C 923.0 190, 923.0 147, 968 147"/>
+  <path class="line" d="M1034 147 C 1079.0 147, 1079.0 104, 1124 104"/>
+  <path class="line" d="M1034 147 C 1079.0 147, 1079.0 190, 1124 190"/>
+  <rect class="chip" x="746" y="83" width="132" height="42" rx="21"/>
+  <circle class="ok" cx="768" cy="104" r="5"/>
+  <text x="784" y="109" class="t ink" font-size="15" font-weight="500" text-anchor="start">调研</text>
+  <rect class="chip" x="746" y="169" width="132" height="42" rx="21"/>
+  <circle class="ok" cx="768" cy="190" r="5"/>
+  <text x="784" y="195" class="t ink" font-size="15" font-weight="500" text-anchor="start">看代码</text>
+  <rect class="chip run" x="902" y="126" width="132" height="42" rx="21"/>
+  <circle class="ok" cx="924" cy="147" r="5"/><circle cx="924" cy="147" r="9" fill="none" class="okline" stroke-opacity=".35" stroke-width="1.5"/>
+  <text x="940" y="152" class="t ink" font-size="15" font-weight="500" text-anchor="start">实现</text>
+  <rect class="chip" x="1058" y="83" width="132" height="42" rx="21"/>
+  <circle class="dot" cx="1080" cy="104" r="4.5"/>
+  <text x="1096" y="109" class="t faint" font-size="15" font-weight="500" text-anchor="start">验收</text>
+  <rect class="chip" x="1058" y="169" width="132" height="42" rx="21"/>
+  <circle class="dot" cx="1080" cy="190" r="4.5"/>
+  <text x="1096" y="195" class="t faint" font-size="15" font-weight="500" text-anchor="start">测试</text>
+  <text x="968" y="262" class="t faint" font-size="13" font-weight="400" text-anchor="middle">每一步交给够用且最便宜的模型</text>
 </svg>

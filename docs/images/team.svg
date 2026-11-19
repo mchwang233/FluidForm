@@ -1,95 +1,87 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" role="img" aria-label="The Super Partner team: you, the lead, workers, reviewer, progress checker, diagnostician, platform engineer, retrospective">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0b1220"/>
-      <stop offset="1" stop-color="#0d1b1a"/>
-    </linearGradient>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#5eead4"/>
-    </marker>
-    <style>
-      .t { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
-      .name { font-size: 20px; font-weight: 700; fill: #f1f5f9; }
-      .desc { font-size: 14.5px; fill: #cbd5e1; }
-      .note { font-size: 13px; fill: #94a3b8; }
-      .card { fill: #111c2b; stroke: #2b3a4f; stroke-width: 1.5; }
-      .edge { fill: none; stroke: #5eead4; stroke-opacity: .55; stroke-width: 2; }
-    </style>
-  </defs>
-  <rect width="1280" height="560" rx="24" fill="url(#bg)"/>
-
-  <!-- 一个任务内 -->
-  <rect x="36" y="168" width="1208" height="364" rx="18" fill="#0f2a24" fill-opacity=".35" stroke="#3ddc97" stroke-opacity=".45" stroke-dasharray="6 6"/>
-  <text x="58" y="196" class="t note" fill="#3ddc97" style="fill:#3ddc97">Inside one task</text>
-
-  <!-- edges -->
-  <path class="edge" d="M640 122 L640 200" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
-  <text x="652" y="166" class="t note">questions, answers, approval</text>
-  <path class="edge" d="M350 92 C 420 92, 400 250, 436 250" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
-  <text x="300" y="158" class="t note">looks back on finished tasks</text>
-  <path class="edge" d="M930 92 C 860 92, 880 250, 844 250" stroke-dasharray="5 5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
-  <text x="862" y="158" class="t note">joins the chat, builds components</text>
-  <g class="edge" marker-end="url(#arrow)">
-    <path d="M600 318 C 600 350, 190 340, 190 384" marker-end="url(#arrow)"/>
-    <path d="M625 318 C 625 350, 490 345, 490 384" marker-end="url(#arrow)"/>
-    <path d="M655 318 C 655 350, 790 345, 790 384" marker-end="url(#arrow)"/>
-    <path d="M680 318 C 680 350, 1090 340, 1090 384" marker-end="url(#arrow)"/>
-  </g>
-
-  <g class="t">
-    <!-- 复盘员 -->
-    <rect class="card" x="50" y="22" width="300" height="122" rx="14"/>
-    <circle cx="86" cy="56" r="20" fill="#3b2f63"/><text x="86" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#c4b5fd">R</text>
-    <text x="118" y="63" class="name">Retrospective</text>
-    <text x="70" y="96" class="desc">After a task ends, turns evidence</text>
-    <text x="70" y="118" class="desc">into lessons for later tasks</text>
-
-    <!-- 你 -->
-    <rect class="card" x="490" y="30" width="300" height="92" rx="14" style="stroke:#94a3b8"/>
-    <circle cx="526" cy="64" r="20" fill="#334155"/><text x="526" y="70" text-anchor="middle" font-size="17" font-weight="700" fill="#f1f5f9">U</text>
-    <text x="558" y="71" class="name">You</text>
-    <text x="510" y="104" class="desc">Describe the task, approve the budget</text>
-
-    <!-- 平台工程师 -->
-    <rect class="card" x="930" y="22" width="300" height="122" rx="14"/>
-    <circle cx="966" cy="56" r="20" fill="#5a3a12"/><text x="966" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#fbbf24">E</text>
-    <text x="998" y="63" class="name">Platform engineer</text>
-    <text x="950" y="96" class="desc">Changes Super Partner itself: fixes</text>
-    <text x="950" y="118" class="desc">bugs, adds components, tested first</text>
-
-    <!-- 负责人 -->
-    <rect x="436" y="200" width="408" height="118" rx="16" fill="#10261f" stroke="#3ddc97" stroke-width="2.5"/>
-    <circle cx="476" cy="236" r="22" fill="#14532d"/><text x="476" y="243" text-anchor="middle" font-size="19" font-weight="700" fill="#3ddc97">L</text>
-    <text x="510" y="244" class="name" style="font-size:22px">The lead</text>
-    <text x="456" y="278" class="desc">Plans the task, decides after every failure, checks</text>
-    <text x="456" y="302" class="desc">the whole result. One conversation, start to end.</text>
-
-    <!-- 员工 -->
-    <rect class="card" x="50" y="384" width="280" height="122" rx="14"/>
-    <circle cx="86" cy="418" r="20" fill="#1e3a5f"/><text x="86" y="424" text-anchor="middle" font-size="17" font-weight="700" fill="#93c5fd">W</text>
-    <text x="118" y="425" class="name">Workers</text>
-    <text x="70" y="458" class="desc">Do their steps with tools in a</text>
-    <text x="70" y="480" class="desc">sandbox; can hand off new subtasks</text>
-
-    <!-- 验收者 -->
-    <rect class="card" x="350" y="384" width="280" height="122" rx="14"/>
-    <circle cx="386" cy="418" r="20" fill="#1e3a5f"/><text x="386" y="424" text-anchor="middle" font-size="17" font-weight="700" fill="#93c5fd">R</text>
-    <text x="418" y="425" class="name">Reviewer</text>
-    <text x="370" y="458" class="desc">A different model checks each</text>
-    <text x="370" y="480" class="desc">result against its acceptance criteria</text>
-
-    <!-- 进度检查员 -->
-    <rect class="card" x="650" y="384" width="280" height="122" rx="14"/>
-    <circle cx="686" cy="418" r="20" fill="#1e3a5f"/><text x="686" y="424" text-anchor="middle" font-size="17" font-weight="700" fill="#93c5fd">P</text>
-    <text x="718" y="425" class="name">Progress checker</text>
-    <text x="670" y="458" class="desc">Looks in on long steps every 10</text>
-    <text x="670" y="480" class="desc">minutes, stops only the stuck ones</text>
-
-    <!-- 诊断员 -->
-    <rect class="card" x="950" y="384" width="280" height="122" rx="14"/>
-    <circle cx="986" cy="418" r="20" fill="#1e3a5f"/><text x="986" y="424" text-anchor="middle" font-size="17" font-weight="700" fill="#93c5fd">D</text>
-    <text x="1018" y="425" class="name">Diagnostician</text>
-    <text x="970" y="458" class="desc">Finds what blocks a step outside</text>
-    <text x="970" y="480" class="desc">the task (tools, licenses) and fixes it</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="588" viewBox="0 0 1280 588" role="img" aria-label="The 搭子 (Super Partner) team: you, the lead, workers, reviewer, progress checker, diagnostician, platform engineer, retrospective">
+  <style>
+    .bg { fill: #fbfaf8; } .frame { fill: none; stroke: #e8e6e1; }
+    .card { fill: #ffffff; stroke: #e6e3de; } .card.lead { stroke: #1d1d1f; stroke-width: 1.6; }
+    .ink { fill: #1d1d1f; } .muted { fill: #6e6e73; } .faint { fill: #a1a1a6; }
+    .ring { fill: none; stroke: #1d1d1f; }
+    .avatar { fill: #f1efea; } .avatar.lead { fill: #1d1d1f; } .glyph { fill: #3a3a3c; } .glyph.lead { fill: #ffffff; }
+    .line { fill: none; stroke: #cfccc6; stroke-width: 1.3; } .dash { stroke-dasharray: 4 5; }
+    .dot { fill: #cfccc6; } .ok { fill: #1f9d55; } .okline { stroke: #1f9d55; }
+    .pill { fill: #fbfaf8; } .chip { fill: #f4f2ee; stroke: #e6e3de; } .chip.run { fill: #ffffff; stroke: #1d1d1f; }
+    .group { fill: #f6f4f0; stroke: #ebe8e3; }
+    .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0f0f10; } .frame { stroke: #232326; }
+      .card { fill: #18181a; stroke: #2a2a2e; } .card.lead { stroke: #ededed; }
+      .ink { fill: #ededed; } .muted { fill: #a1a1a6; } .faint { fill: #6e6e73; }
+      .ring { stroke: #ededed; }
+      .avatar { fill: #26262a; } .avatar.lead { fill: #ededed; } .glyph { fill: #d1d1d6; } .glyph.lead { fill: #111113; }
+      .line { stroke: #3a3a3f; } .dot { fill: #3a3a3f; } .ok { fill: #3ccb7f; } .okline { stroke: #3ccb7f; }
+      .pill { fill: #0f0f10; } .chip { fill: #1d1d20; stroke: #2e2e33; } .chip.run { fill: #18181a; stroke: #ededed; }
+      .group { fill: #141416; stroke: #222225; }
+    }
+  </style>
+  <rect class="bg frame" x="0.5" y="0.5" width="1279" height="587" rx="20"/>
+  <rect class="group" x="32" y="186" width="1216" height="370" rx="18"/>
+  <text x="56" y="214" class="t faint" font-size="13" font-weight="500" text-anchor="start">Inside one task</text>
+  <path class="line" d="M640 136 L640 214"/>
+  <circle class="dot" cx="640" cy="136" r="3"/><circle class="dot" cx="640" cy="214" r="3"/>
+  <text x="654" y="180" class="t faint" font-size="12.5" font-weight="400" text-anchor="start">questions · answers · approval</text>
+  <path class="line dash" d="M206 152 C 206 230, 330 276, 420 276"/>
+  <path class="line dash" d="M1074 152 C 1074 230, 950 276, 860 276"/>
+  <text x="222" y="182" class="t faint" font-size="12.5" font-weight="400" text-anchor="start">looks back on tasks</text>
+  <text x="1058" y="182" class="t faint" font-size="12.5" font-weight="400" text-anchor="end">joins chats · builds parts</text>
+  <path class="line" d="M640 338 C 640 380, 200 372, 200 414"/>
+  <path class="line" d="M640 338 C 640 380, 492 372, 492 414"/>
+  <path class="line" d="M640 338 C 640 380, 784 372, 784 414"/>
+  <path class="line" d="M640 338 C 640 380, 1076 372, 1076 414"/>
+  <circle class="dot" cx="640" cy="338" r="3"/>
+  <rect class="card" x="48" y="36" width="316" height="116" rx="14"/>
+  <circle class="avatar" cx="84" cy="72" r="17"/>
+  <text x="84" y="77.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">R</text>
+  <text x="112" y="78" class="t ink" font-size="17" font-weight="650" text-anchor="start">Retrospective</text>
+  <text x="68" y="112" class="t muted" font-size="14" font-weight="400" text-anchor="start">After a task ends, turns evidence</text>
+  <text x="68" y="134" class="t muted" font-size="14" font-weight="400" text-anchor="start">into lessons for later tasks</text>
+  <rect class="card" x="482" y="44" width="316" height="92" rx="14"/>
+  <circle class="avatar" cx="518" cy="80" r="17"/>
+  <text x="518" y="85.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">U</text>
+  <text x="546" y="86" class="t ink" font-size="17" font-weight="650" text-anchor="start">You</text>
+  <text x="502" y="120" class="t muted" font-size="14" font-weight="400" text-anchor="start">Describe the task, approve the budget</text>
+  <rect class="card" x="916" y="36" width="316" height="116" rx="14"/>
+  <circle class="avatar" cx="952" cy="72" r="17"/>
+  <text x="952" y="77.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">E</text>
+  <text x="980" y="78" class="t ink" font-size="17" font-weight="650" text-anchor="start">Platform engineer</text>
+  <text x="936" y="112" class="t muted" font-size="14" font-weight="400" text-anchor="start">Changes Super Partner itself: fixes</text>
+  <text x="936" y="134" class="t muted" font-size="14" font-weight="400" text-anchor="start">bugs, adds components, tested first</text>
+  <rect class="card lead" x="420" y="214" width="440" height="124" rx="14"/>
+  <circle class="avatar lead" cx="456" cy="250" r="17"/>
+  <text x="456" y="255.5" class="t glyph lead" font-size="15" font-weight="600" text-anchor="middle">L</text>
+  <text x="484" y="256" class="t ink" font-size="19" font-weight="650" text-anchor="start">The lead</text>
+  <text x="440" y="290" class="t muted" font-size="14" font-weight="400" text-anchor="start">Plans the task, decides after every failure, checks</text>
+  <text x="440" y="312" class="t muted" font-size="14" font-weight="400" text-anchor="start">the whole result. One conversation, start to end.</text>
+  <rect class="card" x="64" y="414" width="272" height="118" rx="14"/>
+  <circle class="avatar" cx="100" cy="450" r="17"/>
+  <text x="100" y="455.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">W</text>
+  <text x="128" y="456" class="t ink" font-size="17" font-weight="650" text-anchor="start">Workers</text>
+  <text x="84" y="490" class="t muted" font-size="14" font-weight="400" text-anchor="start">Do their steps with tools in a</text>
+  <text x="84" y="512" class="t muted" font-size="14" font-weight="400" text-anchor="start">sandbox; can hand off new subtasks</text>
+  <rect class="card" x="356" y="414" width="272" height="118" rx="14"/>
+  <circle class="avatar" cx="392" cy="450" r="17"/>
+  <text x="392" y="455.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">R</text>
+  <text x="420" y="456" class="t ink" font-size="17" font-weight="650" text-anchor="start">Reviewer</text>
+  <text x="376" y="490" class="t muted" font-size="14" font-weight="400" text-anchor="start">A different model checks each</text>
+  <text x="376" y="512" class="t muted" font-size="14" font-weight="400" text-anchor="start">result against its acceptance criteria</text>
+  <rect class="card" x="648" y="414" width="272" height="118" rx="14"/>
+  <circle class="avatar" cx="684" cy="450" r="17"/>
+  <text x="684" y="455.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">P</text>
+  <text x="712" y="456" class="t ink" font-size="17" font-weight="650" text-anchor="start">Progress checker</text>
+  <text x="668" y="490" class="t muted" font-size="14" font-weight="400" text-anchor="start">Looks in on long steps every 10</text>
+  <text x="668" y="512" class="t muted" font-size="14" font-weight="400" text-anchor="start">minutes, stops only the stuck ones</text>
+  <rect class="card" x="940" y="414" width="272" height="118" rx="14"/>
+  <circle class="avatar" cx="976" cy="450" r="17"/>
+  <text x="976" y="455.5" class="t glyph" font-size="15" font-weight="600" text-anchor="middle">D</text>
+  <text x="1004" y="456" class="t ink" font-size="17" font-weight="650" text-anchor="start">Diagnostician</text>
+  <text x="960" y="490" class="t muted" font-size="14" font-weight="400" text-anchor="start">Finds what blocks a step outside</text>
+  <text x="960" y="512" class="t muted" font-size="14" font-weight="400" text-anchor="start">the task (tools, licenses) and fixes it</text>
 </svg>
