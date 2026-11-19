@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     chat_tools_network: bool = False
     chat_tool_seconds: int = Field(default=120, ge=10, le=1800)
     chat_tool_turns: int = Field(default=20, ge=1, le=200)
+    # Image models API models may make pictures with (images.py, the GenerateImage tool), first choice
+    # first, e.g. ["glm:cogview-4", "minimax:image-01"]; each uses its provider's key. Empty: none.
+    image_models: list[str] = Field(default_factory=list)
     # Share of a priced CLI's quota window used from which it no longer goes first in routing, and
     # from which it takes no new work until the window resets.
     cli_quota_soft_percent: float = Field(default=70, ge=0, le=100)

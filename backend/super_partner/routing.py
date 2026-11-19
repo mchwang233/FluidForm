@@ -52,6 +52,9 @@ def node_cost(node: TaskNode, model: ModelProfile) -> float:
 def eligible_for_node(
     node: TaskNode, models: list[ModelProfile], configured: set[str], needs_vision: bool = False,
 ) -> list[ModelProfile]:
+    from .images import available
+
+    pictures = bool(node.needs_images and available())
     return [
         model for model in models
         if model.enabled
@@ -63,6 +66,8 @@ def eligible_for_node(
         and (not node.needs_workspace or can_act(model))
         # Attached images reach API models only as image inputs; CLIs open the files themselves.
         and (not needs_vision or model.channel == "cli" or model.supports_vision is not False)
+        # Pictures are made with the GenerateImage tool, which only API models are given.
+        and (not node.needs_images or model.channel != "cli" or not pictures)
     ]
 
 

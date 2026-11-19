@@ -518,6 +518,10 @@ class ProviderRegistry:
         if agent:
             from .extensions import definitions
             tools = [*tools, *definitions(agent)]
+            from .images import available as image_models
+            if not agent.read_only and not agent.host and image_models():
+                tools = [*tools, agent_tools.IMAGE_TOOL]
+                agent.budget = spend_ok
         if conversation and conversation.recall and agent:
             tools = [*tools, memory.RECALL_TOOL]
         if conversation and conversation.handoff:

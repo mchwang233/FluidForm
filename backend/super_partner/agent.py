@@ -188,6 +188,25 @@ TOOLS = [
         }},
     },
 ]
+# Makes a picture with an image model (images.py), for a model that may write; offered only when
+# this machine has one (images.available).
+IMAGE_TOOL = {
+    "name": "GenerateImage",
+    "description": (
+        "Makes a picture from a description with an image model and saves it in the working directory.\n"
+        "- Describe what is in it, its style, light and composition; any language works.\n"
+        "- shape: square, portrait (9:16) or landscape (16:9).\n"
+        "- It costs money per picture: make the ones asked for, and look at the result (Read it) before "
+        "making another.\n"
+        "- This is the way to make real pictures; do not draw them with code instead."
+    ),
+    "parameters": {"type": "object", "properties": {
+        "prompt": {"type": "string", "description": "What the picture shows, and how"},
+        "file_path": {"type": "string", "description": "Where to save it, e.g. avatar.png (the format follows what the model gives)"},
+        "shape": {"type": "string", "enum": ["square", "portrait", "landscape"]},
+    }, "required": ["prompt", "file_path"]},
+}
+
 READ_ONLY_TOOLS = {"Read", "Glob", "Grep", "LS"}
 # A reviewer also runs commands, in a sandbox where the workspace cannot be changed.
 REVIEW_TOOLS = READ_ONLY_TOOLS | {"Bash"}
@@ -460,6 +479,8 @@ class Workspace:
         self.max_turns, self.log = max_turns, log
         # Checks a long attempt instead of a turn limit (progress.Watch); set by the caller.
         self.watch = None
+        # What its pictures are charged to (the call's RequestBudget, providers); None: not charged.
+        self.budget = None
         # (expected turns, progress.Watch): asked when a work package runs well past them.
         self.overrun = None
         # Host mode, for repairing the environment: commands leave the sandbox (network, any
@@ -559,6 +580,8 @@ class Workspace:
                 raise ToolError("arguments must be a JSON object")
             if name == "Bash":
                 return await self.bash(args.get("command"), args.get("timeout"))
+            if name == IMAGE_TOOL["name"] and not self.read_only and not self.host:
+                return await self.generate_image(args)
             if name in settings.api_tool_extensions and not self.read_only and not self.host:
                 from .extensions import execute
                 return await execute(self, name, args)
@@ -610,6 +633,34 @@ class Workspace:
         end = start + len(lines) - 1
         note = f"\n[lines {start}-{end} of {total}; pass offset to read more]" if (start, end) != (1, total) else ""
         return _numbered(lines, start) + note
+
+    async def generate_image(self, args: dict) -> tuple[str, bool]:
+        """GenerateImage: a picture made by an image model (images.generate), saved in the working
+        directory, with the extension of what came back; charged to the call's budget."""
+        from . import images
+
+        path = self._path(args.get("file_path") or "picture.png")
+        shape = args.get("shape") or "square"
+        models = images.available()
+        if not models:
+            raise ToolError("no image model is set up on this machine")
+        budget = self.budget
+        cost = images.price(models[0])
+        if budget is not None and hasattr(budget, "can_spend") and not budget.can_spend(cost):
+            raise ToolError(f"the budget left cannot pay for a picture (about ${cost:g})")
+        try:
+            data, model_id = await images.generate(str(args.get("prompt") or ""), shape)
+        except images.ImageError as exc:
+            raise ToolError(str(exc)) from exc
+        if budget is not None and hasattr(budget, "record_usd"):
+            await budget.record_usd(images.price(model_id))
+        from .attachments import _image_type
+        suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}.get(_image_type(data) or "", "")
+        if suffix and path.suffix.lower() != suffix and not (suffix == ".jpg" and path.suffix.lower() == ".jpeg"):
+            path = path.with_suffix(suffix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return f"Saved {self._relative(path)} ({len(data) // 1024} KB, made by {model_id}). Read it to look at it.", True
 
     def write(self, args: dict) -> str:
         self._require_write()

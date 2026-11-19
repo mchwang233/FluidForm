@@ -116,7 +116,7 @@ PART_SHAPE = ('{"key": "s1", "kind": "part", "title": "...", "goal": "what it de
 TASK_SHAPE = (
     '{"key": "t1", "kind": "task", "title": "...", "instructions": "everything its model needs to know '
     'and do", "acceptance_criteria": "...", "capability": "coding | planning | research | chinese | '
-    'tool_use | structured_output", "difficulty": "easy | normal | hard", "needs_workspace": false, '
+    'tool_use | structured_output", "difficulty": "easy | normal | hard", "needs_workspace": false, "needs_images": false, '
     '"files": ["files it creates or changes"], "reads": ["files it reads for reference"], '
     '"provides": "what later tasks can rely on", "check": "a command that shows it works", '
     '"dependencies": ["keys of earlier children"], "verifies": ["keys of the tasks it checks"], '

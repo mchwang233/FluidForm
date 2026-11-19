@@ -91,6 +91,19 @@ class RequestBudget:
                 continue
             raise BudgetExceeded("剩余预算不足以发起下一轮模型请求，任务已暂停。")
 
+    def can_spend(self, cost: float) -> bool:
+        """Whether ``cost`` more (a picture, say) fits what is left, besides what others hold."""
+        other = sum(value for key, value in self.reservations.items() if key is not self)
+        if self.step_remaining is not None and self.step_remaining() < cost:
+            return False
+        return self.remaining() - other >= cost
+
+    async def record_usd(self, cost: float):
+        """Something a tool paid for at a price of its own (a picture), not in tokens."""
+        if cost > 0:
+            await self.charge(cost)
+            self.spent += cost
+
     async def record(self, model_id: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0):
         model = self.models.get(model_id)
         if model and model.input_per_million is not None and model.output_per_million is not None:

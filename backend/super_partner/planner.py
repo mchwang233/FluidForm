@@ -136,6 +136,8 @@ run at the same time, so packages that touch different files also finish sooner.
 task lists the files it checks in "reads". Tasks that write no files (research, review, a final
 summary) leave "files" empty.
 Set needs_workspace to true only for tasks that must read or modify files in the target project.
+Set needs_images to true only for tasks that must make pictures (a photo, an illustration, an avatar, a
+poster), which an image model draws; not for charts or diagrams drawn with code.
 Token estimates must include expected dependency results and the files given.
 """.replace("{max_files}", "5").replace("{max_reads}", "8") + contracts.RULES
 
@@ -156,6 +158,7 @@ Decompose the user request into a small, executable DAG of tasks (nodes). Return
       "acceptance_criteria": "checkable conditions a reviewer uses to accept the result",
       "verifies": [],
       "needs_workspace": false,
+      "needs_images": false,
       "files": ["files this node creates or changes"],
       "reads": ["files it must read for reference"],
       "provides": "what later nodes can rely on",
@@ -262,6 +265,7 @@ def task_node(raw: dict, key: str, dependencies: list[str], verifies: list[str])
         acceptance_criteria=str(raw.get("acceptance_criteria", "")).strip()[:1000],
         verifies=verifies,
         needs_workspace=raw.get("needs_workspace") is True,
+        needs_images=raw.get("needs_images") is True,
         **package(raw),
         **contracts.declarations(raw),
     )
