@@ -39,6 +39,8 @@ MENTION = re.compile(r"@_user_\d+\s*")
 INBOX = "inbox"
 # What Super Partner takes with one message.
 MAX_FILES = 10
+# The reaction on a message while it is being answered (Feishu's "typing" emoji), taken off after.
+WORKING_EMOJI = "Typing"
 
 
 @dataclass
@@ -181,7 +183,15 @@ class StatusLog(logging.Handler):
 def main() -> None:
     import lark_oapi as lark
     import lark_oapi.ws.client as ws_client
-    from lark_oapi.api.im.v1 import GetMessageResourceRequest, ReplyMessageRequest, ReplyMessageRequestBody
+    from lark_oapi.api.im.v1 import (
+        CreateMessageReactionRequest,
+        CreateMessageReactionRequestBody,
+        DeleteMessageReactionRequest,
+        Emoji,
+        GetMessageResourceRequest,
+        ReplyMessageRequest,
+        ReplyMessageRequestBody,
+    )
 
     # The SDK connects its websocket directly; here the proxy is the only way out.
     direct = ws_client._ws_connect_kwargs
@@ -214,6 +224,34 @@ def main() -> None:
     logging.getLogger("Lark").addHandler(StatusLog(host))
     started = time.time()
 
+    warned = set()
+
+    def working(message_id: str) -> Optional[str]:
+        """Show the asker it is being answered: a "typing" reaction on their message; its id."""
+        request = (CreateMessageReactionRequest.builder().message_id(message_id)
+                   .request_body(CreateMessageReactionRequestBody.builder()
+                                 .reaction_type(Emoji.builder().emoji_type(WORKING_EMOJI).build()).build()).build())
+        try:
+            response = client.im.v1.message_reaction.create(request)
+        except Exception as exc:  # only a courtesy: never in the way of the answer
+            print(f"飞书表情回复失败：{exc}", file=sys.stderr, flush=True)
+            return None
+        if response.success() and response.data:
+            return response.data.reaction_id
+        if "reaction" not in warned:  # once: most likely the permission is missing
+            warned.add("reaction")
+            print(f"飞书表情回复失败（需要「发送、删除消息表情回复」权限）：{response.code} {response.msg}",
+                  file=sys.stderr, flush=True)
+        return None
+
+    def done(message_id: str, reaction_id: Optional[str]) -> None:
+        if reaction_id:
+            try:
+                client.im.v1.message_reaction.delete(
+                    DeleteMessageReactionRequest.builder().message_id(message_id).reaction_id(reaction_id).build())
+            except Exception as exc:
+                print(f"飞书表情撤回失败：{exc}", file=sys.stderr, flush=True)
+
     def download(message_id: str, key: str, kind: str, name: str) -> Optional[str]:
         """A picture or file of the message, saved in the inbox; its path there, or None."""
         request = GetMessageResourceRequest.builder().message_id(message_id).file_key(key).type(kind).build()
@@ -228,14 +266,18 @@ def main() -> None:
         return relative
 
     def answer(message_id: str, chat_id: str, incoming: Incoming) -> None:
-        names = [download(message_id, key, "image", "image.png") for key in incoming.images]
-        names += [download(message_id, key, "file", name) for key, name in incoming.files]
-        kept = tuple(name for name in names if name)
-        if not incoming.text and not kept:
-            reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
-            return
-        if result := host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept):
-            reply(message_id, result)
+        reaction = working(message_id)
+        try:
+            names = [download(message_id, key, "image", "image.png") for key in incoming.images]
+            names += [download(message_id, key, "file", name) for key, name in incoming.files]
+            kept = tuple(name for name in names if name)
+            if not incoming.text and not kept:
+                reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
+                return
+            if result := host.ask(chat_id, incoming.text, {"message_id": message_id, "chat_id": chat_id}, kept):
+                reply(message_id, result)
+        finally:
+            done(message_id, reaction)
 
     def on_message(data) -> None:
         message = data.event.message
