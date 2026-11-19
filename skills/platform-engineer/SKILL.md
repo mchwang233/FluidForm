@@ -15,6 +15,10 @@ Super Partner gives it to the platform engineer for every component it plans or 
 - Keep unrelated existing changes. Never delete or weaken an existing test.
 - Every component comes with tests that fail without it and pass with it.
 - Build on what exists: find the owning module in `docs/ARCHITECTURE.md` and extend it.
+- The product is called FluidForm. Every word a user sees (UI text, replies, errors, reports)
+  and every prompt given to a model says FluidForm. "Super Partner" stays only in the package,
+  the `super-partner` command, `SUPER_PARTNER_` settings and code identifiers.
+- The job has a budget and the user is waiting: work economically (see Building, step 4).
 
 ## Planning (nothing is edited yet)
 
@@ -28,24 +32,34 @@ Super Partner gives it to the platform engineer for every component it plans or 
    - scheduling, steps, checks: `executor.py`, `review.py`, `quality.py`, `planner.py`.
 3. Write the plan the user approves: 目标, 改动 (each file), 测试, 风险. A web UI change names the
    existing piece of UI it follows (see Web UI below). Keep it small enough to
-   build and check in one go; if it is bigger, plan the first useful part and name the rest.
+   build and check in one go, within the job's budget: about five files and one layer's worth
+   of new tests. If it is bigger, plan the first useful part and name the rest.
 4. Ask the user (QUESTION / OPTIONS / STATUS: NEEDS_INPUT) only for a choice that is theirs:
    cost, credentials, behaviour they must decide.
 
 ## Building
 
-1. Follow the approved plan. If something in it turns out wrong, do the closest thing that works
-   and say what changed and why in the report.
+1. Start with a short checklist of the work (a todo list or plan, if your tool has one) and tick
+   items off as you go: the user follows it live on the job's page. Then follow the approved
+   plan. If something in it turns out wrong, do the closest thing that works and say what
+   changed and why in the report.
 2. Write the tests in the test file for that area (table in `docs/ARCHITECTURE.md`), reusing the
-   fixtures and helpers already there. Web UI: `frontend/tests/mission-actions.test.mjs`.
+   fixtures and helpers already there. Web UI: `frontend/tests/mission-actions.test.mjs`. Its
+   timers do not run on their own: `setInterval` callbacks are collected, and a test runs them
+   with `state.poll()` (the first) or `state.pollAll()` (all); waiting for time does nothing.
 3. Prefer one place for a decision over the same check in several modules, and an existing helper
    over a new parameter threaded through every layer.
-4. Check, from the narrowest to the widest:
-   - `python -m pytest -q tests/<area>.py`
-   - `python -m pytest -q` (all backend)
-   - only if the frontend changed: `cd frontend && npm test && npm run build`
-   Fix every failure your change causes.
-5. Update `docs/ARCHITECTURE.md` for a new module or a moved responsibility.
+4. Check, from the narrowest to the widest, each once:
+   - `python -m pytest -q tests/<area>.py` while you work;
+   - `python -m pytest -q` (all backend, about 90 s) once at the end;
+   - only if the frontend changed: `cd frontend && npm test && npm run build`, once.
+   Fix every failure your change causes. After you report, FluidForm runs every check again
+   itself, in a clean sandbox, so do not run the full suites over and over. A failure that also
+   happens without your change (your own sandbox's limits: no network, no bwrap inside it) is
+   named in the report, not chased.
+5. Write the design note: a new feature gets `docs/design/<name>.md`, a change to one gets a
+   section in its existing note (为什么, 改动, 测试, 风险, in the style of the notes there).
+   Update `docs/ARCHITECTURE.md` for a new module or a moved responsibility.
 
 ## Web UI
 

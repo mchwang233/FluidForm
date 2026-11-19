@@ -45,7 +45,8 @@ Super Partner gives it to every model that diagnoses or repairs the platform.
    safe change and describe the larger change in the report.
 4. Check, from the narrowest to the widest:
    - `python -m pytest -q tests/<area>.py`
-   - `python -m pytest -q` (all backend, about 35 s)
+   - `python -m pytest -q` (all backend, about 90 s), once at the end; FluidForm runs every
+     check again itself afterwards
    - only if the frontend changed: `cd frontend && npm test && npm run build`
    Fix every failure your change causes. A failure that also happens without your change
    (for example a sandbox limit of your own session) is noted in the report, not hidden.
