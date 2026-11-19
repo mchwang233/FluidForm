@@ -106,6 +106,8 @@ def wanted(message_type: str, chat_type: str, content: str, mentions: dict, crea
     # question about it comes next); FluidForm decides whether to answer.
     incoming.addressed = called
     incoming.images, incoming.files = incoming.images[:MAX_FILES], incoming.files[:MAX_FILES - len(incoming.images[:MAX_FILES])]
+    if called and message_type in {"text", "post"}:
+        return incoming  # even only @ it, nothing else: still asked (FluidForm answers what came before)
     return incoming if incoming.text or incoming.images or incoming.files else None
 
 
@@ -451,7 +453,7 @@ def main() -> None:
             names = [download(message_id, key, "image", "image.png") for key in incoming.images]
             names += [download(message_id, key, "file", name) for key, name in incoming.files]
             kept = tuple(name for name in names if name)
-            if not incoming.text and not kept:
+            if not incoming.text and not kept and (incoming.images or incoming.files):
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
             typing = Typing(Cards(message_id))
@@ -502,6 +504,10 @@ def check() -> None:
     assert wanted("text", "p2p", json.dumps({"text": "你好"}), {}, ms, now) == Incoming("你好")
     # In a group: @ it, it is asked; without @ it, the words go on unaddressed (FluidForm decides).
     assert wanted("text", "group", text, {"@_user_1": "机器人"}, ms, now) == Incoming("你好")
+    only = json.dumps({"text": "@_user_1"})
+    assert wanted("text", "group", only, {"@_user_1": "机器人"}, ms, now, frozenset({"@_user_1"})) == Incoming("")
+    assert wanted("text", "group", json.dumps({"text": "@_user_2"}), {"@_user_2": "张三"}, ms, now, frozenset()) \
+        == Incoming("@张三", addressed=False)
     assert wanted("text", "group", text, {"@_user_1": "机器人"}, ms, now, frozenset({"@_user_1"})) == Incoming("你好")
     said = json.dumps({"text": "@_user_2 明天几点开会？"})
     alone = frozenset()
