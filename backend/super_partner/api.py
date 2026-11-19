@@ -1449,9 +1449,9 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         asked.attachments = [*files_before, *[item for item in asked.attachments if item.id not in
                                               {before.id for before in files_before}]][-files.MAX_ATTACHMENTS:]
         heard_files.pop(asked.conversation, None)
-    if asked.attachments and asked.text == capability_runner.FILES_ONLY:
-        # Files with no words (a picture sent alone): there is nothing to tell work from; it is
-        # asked about in the chat, as a picture sent to a person would be.
+    if (asked.attachments and asked.text == capability_runner.FILES_ONLY) or asked.text == capability_runner.CALLED_ONLY:
+        # Files with no words (a picture sent alone), or only an @: there is nothing to tell work
+        # from; it is answered in the chat, as a person called on would answer.
         kind, spent = "chat", judged
     else:
         kind, spent = await triage.classify(asked.text, providers, cheapest)

@@ -338,6 +338,31 @@ async def test_a_picture_sent_in_a_group_without_at_is_seen_when_it_is_asked_abo
     assert state["heard_files"] == {} and any("记作上下文" in line for line in runner.get("fake-bot").log)
 
 
+async def test_only_at_it_answers_what_the_group_said_before(packages, monkeypatch):
+    # Regression: a message that only @-ed it was dropped, so it never answered.
+    api, client, _, _ = packages
+    sent, _ = triaging(api, monkeypatch, '{"kind": "task"}')
+    classified = []
+
+    async def complete(model_id, prompt, *_args, **_kwargs):
+        if prompt.startswith("You are 假机器人, an assistant in a group chat"):
+            return ProviderResult('{"reply": false}', 100, 5)
+        classified.append(prompt)
+        return ProviderResult('{"kind": "task"}', 100, 5)
+
+    monkeypatch.setattr(api.providers, "complete", complete)
+    await upload(client, package([
+        {"conversation": "g1", "text": "周五团建去哪儿好？", "addressed": False, "sender": "成员1"},
+        {"conversation": "g1", "text": "", "sender": "成员2"},
+    ]))
+    await enable(client)
+    replies = await eventually(lambda: len(lines("replies.jsonl")) == 2 and lines("replies.jsonl"))
+    assert [item["reply"] for item in replies] == [None, "好的。"]
+    # Answered in the chat, never planned as work, knowing what the group asked.
+    assert not classified and not [run for run in api.db.list_runs() if run.kind == "task"]
+    assert "成员1：周五团建去哪儿好？" in sent[0][2] and capability_runner.CALLED_ONLY in sent[0][2]
+
+
 def test_what_the_group_said_is_kept_bounded():
     kept = capability_runner.keep_heard([f"成员：{n}" * 100 for n in range(50)])
     assert len(kept) <= capability_runner.MAX_HEARD_LINES and sum(map(len, kept)) <= capability_runner.MAX_HEARD_CHARS

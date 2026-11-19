@@ -49,6 +49,8 @@ MAX_TEXT = 20_000
 PROGRESS_SECONDS = 0.5
 # What a message of files alone says.
 FILES_ONLY = "（见附件）"
+# What a message that only calls on it says (an @ and nothing else): answer what came before.
+CALLED_ONLY = "（只 @ 了你，没有别的话）"
 # How long a line from an automation may be.
 LINE_LIMIT = 1 << 20
 
@@ -304,13 +306,15 @@ class Runner:
         request = payload.get("id")
         text = str(payload.get("text") or "").strip()[:MAX_TEXT]
         attached = take_files(item, capability.id, payload.get("attachments"))
-        if not text and not attached:
+        addressed = payload.get("addressed") is not False
+        if not text and not attached and not addressed:
             await self._send(item, {"re": request, "reply": None})
             return
-        asked = Asked(conversation=str(payload.get("conversation") or "")[:200], text=text or FILES_ONLY,
+        asked = Asked(conversation=str(payload.get("conversation") or "")[:200],
+                      text=text or (FILES_ONLY if attached else CALLED_ONLY),
                       origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},
                       attachments=attached, on_text=self._progress(item, request),
-                      addressed=payload.get("addressed") is not False, sender=str(payload.get("sender") or "")[:40])
+                      addressed=addressed, sender=str(payload.get("sender") or "")[:40])
         async with item.lock:
             if item.remaining() <= 0 and not asked.addressed:
                 await self._send(item, {"re": request, "reply": None, "over_budget": True})  # it was not asked

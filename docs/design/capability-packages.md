@@ -59,6 +59,9 @@ unpacked and `MAX_PACKAGE_FILES` files.
       line. The chat or task gets them as files the user attached; a chat whose chosen model
       cannot see images is answered by one that can, saying so. A message of files alone reads
       "（见附件）" and goes to the chat without being classified: there are no words to tell work by.
+      A message with neither words nor files, said where it was called on (an @ and nothing
+      else), reads "（只 @ 了你，没有别的话）" and goes to the chat the same way, with what the
+      group said before.
   - **To the automation** (stdin):
     - `{"re": id, "reply": …}`;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
