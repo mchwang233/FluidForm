@@ -14,7 +14,7 @@ export type EngineerJob = {
   id: string; kind: "repair" | "component"; origin: "user" | "lead" | "diagnosis" | "retrospective"; title: string; request: string;
   headline?: string; plan_plain?: string; plain?: string; thread_id?: string | null;
   status: string; plan?: string | null; report?: string | null; question?: string | null; choices?: string[];
-  run_id?: string | null; node_id?: string | null; files?: string[]; checks?: string[]; diff?: string | null;
+  run_id?: string | null; node_id?: string | null; files?: string[]; checks?: string[]; diff?: string | null; has_diff?: boolean;
   commit?: string | null; model_id?: string | null; messages?: EngineerMessage[]; budget_usd: number; cost_usd: number;
   error?: string | null; created_at: string; updated_at: string; finished_at?: string | null;
 };
@@ -70,17 +70,19 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
 }) {
   const [data, setData] = useState<EngineerOverview | null>(null), [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
-  const revision = useRef(0);
+  const revision = useRef(0), tag = useRef("");
   async function load() {
     const mine = revision.current;
     try {
-      const response = await fetch(`${apiBase}/api/engineer`);
+      // Sent again only when something changed (ETag); diffs are read when opened (JobDiff).
+      const response = await fetch(`${apiBase}/api/engineer`, tag.current ? { headers: { "If-None-Match": tag.current } } : undefined);
+      if (response.status === 304) { setError(""); return; }
       if (!response.ok) throw new Error(`读取失败（${response.status}）`);
       const body = await response.json() as EngineerOverview;
-      if (mine === revision.current) { setData(body); setError(""); }
+      if (mine === revision.current) { setData(body); setError(""); tag.current = response.headers.get("ETag") ?? ""; }
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
   }
-  useEffect(() => { load(); const timer = setInterval(load, 2000); return () => clearInterval(timer); }, []);
+  useEffect(() => { load(); const timer = setInterval(() => { if (!document.hidden) load(); }, 2000); return () => clearInterval(timer); }, []);
   useEffect(() => { if (focusId) setSelectedId(focusId); }, [focusId]);
   const jobs = data?.jobs ?? [];
   const selected = jobs.find(job => job.id === selectedId) ?? jobs[0] ?? null;
@@ -246,7 +248,7 @@ function JobDetail({ apiBase, job, working, runs, act, onOpenRun, onOpenThread }
     {job.report && <div className="engineer-section"><h4>{job.status === "applied" ? "结果" : "工程师的报告"}</h4><div className="dx-report"><MarkdownView text={job.report} /></div></div>}
     {!!job.files?.length && <div className="engineer-section"><h4>改动的文件</h4><ul className="engineer-files">{job.files.map(file => <li key={file}><code>{file}</code></li>)}</ul>
       {!!job.checks?.length && <p className="engineer-checks">检查通过：{job.checks.map(check => CHECKS[check] ?? check).join("、")}</p>}
-      {job.diff && <details className="engineer-diff"><summary>查看改动内容</summary><pre>{job.diff}</pre></details>}</div>}
+      {(job.diff || job.has_diff) && <JobDiff key={job.id} apiBase={apiBase} job={job} />}</div>}
     {job.status === "ready" && <div className="engineer-actions">
       <button type="button" className="primary" disabled={!!busy} onClick={() => post("approve", "apply")}>{busy === "apply" ? "提交中…" : "应用这项改动"}</button>
       <button type="button" className="ghost" disabled={!!busy} onClick={() => post("reject", "reject")}>放弃</button>
@@ -272,4 +274,22 @@ function JobDetail({ apiBase, job, working, runs, act, onOpenRun, onOpenThread }
       <button type="button" className="ghost" disabled={!!busy} onClick={() => post("reject", "reject")}>{busy === "reject" ? "提交中…" : "放弃这项工作"}</button>
     </div>}
   </section>;
+}
+
+/** A change's diff, read when it is opened: it can be hundreds of kilobytes. */
+function JobDiff({ apiBase, job }: { apiBase: string; job: EngineerJob }) {
+  const [diff, setDiff] = useState<string | null>(job.diff ?? null), [error, setError] = useState("");
+  const reading = useRef(false);
+  async function open(event: React.SyntheticEvent<HTMLDetailsElement>) {
+    if (!event.currentTarget.open || diff !== null || reading.current) return;
+    reading.current = true;
+    try {
+      const response = await fetch(`${apiBase}/api/engineer/jobs/${encodeURIComponent(job.id)}/diff`);
+      if (!response.ok) throw new Error(`读取失败（${response.status}）`);
+      setDiff(((await response.json()) as { diff?: string | null }).diff ?? "");
+    } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { reading.current = false; }
+  }
+  return <details className="engineer-diff" onToggle={event => void open(event)}><summary>查看改动内容</summary>
+    {error ? <p className="error" role="alert">{error}</p> : <pre>{diff ?? "加载中…"}</pre>}</details>;
 }

@@ -10,10 +10,10 @@ export type PlanNode = {
   difficulty?: string; quality_threshold?: number; routing_note?: string | null; started_at?: string | null; waiting_for_folder?: boolean; preparing?: boolean; head_start?: string;
   acceptance_criteria?: string; verifies?: string[]; attempts?: NodeAttempt[]; failed_attempts?: number;
   feedback?: string | null; unable_reason?: string | null; review_passed?: boolean | null; review?: string | null; summary?: string | null;
-  changed_files?: string[]; folders?: string[]; inputs?: { node_id: string; form: string; changed_files: number }[];
+  changed_files?: string[]; changed_files_total?: number | null; folders?: string[]; inputs?: { node_id: string; form: string; changed_files: number }[];
   files?: string[]; reads?: string[]; provides?: string; check?: string; part_id?: string | null;
 };
-export type ToolCall = { turn: number; tool: string; detail?: string; ok?: boolean | null; output?: string; running?: boolean; status?: string; diagnostic?: string | null };
+export type ToolCall = { turn: number; tool: string; detail?: string; ok?: boolean | null; output?: string; output_size?: number | null; running?: boolean; status?: string; diagnostic?: string | null };
 type NodeAttempt = { model_id?: string | null; outcome: string; reason?: string | null; reviewer_model_id?: string | null; cost_usd: number; finished_at?: string;
   turns?: number; turn_limit?: boolean; tool_calls?: ToolCall[]; result?: string | null; result_source?: string | null };
 const TOOL_LABELS: Record<string, string> = { Bash: "运行命令", Read: "读文件", Write: "写文件", Edit: "改文件", MultiEdit: "批量改文件",
@@ -25,8 +25,21 @@ const TOOL_LABELS: Record<string, string> = { Bash: "运行命令", Read: "读�
   // The platform engineer's checks of its change (engineer.py).
   check: "检查" };
 
-/** Where an API model's turns went: calls per tool, then every call, folded by default. */
-export function ToolLog({ calls, open = false, title = "工具调用" }: { calls: ToolCall[]; open?: boolean; title?: string }) {
+/** A tool call's output left out of an opened task (output_size), read when it is opened. */
+function LaterOutput({ size, read }: { size: number; read: () => Promise<string> }) {
+  const [text, setText] = useState<string | null>(null), [error, setError] = useState(""), reading = useRef(false);
+  function open(event: React.SyntheticEvent<HTMLDetailsElement>) {
+    if (!event.currentTarget.open || text !== null || reading.current) return;
+    reading.current = true;
+    read().then(setText, failure => setError(failure instanceof Error ? failure.message : String(failure))).finally(() => { reading.current = false; });
+  }
+  return <details className="tool-output" onToggle={open}><summary>模型看到的输出（{size} 字）</summary>
+    {error ? <p className="error" role="alert">{error}</p> : <pre>{text ?? "加载中…"}</pre>}</details>;
+}
+
+/** Where an API model's turns went: calls per tool, then every call, folded by default.
+ *  ``readOutput``: reads the output of a call the opened task left out (LaterOutput). */
+export function ToolLog({ calls, open = false, title = "工具调用", readOutput }: { calls: ToolCall[]; open?: boolean; title?: string; readOutput?: (index: number) => Promise<string> }) {
   const counts = new Map<string, [number, number]>();
   for (const call of calls) {
     const [n, bad] = counts.get(call.tool) ?? [0, 0];
@@ -37,7 +50,8 @@ export function ToolLog({ calls, open = false, title = "工具调用" }: { calls
     <ol>{calls.map((call, index) => <li key={index} className={call.ok === false ? "bad" : undefined}>
       {call.turn > 0 && <span className="tool-turn">第 {call.turn} 轮</span>}<span className="tool-name">{TOOL_LABELS[call.tool] ?? call.tool}</span><code title={call.detail}>{call.detail}</code>{call.running && <em className="running">运行中</em>}{call.ok === false && <em>失败</em>}{!call.running && call.ok == null && <em>{call.status === "incomplete" ? "未完成" : "未知"}</em>}
       {call.diagnostic && <span>{call.diagnostic}</span>}
-      {call.output && <details className="tool-output"><summary>{call.running ? "到目前的输出" : "模型看到的输出"}</summary><pre>{call.output}</pre></details>}
+      {call.output ? <details className="tool-output"><summary>{call.running ? "到目前的输出" : "模型看到的输出"}</summary><pre>{call.output}</pre></details>
+        : call.output_size && readOutput ? <LaterOutput size={call.output_size} read={() => readOutput(index)} /> : null}
     </li>)}</ol>
   </details>;
 }
@@ -270,6 +284,8 @@ function describe(event: TimelineEvent, nodeId: string, number: Map<string, stri
 export function NodeProgress({ apiBase, runId, runStatus, node, nodes, number, model, onOpenModel, onClose }: { apiBase: string; runId: string; runStatus: string; node: PlanNode; nodes: PlanNode[]; number: Map<string, string>; model?: Model; onOpenModel: () => void; onClose: () => void }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]), [now, setNow] = useState(() => Date.now());
   const attempts = node.attempts ?? [], inputs = node.inputs ?? [], files = node.changed_files ?? [];
+  // The server sends the first 50 and the count (api.read_task).
+  const changedTotal = node.changed_files_total ?? files.length;
   const live = ACTIVE_RUN.has(runStatus);
   const [activity, setActivity] = useState<{ total: number; calls: ToolCall[] } | null>(null);
   useEffect(() => {
@@ -352,7 +368,7 @@ export function NodeProgress({ apiBase, runId, runStatus, node, nodes, number, m
         {node.review && <section><h5>验收意见</h5><p>{node.review}</p></section>}
         {node.feedback && node.status !== "succeeded" && <section><h5>需要修改</h5><p>{node.feedback}</p></section>}
         {!!inputs.length && <section><h5>收到的上游结果</h5><p>{inputs.map(input => `${number.get(input.node_id) ?? "?"} 的${INPUT_LABELS[input.form] ?? input.form}${input.changed_files ? `（改动 ${input.changed_files} 个文件）` : ""}`).join("，")}</p></section>}
-        {!!files.length && <section><h5>改动的文件（{files.length}）</h5><ul className="plan-files">{files.slice(0, 50).map(file => <li key={file}>{file}</li>)}{files.length > 50 && <li>…另外 {files.length - 50} 个</li>}</ul></section>}
+        {!!files.length && <section><h5>改动的文件（{changedTotal}）</h5><ul className="plan-files">{files.slice(0, 50).map(file => <li key={file}>{file}</li>)}{changedTotal > 50 && <li>…另外 {changedTotal - 50} 个</li>}</ul></section>}
       </div>
     </div>
     {!!attempts.length && <section className="node-progress-attempts"><h5>尝试记录</h5><ol className="plan-attempts">{attempts.map((attempt, index) => <li key={index} className={attempt.outcome}>
@@ -362,7 +378,8 @@ export function NodeProgress({ apiBase, runId, runStatus, node, nodes, number, m
       {attempt.reason && <p>{attempt.reason}</p>}
       {attempt.result != null ? <details><summary>第 {index + 1} 次回答 · {attempt.result_source === "provider" ? "模型返回" : "来源未知"}</summary><MarkdownView text={attempt.result} /></details>
         : <p className="muted">本次回答未记录，不能用历史输出代替。</p>}
-      {!!attempt.tool_calls?.length && <ToolLog calls={attempt.tool_calls} />}
+      {!!attempt.tool_calls?.length && <ToolLog calls={attempt.tool_calls} readOutput={call => fetch(`${apiBase}/api/tasks/${encodeURIComponent(runId)}/nodes/${encodeURIComponent(node.id)}/attempts/${index}/calls/${call}/output`)
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(`读取失败（${r.status}）`))).then((body: { output?: string }) => body.output ?? "")} />}
     </li>)}</ol></section>}
     {node.result && <section className="node-progress-output"><h5>{attempts.some(attempt => attempt.result === node.result)
       ? "已保存的输出（各次回答见尝试记录）"

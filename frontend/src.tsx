@@ -330,7 +330,7 @@ export function greeting(mode:"auto"|"task"|"chat",hour=new Date().getHours()):s
   return `${part}，今天想做点什么？`;
 }
 
-function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string,attachments?:string[])=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
+function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{loading?:boolean;onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string,attachments?:string[])=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
   const [budget,setBudget]=useState(run?.budget_usd??2),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   // The task's conversation: its lead, and diagnoses no lead ran or asked for.
   const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id));
@@ -343,6 +343,8 @@ function MissionDetail({run,models,onUpdated,onPromote,onToChat,deletingId,cance
   useEffect(()=>{if(!picked.current)setTab(current=>waiting?"chat":current==="chat"?current:defaultTab(run?.status??""))},[run?.status,!!waiting]);
   useEffect(()=>{if(run?.status!=="running")return;const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer)},[run?.status]);
   if(!run)return <section className="panel detail"><div className="empty big">在左侧选一条记录，或点左上角的“新建”。</div></section>;
+  // Opened from the brief list: shown once it has been read in full, not half empty first.
+  if(loading)return <section className="panel detail" aria-busy="true"><div className="empty big">加载中…</div></section>;
   if(run.kind==="chat")return <ChatDetail run={run} auto={!!run.auto_routed} attachments={<TaskAttachments apiBase={API} attachments={run.attachments}/>} model={shortModelName(models.find(item=>item.id===run.supervisor?.model_id)?.display_name??run.supervisor?.model_id??"—")}
     deleteButton={<DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>} onPromote={options=>onPromote(run,options)}
     conversation={<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={((text,files)=>onAsk(run,text,files)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}/>;
@@ -442,21 +444,41 @@ function App() {
   const [quota,setQuota]=useState<Quota[]>([]);
   // Separate from the main load: an older API without this route must not look offline.
   const loadQuota=async(init?:RequestInit,path="")=>{try{const r=await fetch(`${API}/api/models/quota${path}`,init);if(r.ok)setQuota(await r.json())}catch{}};
+  // The list comes brief (no step logs) and only when it changed (ETag, 304); the task that is open
+  // is read in full on its own, also only when it changed. Polling an unchanged page costs nothing.
+  const briefOnly=useRef(new WeakSet<Run>());
+  const listTag=useRef(""),briefRuns=useRef<Run[]>([]),openRun=useRef<{id:string;tag:string;run:Run}|null>(null),openId=useRef<string|null>(null);
+  const tagged=(url:string,tag?:string)=>fetch(url,tag?{headers:{"If-None-Match":tag}}:undefined);
   const load=async(withModels=true)=>{
     const revision=loadRevision.current;
     void loadQuota();
     try{
-      const urls=[`${API}/api/tasks`,...(withModels?[`${API}/api/models`,`${API}/api/providers`]:[])];
-      const data=await Promise.all((await Promise.all(urls.map(url=>fetch(url)))).map(r=>r.json()));
+      const extra=withModels?[`${API}/api/models`,`${API}/api/providers`]:[];
+      const [list,...others]=await Promise.all([tagged(`${API}/api/tasks?brief=true`,listTag.current),...extra.map(url=>fetch(url))]);
+      let changed=false;
+      if(list.status!==304){
+        if(!list.ok)throw new Error(`tasks ${list.status}`);
+        briefRuns.current=await list.json() as Run[];listTag.current=list.headers.get("ETag")??"";changed=true;
+        for(const run of briefRuns.current)briefOnly.current.add(run);
+      }
+      const id=openId.current;
+      if(id&&briefRuns.current.some(run=>run.id===id)){
+        const held=openRun.current?.id===id?openRun.current:null;
+        const read=await tagged(`${API}/api/tasks/${encodeURIComponent(id)}`,held?.tag);
+        if(read.ok){openRun.current={id,tag:read.headers.get("ETag")??"",run:await read.json() as Run};changed=true}
+      }
       setOffline(false);
-      if(revision!==loadRevision.current)return;
-      setRuns(data[0] as Run[]);
+      // Something newer was shown meanwhile: drop this read, and read in full next time.
+      if(revision!==loadRevision.current){listTag.current="";openRun.current=null;return}
+      if(changed){const full=openRun.current;setRuns(briefRuns.current.map(run=>full&&run.id===full.id?full.run:run))}
       // With no tasks yet, the new-task form is the only useful thing to show.
-      if(!loaded.current){loaded.current=true;if(!(data[0] as Run[]).length)setComposerOpen(true)}
-      if(withModels){setModels(data[1] as Model[]);setProviderList(data[2] as Provider[])}
+      if(!loaded.current){loaded.current=true;if(!briefRuns.current.length)setComposerOpen(true)}
+      if(withModels){const [models,providers]=await Promise.all(others.map(r=>r.json()));setModels(models as Model[]);setProviderList(providers as Provider[])}
     }catch{setOffline(true)}
   };
-  useEffect(()=>{load();const id=setInterval(()=>{pollCount.current++;load(pollCount.current%MODEL_REFRESH_EVERY===0)},POLL_MS);return()=>clearInterval(id)},[]);
+  useEffect(()=>{load();const id=setInterval(()=>{if(document.hidden)return;pollCount.current++;load(pollCount.current%MODEL_REFRESH_EVERY===0)},POLL_MS);return()=>clearInterval(id)},[]);
+  // A task opened is read in full at once, not at the next poll.
+  useEffect(()=>{const id=selected?.id??null;if(id===openId.current)return;openId.current=id;if(id&&openRun.current?.id!==id)void load(false)},[selected?.id]);
   useEffect(()=>{
     // Open the newest mission once, so the workbench never starts on an empty detail panel.
     if(!autoSelected.current&&runs.length){autoSelected.current=true;const linked=runs.find(r=>r.id===hashTaskId());setSelected(current=>current??linked??runs[0]);return}
@@ -611,7 +633,7 @@ function App() {
     <p className="composer-hint">{mode==="auto"?"问题直接回答；要动手的事先给你看计划和预算，你点头再开工。":mode==="chat"?"直接聊，不规划也不执行；选了项目时，会员 CLI 能读项目文件（只读）。":"我先拆成几个大项、算好预算，你确认后才开始执行。"}</p>
     {suggestions.length>0&&<div className="composer-suggestions">{suggestions.map(item=><button key={item.label} type="button" className="ghost" onClick={item.act}>{item.label}</button>)}</div>}
     {formError&&<p className="form-error" role="alert">{formError}</p>}</section>}
-      <MissionDetail run={selected} models={models} onUpdated={replaceRun} onPromote={promoteChat} onToChat={taskToChat} onOpenModel={openModelProfile} deletingId={deletingRunId} cancellingId={cancellingRunId} onConfirm={confirmRun} onChoose={chooseForPlan} onResume={resumeRun} onPause={run=>postAction(run,"pause","暂停")} onDiagnose={run=>postAction(run,"diagnose","请平台工程师")} onReply={replyToDiagnosis} onAsk={askLead} onOpenEngineer={id=>{setEngineerFocus(id);setView("engineer");window.scrollTo({top:0})}} onChange={changeRequirement} onNetwork={setNetwork} parent={selected?.parent_run_id?runs.find(item=>item.id===selected.parent_run_id):undefined} onOpenRun={run=>{autoSelected.current=true;setSelected(run)}} onCancel={requestCancelRun} onDelete={requestDeleteRun}/>
+      <MissionDetail loading={!!selected&&briefOnly.current.has(selected)} run={selected} models={models} onUpdated={replaceRun} onPromote={promoteChat} onToChat={taskToChat} onOpenModel={openModelProfile} deletingId={deletingRunId} cancellingId={cancellingRunId} onConfirm={confirmRun} onChoose={chooseForPlan} onResume={resumeRun} onPause={run=>postAction(run,"pause","暂停")} onDiagnose={run=>postAction(run,"diagnose","请平台工程师")} onReply={replyToDiagnosis} onAsk={askLead} onOpenEngineer={id=>{setEngineerFocus(id);setView("engineer");window.scrollTo({top:0})}} onChange={changeRequirement} onNetwork={setNetwork} parent={selected?.parent_run_id?runs.find(item=>item.id===selected.parent_run_id):undefined} onOpenRun={run=>{autoSelected.current=true;setSelected(run)}} onCancel={requestCancelRun} onDelete={requestDeleteRun}/>
     </div>
     </>}
     {!!toasts.length&&<div className="toasts" role="status">{toasts.map(toast=><div key={toast.id} className={`toast ${toast.tone}`}>

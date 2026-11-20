@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -17,7 +18,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
 from . import attachments as files
 from . import (
@@ -369,10 +370,22 @@ def _engineer(action):
 
 
 @app.get("/api/engineer")
-def engineer_overview(run_id: Optional[str] = None):
+def engineer_overview(request: Request, run_id: Optional[str] = None):
     """The platform engineer (engineer.py): its jobs, newest first, and what it is working on;
-    with ``run_id``, only the jobs of that task."""
-    return executor.engineer_overview(run_id=run_id)
+    with ``run_id``, only the jobs of that task. Each job's diff is left out (``has_diff``) and
+    read when it is opened (GET /api/engineer/jobs/{id}/diff)."""
+    overview = executor.engineer_overview(run_id=run_id)
+    for job in overview["jobs"]:
+        job["has_diff"], job["diff"] = bool(job.get("diff")), None
+    return _unchanged_or(request, json.dumps(overview, ensure_ascii=False).encode())
+
+
+@app.get("/api/engineer/jobs/{job_id}/diff")
+def engineer_job_diff(job_id: str):
+    job = db.get_engineer_job(job_id)
+    if not job:
+        raise HTTPException(404, "没有这项平台改动")
+    return {"diff": job.diff}
 
 
 @app.post("/api/tasks/{run_id}/engineer", status_code=201)
@@ -906,9 +919,40 @@ def _calibrated(runs: list[ExecutionRun]) -> list[ExecutionRun]:
     return runs
 
 
+def _unchanged_or(request: Request, body: bytes) -> Response:
+    """JSON the console polls for, tagged so it is not sent again while it is the same: the console
+    asks every few seconds, and a 304 costs the browser no parsing and no redraw."""
+    tag = '"' + hashlib.sha1(body).hexdigest()[:20] + '"'
+    headers = {"ETag": tag, "Cache-Control": "no-cache"}
+    if request.headers.get("if-none-match") == tag:
+        return Response(status_code=304, headers=headers)
+    return Response(body, media_type="application/json", headers=headers)
+
+
+RUNS = TypeAdapter(list[ExecutionRun])
+
+
+def _brief(run: ExecutionRun) -> ExecutionRun:
+    """A task as the task list shows it: without the steps' tool output, answers and changed files,
+    the team, the lead's decisions and what was said with it, which only the opened task needs
+    (GET /api/tasks/{id})."""
+    nodes = [node.model_copy(update={"changed_files": [], "result": None, "attempts": [
+        attempt.model_copy(update={"tool_calls": [], "result": None, "trace": None}) for attempt in node.attempts]})
+        for node in run.plan.nodes]
+    update = {"plan": run.plan.model_copy(update={"nodes": nodes, "employees": [], "team_brief": ""}),
+              "decisions": [],
+              # The list counts a chat's questions by who said them.
+              "lead_messages": [message.model_copy(update={"text": ""}) for message in run.lead_messages]}
+    if run.supervisor:
+        update["supervisor"] = run.supervisor.model_copy(update={"history": []})
+    return run.model_copy(update=update)
+
+
 @app.get("/api/tasks", response_model=list[ExecutionRun])
-def list_tasks():
-    return _calibrated(db.list_runs())
+def list_tasks(request: Request, brief: bool = False):
+    """Every task; ``brief`` leaves out what only an opened task shows (``_brief``)."""
+    runs = _calibrated(db.list_runs())
+    return _unchanged_or(request, RUNS.dump_json([_brief(run) for run in runs] if brief else runs))
 
 
 @app.get("/api/retrospectives/recurring")
@@ -1018,8 +1062,37 @@ def get_task(run_id: str):
 
 
 @app.get("/api/tasks/{run_id}", response_model=ExecutionRun)
-def read_task(run_id: str):
-    return _calibrated([get_task(run_id)])[0]
+def read_task(run_id: str, request: Request):
+    """A task as its page shows it. Left out, as the page does not show them or reads them when
+    shown: changed files past the first ones, each tool call's output (``tool_call_output``) and
+    the end of a long command, and the lead's own conversation with its model."""
+    run = _calibrated([get_task(run_id)])[0]
+    for node in run.plan.nodes:
+        # The page lists the first files and the count; a simulation can leave megabytes of names.
+        if len(node.changed_files) > SHOWN_CHANGED_FILES:
+            node.changed_files_total = len(node.changed_files)
+            node.changed_files = node.changed_files[:SHOWN_CHANGED_FILES]
+        for attempt in node.attempts:
+            for call in attempt.tool_calls:
+                if call.output:
+                    call.output_size, call.output = len(call.output), ""
+                call.detail = call.detail[:SHOWN_COMMAND_CHARS]
+    if run.supervisor:
+        run.supervisor.history = []
+    return _unchanged_or(request, run.model_dump_json().encode())
+
+
+SHOWN_CHANGED_FILES, SHOWN_COMMAND_CHARS = 50, 300
+
+
+@app.get("/api/tasks/{run_id}/nodes/{node_id}/attempts/{attempt}/calls/{call}/output")
+def tool_call_output(run_id: str, node_id: str, attempt: int, call: int):
+    """What one tool call of a step's attempt returned, read when the page shows it."""
+    node = next((item for item in get_task(run_id).plan.nodes if item.id == node_id), None)
+    try:
+        return {"output": node.attempts[attempt].tool_calls[call].output}
+    except (AttributeError, IndexError):
+        raise HTTPException(404, "没有这次工具调用") from None
 
 
 @app.delete("/api/tasks/{run_id}", status_code=204)

@@ -147,6 +147,8 @@ class ToolCall(BaseModel):
     diagnostic: Optional[str] = None
     # The start of what the tool returned, as the model saw it.
     output: str = ""
+    # Set only in what the console reads, when output was left out to be read when shown (api.py).
+    output_size: Optional[int] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -348,6 +350,8 @@ class TaskNode(BaseModel):
     # Short form of a long result, handed to downstream nodes instead of the full text.
     summary: Optional[str] = None
     changed_files: list[str] = Field(default_factory=list)
+    # Set only in what the console reads, when changed_files was cut to what it shows (api.py).
+    changed_files_total: Optional[int] = None
     inputs: list[NodeInput] = Field(default_factory=list)
     # Rework invalidates in-flight results that were based on an older generation.
     generation: int = 0

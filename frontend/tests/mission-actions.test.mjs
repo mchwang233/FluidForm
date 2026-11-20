@@ -390,12 +390,28 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       return json({ path: "/home/me/prj/picked" });
     }
     if (path === "/api/tasks") {
+      (state.listReads ??= []).push({ query: new URL(url).search, tag: options.headers?.["If-None-Match"] ?? null });
+      if (state.tags) {
+        // Like the server: tagged by content, and not sent again while it is the same.
+        const tag = `"${JSON.stringify(state.records).length}-${state.records.map(run => run.status).join(",")}"`;
+        if (options.headers?.["If-None-Match"] === tag) return new Response(null, { status: 304, headers: { ETag: tag } });
+        return new Response(JSON.stringify(state.records), { status: 200, headers: { "content-type": "application/json", ETag: tag } });
+      }
       const response = json(state.records);
       if (state.holdNextRead) {
         state.holdNextRead = false;
         return new Promise(resolve => { state.releaseRead = () => resolve(response); });
       }
       return response;
+    }
+    if (/^\/api\/tasks\/[^/]+\/nodes\/[^/]+\/attempts\/\d+\/calls\/\d+\/output$/.test(path)) {
+      (state.outputReads ??= []).push(path.split("/").slice(5).join("/"));
+      return json({ output: "3 passed" });
+    }
+    if (/^\/api\/tasks\/[^/]+$/.test(path) && !options.method) {
+      (state.taskReads ??= []).push(decodeURIComponent(path.split("/")[3]));
+      const record = state.records.find(run => run.id === decodeURIComponent(path.split("/")[3]));
+      return record ? json(record) : new Response(null, { status: 404 });
     }
     if (path.endsWith("/timeline")) return json(state.timeline ?? []);
     if (path.endsWith("/files/content")) {
@@ -422,6 +438,10 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     if (path.startsWith("/api/tasks/") && path.endsWith("/lead/activity")) {
       state.chatActivityReads = (state.chatActivityReads ?? 0) + 1;
       return json(state.chatActivity ?? { running: false, total: 0, calls: [] });
+    }
+    if (path.startsWith("/api/engineer/jobs/") && path.endsWith("/diff")) {
+      (state.diffReads ??= []).push(path.split("/")[4]);
+      return json({ diff: state.diffs?.[path.split("/")[4]] ?? null });
     }
     if (path.startsWith("/api/engineer/jobs/") && path.endsWith("/activity")) {
       state.activityReads = (state.activityReads ?? 0) + 1;
@@ -499,6 +519,22 @@ test("pending delete prevents duplicate requests; server error remains visible a
   await click(button("确认删除", dialog()));
   assert.equal(dialog(), null);
   assert.equal(state.deletes.length, 2);
+});
+
+test("the task list is read brief, the opened task in full, and an unchanged list is not sent again", async t => {
+  // The page was slow: every two seconds it read every task with all its steps' logs (7 MB).
+  const { state, act, document, click } = await setup(t);
+  state.tags = true;
+  assert.equal(state.listReads[0].query, "?brief=true");
+  await click([...document.querySelectorAll(".run")].find(run => run.title === "running-task"));
+  assert.ok(state.taskReads.includes("running-task"));
+  await act(async () => state.poll());
+  await act(async () => state.poll());
+  assert.ok(state.listReads.at(-1).tag?.startsWith('"'), "a later read asks whether it changed");
+  assert.equal(document.querySelector(".detail .pill").textContent, "运行中");
+  state.records[1] = mission("running-task", "succeeded");
+  await act(async () => state.poll());
+  assert.equal(document.querySelector(".detail .pill").textContent, "已完成");
 });
 
 test("an already removed task clears locally when the server returns 404", async t => {
@@ -1177,7 +1213,7 @@ test("each task shows its check result, and clicking it shows its progress", asy
     { id: 4, kind: "run.rework", data: { round: 1, verifier: "check", reopened: ["impl", "check"], problems: "tests still fail" }, created_at: at },
     { id: 5, kind: "node.started", data: { node_id: "check", attempt: 2 }, created_at: at },
   ];
-  const { state, document, click } = await setup(t, [run]);
+  const { state, document, click, act } = await setup(t, [run]);
   state.timeline = timeline;
   assert.match(document.querySelector(".plan-summary").textContent, /重试 1 次.*返工 1 轮/);
   // Stages run left to right.
@@ -1197,6 +1233,25 @@ test("each task shows its check result, and clicking it shows its progress", asy
   ]);
   assert.match(panel.textContent, /login\.py is changed/);
   assert.match(panel.textContent, /改动的文件（2）/);
+  // A step with thousands of changed files: the server sends the first ones and the count.
+  const edited = state.records[0].plan.nodes.find(node => node.acceptance_criteria === "login.py is changed");
+  state.records[0] = { ...state.records[0], plan: { ...state.records[0].plan, nodes: state.records[0].plan.nodes.map(node =>
+    node === edited ? { ...node, changed_files_total: 3000 } : node) } };
+  await act(async () => state.poll());
+  panel = document.querySelector(".node-progress");
+  assert.match(panel.textContent, /改动的文件（3000）.*另外 2950 个/s);
+  // A tool call's output is not in the opened task: it is read when it is opened.
+  state.records[0] = { ...state.records[0], plan: { ...state.records[0].plan, nodes: state.records[0].plan.nodes.map(node =>
+    node.acceptance_criteria === "login.py is changed" ? { ...node, attempts: node.attempts.map((attempt, index) => index === 1
+      ? { ...attempt, tool_calls: [{ turn: 1, tool: "command", detail: "pytest", ok: true, output: "", output_size: 8 }] } : attempt) } : node) } };
+  await act(async () => state.poll());
+  panel = document.querySelector(".node-progress");
+  const later = [...panel.querySelectorAll(".tool-output")].find(item => item.textContent.includes("8 字"));
+  assert.ok(later && !state.outputReads);
+  await act(async () => { later.open = true; });
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.deepEqual(state.outputReads, ["impl/attempts/1/calls/0/output"]);
+  assert.equal(later.querySelector("pre").textContent, "3 passed");
   assert.deepEqual([...panel.querySelectorAll(".plan-attempts b")].map(b => b.textContent), ["第 1 次 · 验收未通过", "第 2 次 · 通过"]);
   assert.equal(panel.querySelector(".node-progress-output .markdown-body").textContent, "Edited login.py");
 
@@ -2029,7 +2084,8 @@ test("the platform engineer page opens from a task's conversation, shows finishe
   const { state, document, button, click, act, window } = await setup(t, [run], [], { openComposer: false });
   state.engineer = { available: true, jobs: [engineerJob({ run_id: "finished-task", messages: [{ role: "user", text: "加导出按钮", created_at: "2026-10-19T08:00:00Z" }] }),
     engineerJob({ id: "job0", title: "修复状态", status: "applied", kind: "repair",
-    report: "改好了", files: ["backend/super_partner/executor.py"], checks: ["Backend tests"], diff: "+fixed", commit: "abcdef1234" })] };
+    report: "改好了", files: ["backend/super_partner/executor.py"], checks: ["Backend tests"], diff: null, has_diff: true, commit: "abcdef1234" })] };
+  state.diffs = { job0: "+fixed" };
   state.records[0] = { ...state.records[0], updated_at: "2026-10-19T08:00:01Z" };
   await act(async () => state.poll());
   await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
@@ -2044,6 +2100,13 @@ test("the platform engineer page opens from a task's conversation, shows finishe
   await click([...page.querySelectorAll(".engineer-list button")].find(node => node.textContent.includes("修复状态")));
   const detail = document.querySelector(".engineer-job");
   assert.match(detail.textContent, /已生效.*executor\.py.*检查通过：后端测试.*abcdef12/s);
+  // The diff is not in the list (it can be hundreds of kilobytes): it is read when opened.
+  assert.equal(state.diffReads, undefined);
+  const diff = detail.querySelector(".engineer-diff");
+  await act(async () => { diff.open = true; });
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.deepEqual(state.diffReads, ["job0"]);
+  assert.equal(diff.querySelector("pre").textContent, "+fixed");
   // A new request goes to the engineer through the 平台 page's conversation, its kind told from its words.
   await click(button("← 平台"));
   const box = document.querySelector('.platform-composer [aria-label="给平台工程师的消息"]');
