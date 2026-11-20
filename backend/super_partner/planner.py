@@ -413,7 +413,7 @@ async def _plan_as_lead(request: str, models: list[ModelProfile], configured: se
                                          team_request or request, models, configured)
             opening = supervisor.ROLE + request + (team.assignment_prompt(roster) if roster else "")
             plan = await plan_tasks(partial(say, effort=planning_effort, stage="tasks"),
-                                    opening, roster, artifact_work)
+                                    opening, roster, artifact_work, in_project)
             concurrency = plan.planning_note
         except Exception as exc:
             # The next lead tries; with none left, the usual single-call planner does.

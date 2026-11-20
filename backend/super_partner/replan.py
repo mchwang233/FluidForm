@@ -4,9 +4,11 @@ so the lead can be asked again."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import uuid4
 
 from . import contracts, team
+from .config import settings
 from .lead_planning import MAX_TASKS
 from .models import ExecutionRun, ModelProfile, NodeStatus, TaskNode
 from .planner import _difficulty, package
@@ -124,6 +126,10 @@ def change_plan(run: ExecutionRun, change: dict, models: list[ModelProfile], con
         contracts.validate(run.plan.model_copy(update={"nodes": remaining}), partial=True)
     except contracts.ContractError as exc:
         raise PlanError(str(exc)) from exc
+    folder = Path(run.project_dir) if run.project_dir else settings.workspace_root / run.folder_id
+    if problems := contracts.unwritten_scripts(run.plan.model_copy(update={"nodes": remaining}),
+                                               lambda name: (folder / name).exists()):
+        raise PlanError("; ".join(problems))
     for node in added + (updated if run.plan.employees else []):
         try:
             if run.plan.employees:

@@ -432,3 +432,22 @@ async def test_the_lead_hears_what_the_engineer_found_when_the_user_called_it(da
     await run(database, team)
     assert "What the platform engineer (平台工程师) found and did here so far:" in team.lead[0]
     assert "the user asked: fixed. 许可证服务器没启动" in team.lead[0]
+
+
+def test_a_requirement_a_step_set_itself_is_not_the_bar(database):
+    # The axi-to-apb task: the step building the test bench wrote "every legal parameter combination"
+    # into its own requirements list; the report step then stopped twice over it.
+    from super_partner.models import NodeAttempt as Attempt
+    from super_partner.models import Outcome
+    from super_partner.supervisor import BEYOND_THE_BAR, failure_message
+    task = database.get_run("r")
+    step = task.plan.nodes[0]
+    step.acceptance_criteria = "报告每项覆盖率都有原始数据依据"
+    prompt, _ = quality.node_prompt(step, task, 4000)
+    assert quality.OWN_BAR in prompt
+    verdict = type("Verdict", (), {"reason": "R25 要求全部合法参数配置", "fix": None})()
+    step.attempts = [Attempt(model_id="cli:codex", outcome=Outcome.BLOCKED, reason=verdict.reason)]
+    told = failure_message(task, step, step.attempts[-1], verdict, list(MODELS.values()), (3, 10))
+    assert BEYOND_THE_BAR in told and "as you set them: 报告每项覆盖率都有原始数据依据" in told
+    step.attempts[-1].outcome = Outcome.ERROR
+    assert BEYOND_THE_BAR not in failure_message(task, step, step.attempts[-1], verdict, list(MODELS.values()), (3, 10))

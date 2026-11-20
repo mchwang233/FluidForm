@@ -17,7 +17,7 @@ from . import folders
 from .budget import ProviderError
 from .cli_channels import SESSION_CLIS, SessionLost
 from .config import settings
-from .models import ExecutionRun, ModelProfile, NodeStatus, SupervisorSession
+from .models import ExecutionRun, ModelProfile, NodeStatus, Outcome, SupervisorSession
 from .quota import ModelUnavailable
 
 ROLE = (
@@ -472,6 +472,13 @@ PLAN_FORMAT = (
 )
 
 
+# The task's result is what the user reads when it ends: the lead, which has seen every step, writes
+# it, rather than the output of whichever step happened to run last.
+SUMMARY_FORMAT = ('"summary": "done only: the task\'s result for the user, in the language of the request: '
+                  'what was delivered, with links to the main files, how it was checked, and what is not done or '
+                  'only partly verified. A few short paragraphs or a short list, not the history of the work", ')
+
+
 def decision_format(rework: bool = False, final: bool = False) -> str:
     """How to answer; a failed verification may also send steps back (``rework``), and when
     every step has finished (``final``) the lead says whether the task is done."""
@@ -488,6 +495,7 @@ def decision_format(rework: bool = False, final: bool = False) -> str:
            'for repair_*: what to repair; for request_component: what to add and why", ')
         + '"model_id": "switch_model only: one of the models listed", '
         + ('"targets": ["rework only: ids of the steps to redo"], ' if rework or final else "")
+        + (SUMMARY_FORMAT if final else "")
         + (PLAN_FORMAT + ", " if "replan" in actions else "")
         + '"question": "ask_user only, in Chinese", "options": ["ask_user only: up to 4 answers"], '
         '"user_action": "unable only: what the user could do to make it possible", '
@@ -549,6 +557,15 @@ def engineer_looks(run: ExecutionRun, node) -> list[str]:
     return ["What the platform engineer (平台工程师) found and did here so far:", *lines] if lines else []
 
 
+# A step that stops over a requirement nobody set for it: in the axi-to-apb task one step wrote
+# "every legal parameter combination" into its own requirements list and a later step stopped twice
+# over it. Whether the task needs it is the lead's call, made once, not the step's.
+BEYOND_THE_BAR = ("If it stopped over a requirement that is neither in the request nor in these criteria (one a "
+                  "step wrote down itself, for example in a requirements list), decide whether the request needs "
+                  "it rather than following it: if not, retry with instructions to list it as an open point; if "
+                  "it does, say why in your reason and keep it from then on.")
+
+
 def failure_message(run: ExecutionRun, node, attempt, verdict, choices: list[ModelProfile],
                     left: tuple[int, int], upstream: Optional[set[str]] = None) -> str:
     """Tell the lead an attempt of ``node`` failed, with the evidence, and ask what to do;
@@ -561,6 +578,8 @@ def failure_message(run: ExecutionRun, node, attempt, verdict, choices: list[Mod
         f"Attempt {len(node.attempts)} by {attempt.model_id}: {attempt.outcome}.",
         f"Why it was not accepted: {verdict.reason}",
         *([f"What the check says to change: {verdict.fix}"] if verdict.fix and verdict.fix != verdict.reason else []),
+        *([f"Its acceptance criteria, as you set them: {node.acceptance_criteria}"] if node.acceptance_criteria else []),
+        *([BEYOND_THE_BAR] if attempt.outcome in {Outcome.BLOCKED, Outcome.UNABLE} else []),
         *([f"Its answer (start):\n{node.result[:MAX_EVIDENCE_CHARS]}"] if node.result else []),
         *([_tool_summary(attempt, True)] if attempt.tool_calls else []),
         f"Files this step has changed: {', '.join(node.changed_files[:30]) or '(none)'}",
@@ -823,6 +842,8 @@ def parse_decision(text: str, model_ids: set[str], targets: Optional[set[str]] =
         return None
     if clean["action"] in {"request_component", "call_engineer"} and not (clean.get("instructions") or clean.get("reason")):
         return None
+    if clean["action"] == "done" and str(payload.get("summary") or "").strip():
+        clean["summary"] = str(payload["summary"]).strip()[:6000]
     if clean["action"] == "call_engineer":
         clean["kind"] = "component" if payload.get("kind") == "component" else "repair"
     if call := read_engineer(payload.get("engineer")):

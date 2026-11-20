@@ -278,3 +278,32 @@ async def test_the_lead_is_told_which_paths_are_not_allowed_and_can_correct_them
     plan = await planned(provider)
     assert "rtl/*.sv, ../secret" in provider.messages[2]
     assert plan.nodes[0].reads == ["rtl/top.sv"]
+
+
+async def test_a_check_that_runs_a_script_no_step_writes_is_sent_back_when_planning():
+    # The axi-to-apb task: a step's check ran verification/runs/check_collection.py, which no step
+    # was allowed to write, so the step did its work for 21 minutes and then could not pass.
+    unwritten = {**TASKS, "nodes": [{**TASKS["nodes"][0], "files": ["runs/coverage.txt"],
+                                     "check": "python3 runs/check_collection.py && test -s runs/coverage.txt"},
+                                    TASKS["nodes"][1]]}
+    fixed = {**unwritten, "nodes": [{**unwritten["nodes"][0], "files": ["runs/coverage.txt", "runs/check_collection.py"]},
+                                    TASKS["nodes"][1]]}
+
+    class Correcting(Planner):
+        async def converse(self, session, text, **kwargs):
+            self.messages.append(text)
+            if "TEAM_SETUP" in text:
+                return ProviderResult(json.dumps(ROSTER), 10, 10, session.model_id)
+            return ProviderResult(json.dumps(unwritten if len(self.messages) == 2 else fixed), 10, 10, session.model_id)
+
+    provider = Correcting()
+    plan = await planned(provider)
+    assert "runs/check_collection.py" in provider.messages[2] and "no step writes" in provider.messages[2]
+    assert "runs/check_collection.py" in plan.nodes[0].files
+    # A script a dependency writes, or one already in the project, is fine.
+    from super_partner.contracts import unwritten_scripts
+    built, checked = (plan.nodes[0].model_copy(update={"check": ""}),
+                      plan.nodes[1].model_copy(update={"check": "bash runs/check_collection.py -v"}))
+    assert unwritten_scripts(TaskPlan(summary="s", nodes=[built, checked])) == []
+    assert unwritten_scripts(TaskPlan(summary="s", nodes=[checked], in_project=True)) == []
+    assert unwritten_scripts(TaskPlan(summary="s", nodes=[checked.model_copy(update={"dependencies": []})]))

@@ -553,6 +553,8 @@ class Decision(BaseModel):
     targets: list[str] = Field(default_factory=list)
     lead_model_id: Optional[str] = None
     engineer_job_id: Optional[str] = None
+    # done at the end: the task's result as the user reads it, written by the lead.
+    summary: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

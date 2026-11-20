@@ -114,6 +114,18 @@ async def test_the_lead_confirms_the_whole_result_before_the_task_ends(database)
     assert result.status == RunStatus.SUCCEEDED
     assert "EVENT: every step has finished" in team.lead[0] and "写一个工具" in team.lead[0]
     assert [(item.event, item.action) for item in result.decisions] == [("all_done", "done")]
+    assert result.final_result == result.plan.nodes[-1].result  # no summary: the steps' output, as before
+
+
+async def test_the_task_ends_with_the_leads_summary_not_the_last_steps_output(database):
+    # The axi-to-apb task ended with the last rework's note about a rebuild script; what the module
+    # does and how far it was verified was only in the lead's reason.
+    summary = "AXI4→APB4 桥已完成，53 次回归通过；功能覆盖率 100%，代码覆盖率未到 100%，原因见报告。"
+    team = Team([json.dumps({"action": "done", "reason": "整体验收通过", "summary": summary})], fails=0)
+    _, result = await run(database, team)
+    assert "summary" in team.lead[0] and "what was delivered" in team.lead[0]
+    assert result.final_result.startswith(summary)
+    assert result.decisions[-1].summary == summary
 
 
 async def test_the_lead_sends_finished_work_back_when_the_whole_falls_short(database):
@@ -136,3 +148,16 @@ async def test_without_a_lead_a_finished_task_ends_as_before(database, monkeypat
     team = Team([], fails=0)
     _, result = await run(database, team)
     assert result.status == RunStatus.SUCCEEDED and team.lead == []
+
+
+def test_a_changed_check_must_run_a_script_that_is_written_or_already_there(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "workspace_root", tmp_path)
+    current = plan(step("a", NodeStatus.SUCCEEDED), step("b", deps=["a"]))
+    change = {"update": [{"id": "b", "check": "python3 checks/run.py"}]}
+    with pytest.raises(PlanError, match="checks/run.py, which no step writes"):
+        change_plan(current, change, list(MODELS.values()), CONFIGURED)
+    # An earlier step already left it in the task's folder.
+    (tmp_path / current.folder_id / "checks").mkdir(parents=True)
+    (tmp_path / current.folder_id / "checks" / "run.py").write_text("print('ok')")
+    change_plan(current, change, list(MODELS.values()), CONFIGURED)
+    assert current.plan.nodes[1].check == "python3 checks/run.py"

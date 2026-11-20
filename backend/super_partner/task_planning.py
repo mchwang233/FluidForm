@@ -80,7 +80,8 @@ Retain explicit artifact evidence and limits when applicable:
 """ + contracts.RULES + "\nUser request and context:\n"
 
 
-async def plan_tasks(say, opening: str, roster: TaskPlan = None, artifact_work: bool = False) -> TaskPlan:
+async def plan_tasks(say, opening: str, roster: TaskPlan = None, artifact_work: bool = False,
+                     in_project: bool = False) -> TaskPlan:
     asked = []
 
     def read(payload):
@@ -126,6 +127,9 @@ async def plan_tasks(say, opening: str, roster: TaskPlan = None, artifact_work: 
         plan.title = plan_title(payload)
         plan.choices = plan_choices(payload)
         contracts.validate(plan)  # expanded verification still needs all original evidence/limits
+        plan.in_project = in_project
+        if problems := contracts.unwritten_scripts(plan):
+            raise ValueError("; ".join(problems))
         serial_reason = str(payload.get("serial_reason") or "").strip()[:300]
         # Asked once, in the correction round: a plan that truly cannot overlap is then kept as is.
         if (len(asked) == 1 and not serial_reason and len(plan.nodes) >= SERIAL_CHECK_MIN_NODES

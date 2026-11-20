@@ -118,6 +118,13 @@ def folders_section(node: TaskNode) -> str:
             "anything else you need, but do not change it.")
 
 
+# The request and the lead's criteria are the bar; a step does not raise it for the steps after it.
+OWN_BAR = ("These criteria and the request are the bar. Do not write stricter requirements of your own into the "
+           "work for later steps to meet; if you think the task needs more, say so in your result. A "
+           "requirement an earlier step wrote down that goes beyond them is not a reason to stop: do what "
+           "they ask and list the rest as open points for the lead.")
+
+
 def node_prompt(node: TaskNode, run: ExecutionRun, limit: int) -> tuple[str, list[NodeInput]]:
     """The node's prompt and a record of what it received from each upstream node."""
     by_id = {item.id: item for item in run.plan.nodes}
@@ -135,7 +142,8 @@ def node_prompt(node: TaskNode, run: ExecutionRun, limit: int) -> tuple[str, lis
                         "directory; build on them and keep what the change does not touch.\n"
                         + run.background[:BACKGROUND_CHARS])
     if node.acceptance_criteria:
-        sections.append(f"Acceptance criteria (your result will be checked against these):\n{node.acceptance_criteria}")
+        sections.append(f"Acceptance criteria (your result will be checked against these):\n{node.acceptance_criteria}\n"
+                        + OWN_BAR)
     from .contracts import prompt as contract_prompt
     if contract := contract_prompt(node):
         sections.append(contract)

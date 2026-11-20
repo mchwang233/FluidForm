@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shlex
 from pathlib import Path, PurePosixPath
 
 from .models import Artifact, ArtifactContract, NodeStatus, TaskNode, TaskPlan
@@ -186,6 +187,54 @@ def ancestors(node: TaskNode, nodes: list[TaskNode]) -> list[TaskNode]:
         seen.add(key)
         todo += by_id[key].dependencies
     return [item for item in nodes if item.id in seen]
+
+
+# Files a check runs or reads by name; a fresh task's folder starts empty, so each must be written
+# by the step or one it depends on, or the step does its work and then cannot pass its own check.
+SCRIPT_SUFFIXES = {".py", ".sh", ".bash", ".tcl", ".pl", ".rb", ".js", ".mjs", ".cjs", ".ts"}
+WORD = re.compile(r"^[\w./+-]+$")
+
+
+def _scripts(command: str) -> set[str]:
+    try:
+        words = shlex.split(command, comments=True)
+    except ValueError:
+        return set()
+    if "cd" in words or "pushd" in words:
+        return set()  # paths after a cd are relative to somewhere else
+    found = set()
+    for word in words:
+        name = word.removeprefix("./")
+        if (WORD.match(name) and not name.startswith("-") and safe_name(name)
+                and (word.startswith("./") or PurePosixPath(name).suffix in SCRIPT_SUFFIXES)):
+            found.add(name)
+    return found
+
+
+def unwritten_scripts(plan: TaskPlan, exists=lambda name: False) -> list[str]:
+    """Steps not yet run whose check runs a file nothing before them writes and that is not there
+    (``exists``: a changed plan's folder already holds what earlier steps wrote). Only in a fresh
+    folder: in a project the file may already be there."""
+    if plan.in_project:
+        return []
+    problems = []
+    for node in plan.nodes:
+        if node.status != NodeStatus.PENDING:
+            continue
+        commands = [node.check, *(node.artifact_contract.acceptance_commands if node.artifact_contract else [])]
+        written = set()
+        for item in [node, *ancestors(node, plan.nodes)]:
+            written |= {path.rstrip("/") for path in item.files}
+            if item.artifact_contract:
+                written |= {out.path.rstrip("/") for out in item.artifact_contract.outputs}
+        missing = sorted(name for command in commands if command for name in _scripts(command)
+                         if not any(name == path or name.startswith(path + "/") for path in written)
+                         and not exists(name))
+        if missing:
+            problems.append(f"{node.title}: its check runs {', '.join(missing)}, which no step writes (the folder "
+                            "starts empty); add it to the files of this step or of a step it depends on, or "
+                            "check without it")
+    return problems
 
 
 def producers(item: Artifact, nodes: list[TaskNode]) -> list[TaskNode]:

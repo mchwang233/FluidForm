@@ -1368,8 +1368,11 @@ class Executor(Reviewing, Leading, Diagnosing, SelfRepair, Engineering, Prefligh
 
     @staticmethod
     def _final_result(run: ExecutionRun, completed_only: bool = False):
-        """Results of the graph's end nodes, which nothing else depends on, in plan order;
-        ``completed_only`` takes the furthest completed steps instead."""
+        """The lead's summary when it ended the task with one; else the results of the graph's end
+        nodes, which nothing else depends on, in plan order; ``completed_only`` takes the furthest
+        completed steps instead."""
+        if not completed_only and run.decisions and run.decisions[-1].event == "all_done" and run.decisions[-1].summary:
+            return run.decisions[-1].summary
         nodes = [node for node in run.plan.nodes if node.status == NodeStatus.SUCCEEDED] if completed_only else run.plan.nodes
         required = {dep for node in nodes for dep in node.dependencies}
         sinks = [node for node in nodes if node.id not in required]

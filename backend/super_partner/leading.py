@@ -229,7 +229,7 @@ class Leading:
             run = self.db.get_run(run_id)
             run.decisions.append(Decision(event="all_done", action=action, reason=reason,
                                           instructions=decision.get("instructions"), targets=decision.get("targets", []),
-                                          lead_model_id=run.supervisor.model_id))
+                                          summary=decision.get("summary"), lead_model_id=run.supervisor.model_id))
             changes = None
             if action == "rework":
                 self._reopen(run, set(decision["targets"]), decision.get("instructions") or reason)
