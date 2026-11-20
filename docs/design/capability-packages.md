@@ -70,7 +70,9 @@ unpacked and `MAX_PACKAGE_FILES` files.
       (`_send_files`), and the chat keeps "（发了：…）" with the answer;
     - `{"event": "task_ended", "origin": {…}, "text": …}`.
     - A message may say `"addressed": false` (said where it was not called on: a group message
-      without @ it) and `"sender"`. The cheapest model decides whether it is meant for it
+      without @ it), `"sender"` and `"people"` (the names of the group's people: the chat is told
+      them with the message, not kept in what the chat shows, so an answer can write "@name" and
+      the package turns it into its app's @; `group_people` bounds them). The cheapest model decides whether it is meant for it
       (`triage.addressed`; failure or doubt: no). If not, it is not answered (`reply` null) but
       kept, per conversation (`state["heard"]`, bounded by `keep_heard`), and the next message it
       answers there is told what the group said before. Pictures and files

@@ -8,7 +8,8 @@ Each automation is its package's ``entry`` command, run in the capabilities' san
   asks it something, with ``"attachments": [path, ...]`` for files sent along: paths in its data
   folder, which FluidForm takes (copies into its attachments, then removes); with
   ``"addressed": false`` when it was not called on (a group message without @ it), and
-  ``"sender"`` naming who said it;
+  ``"sender"`` naming who said it, and ``"people"`` the names of the group's people (so an answer
+  can @ them: the package turns "@name" into its app's mention);
 - it reads ``{"re": id, "reply": ..., "files": [...]}``, the answer and the files to send with it
   (paths in its data folder, which it may remove once sent), and ``{"event": "task_ended", "origin": {...},
   "text": ...}`` when a task it asked for ends. While a chat's answer is being written (an API
@@ -85,6 +86,8 @@ class Asked:
     # answers only if the message is meant for it; ``sender`` names who said it there.
     addressed: bool = True
     sender: str = ""
+    # In a group: its people's names, the ones an answer may @ (the package marks them).
+    people: list[str] = field(default_factory=list)
 
 
 # What is kept of a group's talk the automation was not called on, per conversation (keep_heard).
@@ -92,6 +95,18 @@ MAX_HEARD_LINES = 30
 MAX_HEARD_CHARS = 4000
 # And of the pictures and files sent there (a picture in a group cannot @ it): the latest ones.
 MAX_HEARD_FILES = 10
+
+
+# The names of a group's people told to its chat: enough for a team, not a whole company.
+MAX_PEOPLE, MAX_PERSON_CHARS = 200, 40
+
+
+def group_people(names) -> list[str]:
+    """The ``"people"`` a message names, cleaned: strings, one line each, within bounds."""
+    if not isinstance(names, list):
+        return []
+    kept = [" ".join(str(name).split())[:MAX_PERSON_CHARS] for name in names if isinstance(name, str)]
+    return list(dict.fromkeys(name for name in kept if name))[:MAX_PEOPLE]
 
 
 def keep_heard(lines: list[str]) -> list[str]:
@@ -344,7 +359,8 @@ class Runner:
                       text=text or (FILES_ONLY if attached else CALLED_ONLY),
                       origin=payload.get("origin") if isinstance(payload.get("origin"), dict) else {},
                       attachments=attached, on_text=self._progress(item, request),
-                      addressed=addressed, sender=str(payload.get("sender") or "")[:40])
+                      addressed=addressed, sender=str(payload.get("sender") or "")[:40],
+                      people=group_people(payload.get("people")))
         async with item.lock:
             if item.remaining() <= 0 and not asked.addressed:
                 await self._send(item, {"re": request, "reply": None, "over_budget": True})  # it was not asked

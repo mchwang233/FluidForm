@@ -999,6 +999,28 @@ async def test_in_a_group_a_reply_to_its_own_question_is_answered_without_an_at(
     assert not any("群里此前的消息" in m.text for m in chat.lead_messages if m.role == "user")
 
 
+async def test_in_a_group_the_chat_is_told_whose_names_an_at_reaches(packages, monkeypatch):
+    # Regression: told to @ 叶玉文, it wrote "@叶玉文" as plain words: it knew the group only as
+    # 成员N and names others had @-ed, and the bot had forgotten those since its restart.
+    api, client, runner, _ = packages
+    sent, _ = triaging(api, monkeypatch, '{"kind": "chat"}', ["@叶玉文 在吗？", "好。"])
+    await upload(client, package())
+    bot, state = capabilities.load("fake-bot"), runner.get("fake-bot")
+    people = capability_runner.group_people(["张三", "叶玉文", "叶玉文", 3, " 李\n四 ", "x" * 99])
+    assert people == ["张三", "叶玉文", "李 四", "x" * capability_runner.MAX_PERSON_CHARS]
+    assert capability_runner.group_people("张三") == [] and capability_runner.group_people(None) == []
+    asked = capability_runner.Asked(conversation="g3", text="@叶玉文 一下", origin={"chat_type": "group"},
+                                    sender="张三", people=people)
+    assert (await api.automation_message(bot, asked, state))[0] == "@叶玉文 在吗？"
+    assert "群里的人：张三、叶玉文、李 四、x" in sent[-1][2] and "（要 @ 谁就写 @ 加这里的名字" in sent[-1][2]
+    assert "发出去就是真正的 @" in sent[-1][2]  # Regression: it said it could only send plain text.
+    # Told, not kept: what the chat shows is what was said.
+    chat = api.db.get_run(state.state["chats"]["g3"])
+    assert not any("群里的人" in m.text for m in chat.lead_messages)
+    await api.automation_message(bot, capability_runner.Asked(conversation="g3", text="谢谢", sender="张三"), state)
+    assert "群里的人" not in sent[-1][2]
+
+
 async def test_only_an_at_with_nothing_new_gets_a_short_answer(packages, monkeypatch):
     # Regression: an @ alone made it describe every picture of the conversation again.
     api, client, runner, _ = packages

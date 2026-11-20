@@ -1653,6 +1653,10 @@ async def automation_message(capability: Capability, asked: capability_runner.As
         said = ("群里此前的消息（不是问你的，供参考）：\n" + "\n".join(earlier)
                 + f"\n\n现在问你的：\n{line if asked.sender else asked.text}")
         heard.pop(asked.conversation, None)
+    if asked.people:
+        # Who is in the group, by the names an "@" reaches (the package makes "@name" a real @).
+        said = (f"群里的人：{'、'.join(asked.people)}\n（要 @ 谁就写 @ 加这里的名字，原样照写；发出去就是真正的 @，"
+                "对方会收到提醒。直接 @，不用解释怎么 @ 的；你以前说过只能发纯文字的话不对了。）\n\n" + said)
     # What happened since in FluidForm (a task it had planned ended), told before the message.
     notes = automation.state.setdefault("notes", {}).pop(asked.conversation, []) if asked.conversation else []
     if notes:
