@@ -114,9 +114,15 @@ def wanted(message_type: str, chat_type: str, content: str, mentions: dict, crea
     return incoming if incoming.text or incoming.images or incoming.files else None
 
 
+# Who a card's @ marks are (open_id -> name), for its preview: there a mark shows as written.
+AT_NAMES: dict = {"all": "所有人"}
+AT_MARK = re.compile(r"<at id=([^>\s]+)></at>")
+
+
 def summary(text: str) -> str:
-    """A card's preview in the chat list: its first line, without Markdown's marks."""
+    """A card's preview in the chat list: its first line, without Markdown's marks, an @ as "@name"."""
     first = next((line for line in text.splitlines() if line.strip()), "")
+    first = AT_MARK.sub(lambda found: "@" + AT_NAMES.get(found.group(1), "某人"), first)
     return re.sub(r"[*_`#>\[\]]|^\s*[-+] ", "", first).strip()[:60] or "回复"
 
 
@@ -145,8 +151,97 @@ def with_mentions(text: str, known: dict, card: bool = True) -> str:
 
     def mark(found) -> str:
         name, open_id = found.group(1), people[found.group(1)]
+        if card and open_id != "all" and len(AT_NAMES) < 5000:
+            AT_NAMES[open_id] = name
         return f"<at id={open_id}></at>" if card else f'<at user_id="{open_id}">{"所有人" if open_id == "all" else name}</at>'
     return pattern.sub(mark, text)
+
+
+# A name after "@" in a reply: up to the next space or punctuation.
+NAMED = re.compile(r"@([^\s@，。,.:：;；!！?？、()（）<>]{1,20})")
+
+
+def unknown_names(text: str, known: dict) -> list:
+    """The "@name"s in ``text`` that ``known`` cannot turn into an @ (with_mentions)."""
+    marked = with_mentions(text, known)
+    return [name for name in NAMED.findall(marked) if name not in EVERYONE]
+
+
+class People:
+    """Per chat, who is in it, kept in the data folder across restarts: their names (name ->
+    open_id; a name two people share is left out, never guessed) and, for whoever speaks without
+    a name known, 成员N. ``lookup(chat_id)`` gives the chat's members as Feishu lists them
+    ({open_id: name}, or None if it will not say); asked when a chat is first seen, every
+    ROSTER_EVERY after, and when a reply names someone not known (at most every LOOKUP_EVERY)."""
+
+    ROSTER_EVERY, LOOKUP_EVERY, MAX_NAMES = 1800, 300, 200
+
+    def __init__(self, folder: Path, lookup=lambda chat_id: None):
+        self.path, self.lookup, self.lock, self.asked = folder / "people.json", lookup, threading.Lock(), {}
+        try:
+            self.chats = {chat: {"names": dict(kept.get("names") or {}), "aliases": dict(kept.get("aliases") or {})}
+                          for chat, kept in json.loads(self.path.read_text()).items()}
+        except (OSError, ValueError, AttributeError):
+            self.chats = {}
+
+    def _chat(self, chat_id: str) -> dict:
+        return self.chats.setdefault(chat_id, {"names": {}, "aliases": {}})
+
+    def _save(self) -> None:
+        self.path.write_text(json.dumps(self.chats, ensure_ascii=False))
+
+    def learn(self, chat_id: str, name: str, open_id: str) -> None:
+        """Someone's name, from an @ of them."""
+        if not (chat_id and name and open_id):
+            return
+        with self.lock:
+            names = self._chat(chat_id)["names"]
+            if names.get(name) != open_id:
+                names[name] = open_id
+                self._save()
+
+    def refresh(self, chat_id: str, every: float = ROSTER_EVERY) -> None:
+        """The chat's members asked again, if not asked within ``every`` seconds."""
+        if not chat_id or time.time() - self.asked.get(chat_id, 0) < every:
+            return
+        self.asked[chat_id] = time.time()
+        listed = self.lookup(chat_id)
+        if not listed:
+            return
+        count: dict = {}
+        for name in listed.values():
+            count[name] = count.get(name, 0) + 1
+        with self.lock:
+            self._chat(chat_id)["names"] = {name: open_id for open_id, name in listed.items() if name and count[name] == 1}
+            self._save()
+
+    def name_of(self, chat_id: str, open_id: str) -> str:
+        """Who said it: their name if known, else the chat's 成员N (the same after a restart)."""
+        if not open_id:
+            return ""
+        with self.lock:
+            kept = self._chat(chat_id)
+            for name, known in kept["names"].items():
+                if known == open_id:
+                    return name
+            if open_id not in kept["aliases"]:
+                kept["aliases"][open_id] = f"成员{len(kept['aliases']) + 1}"
+                self._save()
+            return kept["aliases"][open_id]
+
+    def names(self, chat_id: str) -> list:
+        """The names of the chat's people, for the model to @ them by."""
+        return sorted(self.chats.get(chat_id, {}).get("names", {}))[:self.MAX_NAMES]
+
+    def known(self, chat_id: str) -> dict:
+        kept = self.chats.get(chat_id) or {"names": {}, "aliases": {}}
+        return {**{alias: open_id for open_id, alias in kept["aliases"].items()}, **kept["names"]}
+
+    def mark(self, chat_id: str, text: str, card: bool = True) -> str:
+        """``text`` with the "@name"s of this chat's people as real @s (with_mentions)."""
+        if unknown_names(text, self.known(chat_id)):
+            self.refresh(chat_id, self.LOOKUP_EVERY)
+        return with_mentions(text, self.known(chat_id), card)
 
 
 def merged(items: list) -> Incoming:
@@ -304,9 +399,10 @@ class Host:
         self.send({"op": "status", "text": text})
 
     def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
-            heard=None, addressed: bool = True, sender: str = "") -> tuple[Optional[str], list]:
+            heard=None, addressed: bool = True, sender: str = "", people=()) -> tuple[Optional[str], list]:
         """Super Partner's answer, and the files to send with it (paths in the data folder);
-        ``heard`` hears the answer as it is being written ({"progress": ...})."""
+        ``heard`` hears the answer as it is being written ({"progress": ...}); ``people``: the names
+        of the group's people, so the answer can @ them."""
         request, done = uuid.uuid4().hex, threading.Event()
         self.pending[request] = [done, None, heard, []]
         message = {"op": "message", "id": request, "conversation": conversation, "text": text, "origin": origin}
@@ -316,6 +412,8 @@ class Host:
             message["addressed"] = False
         if sender:
             message["sender"] = sender
+        if people:
+            message["people"] = list(people)
         self.send(message)
         done.wait(REPLY_WAIT)
         _, answer, _, files = self.pending.pop(request, [None, None, None, []])
@@ -419,11 +517,38 @@ def main() -> None:
             print(f"飞书回复失败（{kind}）：{response.code} {response.msg}", file=sys.stderr, flush=True)
         return response.success()
 
-    def reply(message_id: str, text: str, known: Optional[dict] = None) -> None:
+    def reply(message_id: str, text: str, chat_id: str = "") -> None:
         """As a card, so its Markdown shows as meant; as plain text if a card cannot be sent.
-        ``known``: the chat's people (name -> open_id), so an "@name" in it @s them."""
-        if not send_reply(message_id, "interactive", card_json(with_mentions(cut(text), known or {}))):
-            send_reply(message_id, "text", {"text": with_mentions(cut(text), known or {}, card=False)})
+        ``chat_id``: where it goes, so an "@name" of someone there @s them."""
+        if not send_reply(message_id, "interactive", card_json(people.mark(chat_id, cut(text)))):
+            send_reply(message_id, "text", {"text": people.mark(chat_id, cut(text), card=False)})
+
+    def chat_members(chat_id: str) -> Optional[dict]:
+        """The chat's members ({open_id: name}); None if Feishu will not say."""
+        found, token = {}, ""
+        try:
+            for _ in range(20):
+                query = "?member_id_type=open_id&page_size=100" + (f"&page_token={token}" if token else "")
+                request = (lark.BaseRequest.builder().http_method(lark.HttpMethod.GET)
+                           .uri(f"/open-apis/im/v1/chats/{chat_id}/members{query}")
+                           .token_types({lark.AccessTokenType.TENANT}).build())
+                body = json.loads(client.request(request).raw.content)
+                if body.get("code"):
+                    if "members" not in warned:  # once: most likely the permission is missing
+                        warned.add("members")
+                        print(f"读不到群成员（需要「查看群成员」权限 im:chat.members:read）：{body.get('code')} {body.get('msg')}",
+                              file=sys.stderr, flush=True)
+                    return None
+                page = body.get("data") or {}
+                found.update({item["member_id"]: item["name"] for item in page.get("items") or []
+                              if item.get("name") and item.get("member_id")})
+                token = page.get("page_token") or ""
+                if not page.get("has_more") or not token:
+                    break
+        except Exception as exc:
+            print(f"读不到群成员：{exc}", file=sys.stderr, flush=True)
+            return None
+        return found
 
     def ok(response, what: str) -> bool:
         if not response.success() and what not in warned:  # once: most likely a missing permission
@@ -558,12 +683,12 @@ def main() -> None:
         (data / relative).write_bytes(response.file.read())
         return relative
 
-    def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "", chat_type: str = "") -> None:
+    def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "", chat_type: str = "",
+               names: tuple = ()) -> None:
         origin = {"message_id": message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
-        known = people.setdefault(chat_id, {})
 
         def marked(typing):
-            return lambda text: typing.heard(with_mentions(text, known))
+            return lambda text: typing.heard(people.mark(chat_id, text))
         if not incoming.addressed:
             # Not called on: no "typing" until FluidForm decides it is meant for it.
             names = [download(message_id, key, "image", "image.png") for key in incoming.images]
@@ -572,9 +697,10 @@ def main() -> None:
             if not incoming.text and not kept:
                 return
             typing = Typing(Cards(message_id))
-            result, files = host.ask(chat_id, incoming.text, origin, kept, marked(typing), addressed=False, sender=sender)
-            if result and not typing.finish(with_mentions(result, known)):
-                reply(message_id, result, known)
+            result, files = host.ask(chat_id, incoming.text, origin, kept, marked(typing), addressed=False, sender=sender,
+                                         people=names)
+            if result and not typing.finish(people.mark(chat_id, result)):
+                reply(message_id, result, chat_id)
             send_files(message_id, files)
             return
         reaction = working(message_id)
@@ -586,9 +712,9 @@ def main() -> None:
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
             typing = Typing(Cards(message_id))
-            result, files = host.ask(chat_id, incoming.text, origin, kept, marked(typing), sender=sender)
-            if result and not typing.finish(with_mentions(result, known)):
-                reply(message_id, result, known)
+            result, files = host.ask(chat_id, incoming.text, origin, kept, marked(typing), sender=sender, people=names)
+            if result and not typing.finish(people.mark(chat_id, result)):
+                reply(message_id, result, chat_id)
             elif not result:
                 typing.finish("（没有回答）")
             send_files(message_id, files)
@@ -596,14 +722,8 @@ def main() -> None:
             done(message_id, reaction)
 
     me_id = bot_open_id()
-    members: dict = {}
-    # Per chat, the people a reply may @: name (or 成员N) -> open_id (with_mentions).
-    people: dict = {}
-
-    def alias(chat_id: str, open_id: str) -> str:
-        """Who said it, as the group's 成员N (Feishu tells only an id; names need another permission)."""
-        known = members.setdefault(chat_id, {})
-        return known.setdefault(open_id, f"成员{len(known) + 1}") if open_id else ""
+    # Per group, who is in it: speakers are called by name, and a reply's "@name" @s them.
+    people = People(data, chat_members)
 
     def on_message(data) -> None:
         message, sender = data.event.message, data.event.sender
@@ -616,23 +736,24 @@ def main() -> None:
             item.id.open_id == me_id if me_id else item.mentioned_type == "bot")) if known else None
         incoming = wanted(message.message_type or "", message.chat_type or "", message.content or "", mentions,
                           int(message.create_time or 0), started, me)
-        who = alias(message.chat_id, sender.sender_id.open_id if sender and sender.sender_id else "") \
-            if message.chat_type == "group" else ""
-        known = people.setdefault(message.chat_id, {})
-        if who:
-            known[who] = sender.sender_id.open_id
+        group = message.chat_type == "group"
         for item in message.mentions or []:
-            if item.name and item.id and item.id.open_id and item.key not in (me or ()) and item.id.open_id != me_id:
-                known[item.name] = item.id.open_id
+            if group and item.name and item.id and item.id.open_id and item.key not in (me or ()) \
+                    and item.id.open_id != me_id:
+                people.learn(message.chat_id, item.name, item.id.open_id)
         if incoming is not None and seen.first(message.message_id):
             person = sender.sender_id.open_id if sender and sender.sender_id else ""
-            gather.add((message.chat_id, person), (message.message_id, message.chat_type or "", incoming, who))
+            gather.add((message.chat_id, person), (message.message_id, message.chat_type or "", incoming))
 
     def gathered(key, items) -> None:
         """Someone's messages in a row, answered once, under the last of them."""
-        chat_id, _ = key
-        message_id, chat_type, _, who = items[-1]
-        answer(message_id, chat_id, merged([incoming for _, _, incoming, _ in items]), who, chat_type)
+        chat_id, person = key
+        message_id, chat_type, _ = items[-1]
+        who, names = "", []
+        if chat_type == "group":
+            people.refresh(chat_id)
+            who, names = people.name_of(chat_id, person), people.names(chat_id)
+        answer(message_id, chat_id, merged([incoming for _, _, incoming in items]), who, chat_type, names)
 
     gather = Gather(gathered)
 
@@ -675,6 +796,10 @@ def check() -> None:
     assert safe_name("../../etc/passwd") == "passwd" and safe_name("a b/截图.png") == "截图.png"
     # Replies are cards; one being written is written in order, the newest piece each time.
     assert card_json("**WAL** 是预写日志")["config"]["summary"]["content"] == "WAL 是预写日志"
+    # Regression: the chat list showed a reply's @ as "<at id=ou_…></at>".
+    marked = with_mentions("@叶玉文 在吗？@所有人", {"叶玉文": "ou_8"})
+    assert card_json(marked)["config"]["summary"]["content"] == "@叶玉文 在吗？@所有人"
+    assert summary("<at id=ou_x></at> 好") == "@某人 好"
     assert card_json("x", streaming=True)["config"]["streaming_mode"] is True
 
     class Fake:
@@ -717,6 +842,27 @@ def check() -> None:
     assert with_mentions("@所有人 明天放假，@李四 不认识", known) == "<at id=all></at> 明天放假，@李四 不认识"
     assert with_mentions("@张三 好", known, card=False) == '<at user_id="ou_1">张三</at> 好'
     assert with_mentions("@all 注意", {}, card=False) == '<at user_id="all">所有人</at> 注意'
+    # A group's people: called by name once Feishu lists them (a name two share is not guessed),
+    # else 成员N; someone a reply names but not known is looked up; all of it kept across restarts.
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        asked, listed = [], {"ou_1": "张三", "ou_2": "李四", "ou_3": "李四"}
+        roster = People(Path(folder), lambda chat_id: asked.append(chat_id) or dict(listed))
+        assert roster.name_of("oc_1", "ou_9") == "成员1" and roster.mark("oc_1", "@成员1 好") == "<at id=ou_9></at> 好"
+        roster.refresh("oc_1")
+        roster.refresh("oc_1")
+        assert asked == ["oc_1"] and roster.names("oc_1") == ["张三"] and roster.name_of("oc_1", "ou_1") == "张三"
+        assert roster.mark("oc_1", "@张三 和 @李四") == "<at id=ou_1></at> 和 @李四"
+        listed["ou_4"] = "叶玉文"
+        roster.asked["oc_1"] = 0
+        assert roster.mark("oc_1", "@叶玉文 在吗？") == "<at id=ou_4></at> 在吗？" and len(asked) == 2
+        assert roster.mark("oc_1", "@王五 在吗") == "@王五 在吗" and len(asked) == 2  # not again so soon
+        roster.learn("oc_1", "小王", "ou_5")
+        again = People(Path(folder))
+        assert again.name_of("oc_1", "ou_9") == "成员1" and again.name_of("oc_1", "ou_7") == "成员2"
+        assert again.mark("oc_1", "@小王 @叶玉文", card=False) == \
+            '<at user_id="ou_5">小王</at> <at user_id="ou_4">叶玉文</at>'
+        assert unknown_names("@所有人 @张三，@成员1。", {"成员1": "ou_1"}) == ["张三"]
     # Files FluidForm sends: their own names, pictures known by their bytes, Feishu's file kinds.
     assert sent_name("0a1b2c3d-猫.png") == "猫.png" and sent_name("cat.png") == "cat.png"
     assert picture(b"\x89PNG\r\n\x1a\n" + b"\0" * 8) and not picture(b"%PDF-1.7")
