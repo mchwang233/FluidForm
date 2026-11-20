@@ -131,6 +131,24 @@ def card_json(text: str, streaming: bool = False) -> dict:
             "body": {"elements": [{"tag": "markdown", "content": text, "element_id": ANSWER}]}}
 
 
+# Someone a reply names: "@张三" (a name from an @ in the chat), "@成员2" (who said something, as
+# the chat shows them to FluidForm) or "@所有人"/"@all". Feishu only @s by id, so these become its
+# mention marks; anyone it has not seen stays plain text.
+EVERYONE = ("所有人", "all")
+
+
+def with_mentions(text: str, known: dict, card: bool = True) -> str:
+    """``text`` with each "@name" of someone in ``known`` (name -> open_id) a real @: in a card
+    ``<at id=…></at>``, in a text message ``<at user_id="…">name</at>``."""
+    people = {**{name: "all" for name in EVERYONE}, **{name: open_id for name, open_id in known.items() if name and open_id}}
+    pattern = re.compile("@(" + "|".join(re.escape(name) for name in sorted(people, key=len, reverse=True)) + ")")
+
+    def mark(found) -> str:
+        name, open_id = found.group(1), people[found.group(1)]
+        return f"<at id={open_id}></at>" if card else f'<at user_id="{open_id}">{"所有人" if open_id == "all" else name}</at>'
+    return pattern.sub(mark, text)
+
+
 def merged(items: list) -> Incoming:
     """Several messages one person sent in a row, as one: their words line by line, their pictures
     and files together; called on if any of them was."""
@@ -401,10 +419,11 @@ def main() -> None:
             print(f"飞书回复失败（{kind}）：{response.code} {response.msg}", file=sys.stderr, flush=True)
         return response.success()
 
-    def reply(message_id: str, text: str) -> None:
-        """As a card, so its Markdown shows as meant; as plain text if a card cannot be sent."""
-        if not send_reply(message_id, "interactive", card_json(cut(text))):
-            send_reply(message_id, "text", {"text": cut(text)})
+    def reply(message_id: str, text: str, known: Optional[dict] = None) -> None:
+        """As a card, so its Markdown shows as meant; as plain text if a card cannot be sent.
+        ``known``: the chat's people (name -> open_id), so an "@name" in it @s them."""
+        if not send_reply(message_id, "interactive", card_json(with_mentions(cut(text), known or {}))):
+            send_reply(message_id, "text", {"text": with_mentions(cut(text), known or {}, card=False)})
 
     def ok(response, what: str) -> bool:
         if not response.success() and what not in warned:  # once: most likely a missing permission
@@ -541,6 +560,10 @@ def main() -> None:
 
     def answer(message_id: str, chat_id: str, incoming: Incoming, sender: str = "", chat_type: str = "") -> None:
         origin = {"message_id": message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
+        known = people.setdefault(chat_id, {})
+
+        def marked(typing):
+            return lambda text: typing.heard(with_mentions(text, known))
         if not incoming.addressed:
             # Not called on: no "typing" until FluidForm decides it is meant for it.
             names = [download(message_id, key, "image", "image.png") for key in incoming.images]
@@ -549,9 +572,9 @@ def main() -> None:
             if not incoming.text and not kept:
                 return
             typing = Typing(Cards(message_id))
-            result, files = host.ask(chat_id, incoming.text, origin, kept, typing.heard, addressed=False, sender=sender)
-            if result and not typing.finish(result):
-                reply(message_id, result)
+            result, files = host.ask(chat_id, incoming.text, origin, kept, marked(typing), addressed=False, sender=sender)
+            if result and not typing.finish(with_mentions(result, known)):
+                reply(message_id, result, known)
             send_files(message_id, files)
             return
         reaction = working(message_id)
@@ -563,9 +586,9 @@ def main() -> None:
                 reply(message_id, "图片或文件没能下载下来：请主人检查应用是否开通了「获取与上传图片或文件资源」权限。")
                 return
             typing = Typing(Cards(message_id))
-            result, files = host.ask(chat_id, incoming.text, origin, kept, typing.heard, sender=sender)
-            if result and not typing.finish(result):
-                reply(message_id, result)
+            result, files = host.ask(chat_id, incoming.text, origin, kept, marked(typing), sender=sender)
+            if result and not typing.finish(with_mentions(result, known)):
+                reply(message_id, result, known)
             elif not result:
                 typing.finish("（没有回答）")
             send_files(message_id, files)
@@ -574,6 +597,8 @@ def main() -> None:
 
     me_id = bot_open_id()
     members: dict = {}
+    # Per chat, the people a reply may @: name (or 成员N) -> open_id (with_mentions).
+    people: dict = {}
 
     def alias(chat_id: str, open_id: str) -> str:
         """Who said it, as the group's 成员N (Feishu tells only an id; names need another permission)."""
@@ -593,6 +618,12 @@ def main() -> None:
                           int(message.create_time or 0), started, me)
         who = alias(message.chat_id, sender.sender_id.open_id if sender and sender.sender_id else "") \
             if message.chat_type == "group" else ""
+        known = people.setdefault(message.chat_id, {})
+        if who:
+            known[who] = sender.sender_id.open_id
+        for item in message.mentions or []:
+            if item.name and item.id and item.id.open_id and item.key not in (me or ()) and item.id.open_id != me_id:
+                known[item.name] = item.id.open_id
         if incoming is not None and seen.first(message.message_id):
             person = sender.sender_id.open_id if sender and sender.sender_id else ""
             gather.add((message.chat_id, person), (message.message_id, message.chat_type or "", incoming, who))
@@ -679,6 +710,13 @@ def check() -> None:
     failed.heard("W")
     time.sleep(0.1)
     assert failed.finish("WAL") is False and Typing(Fake()).finish("x") is False
+    # "@name" in a reply @s that person for real, if the chat has shown who they are.
+    known = {"张三": "ou_1", "张三丰": "ou_2", "成员2": "ou_3"}
+    assert with_mentions("@张三丰 和 @张三 看下，@成员2 也是", known) == \
+        "<at id=ou_2></at> 和 <at id=ou_1></at> 看下，<at id=ou_3></at> 也是"
+    assert with_mentions("@所有人 明天放假，@李四 不认识", known) == "<at id=all></at> 明天放假，@李四 不认识"
+    assert with_mentions("@张三 好", known, card=False) == '<at user_id="ou_1">张三</at> 好'
+    assert with_mentions("@all 注意", {}, card=False) == '<at user_id="all">所有人</at> 注意'
     # Files FluidForm sends: their own names, pictures known by their bytes, Feishu's file kinds.
     assert sent_name("0a1b2c3d-猫.png") == "猫.png" and sent_name("cat.png") == "cat.png"
     assert picture(b"\x89PNG\r\n\x1a\n" + b"\0" * 8) and not picture(b"%PDF-1.7")
