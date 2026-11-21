@@ -99,6 +99,8 @@ export function planPrompt(job: EngineerJob, guide: string): string {
     + "\n" + plainRule("in two or three short sentences: what you will make or fix, how it will be used, roughly how big the change is")
     + "Write the plan in Chinese, short, for the user to approve:\n"
     + "- 目标: what will work afterwards.\n"
+    + "- 现成方案: the official or mature open-source solution it uses (an SDK, a library, an integration), "
+    + "or what you looked at and why none fits; build it yourself only then. A new dependency is named with its source and licence.\n"
     + "- 改动: each file and what changes in it.\n"
     + "- 测试: the tests you will add and what they prove.\n"
     + "- 风险: what could break, and what is left out.\n"

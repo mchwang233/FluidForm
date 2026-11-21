@@ -239,7 +239,7 @@ With nothing set, FluidForm works like this:
 - **Going on after a restart**: a task cut off by a service restart goes on from its finished steps. A task in a project still waits for you.
 - **Chats do small jobs**: an API model in a chat runs commands and looks things up online in its own folder, at most 5 minutes and 50 tool calls per message. Bigger work becomes a task. Starting a task, sending a file and calling the platform engineer are tool calls.
 - **Remembering**: chats remember lasting preferences people tell them. Your own web chats and each automation conversation (Feishu, say) are kept apart, and a new chat is told them first. **Settings → 记住的事** lists them and deletes them. Anything that looks like a password or key is never kept.
-- **Pictures and search** use whichever providers this machine has keys for, with nothing to configure. Pictures come from MiniMax (no watermark) or Zhipu CogView and are charged per picture. Search uses Zhipu and is charged per search. `WebFetch` reads public pages only. These tools are given only to steps and chats allowed the internet.
+- **Pictures, search and reading pages** come from the vendors' official MCP servers you set in `MCP_SERVERS` (MiniMax for pictures, Zhipu's web search and page reader, for example; see docs/design/mcp-and-web.md). A server marked `makes_images` draws the pictures a plan asks for, and such a task is allowed the internet. A remote server is asked only for work allowed the internet.
 - **Every repair is the platform engineer's**: the lead just calls it, and it finds whether to repair this machine or FluidForm's source.
 
 **Settings → 工作方式** also offers **稳妥** (careful): every task is planned by the lead, and every step is reviewed by another model. You can also set `SUPER_PARTNER_PROFILE=careful` in `.env`.
@@ -251,11 +251,11 @@ Only these depend on the machine (all start with `SUPER_PARTNER_`):
 - local ports and variables the sandbox lets through: `SANDBOX_HOST_PORTS`, `SANDBOX_ENV`;
 - MCP servers you want: `MCP_SERVERS`, for example
   ```
-  SUPER_PARTNER_MCP_SERVERS='{"github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
+  SUPER_PARTNER_MCP_SERVERS='{"web-search": {"url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", "headers": {"Authorization": "Bearer ${ZHIPU_API_KEY}"}}, "github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
   ```
-  Their secrets live in the system keyring as `capability/mcp-<server>/<VARIABLE>`.
+  Their secrets live in the system keyring as `capability/mcp-<server>/<VARIABLE>`; a key FluidForm already keeps (`ZHIPU_API_KEY`, `MINIMAX_API_KEY`, `GITHUB_TOKEN`...) can be named directly.
 
-Each default above can still be turned off on its own, for example `SUPER_PARTNER_QUICK_TASKS=false` or `SUPER_PARTNER_IMAGE_MODELS='[]'`.
+Each default above can still be turned off on its own, for example `SUPER_PARTNER_QUICK_TASKS=false`.
 
 ### Evals
 

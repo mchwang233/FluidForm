@@ -134,6 +134,19 @@ test("a quick task gets one easy step, without the lead's planning", async () =>
   assert.equal(created.json().status, "awaiting_confirmation");
 });
 
+test("a task that must make pictures is allowed the internet when an MCP server makes them", async () => {
+  // The image server reaches its service from the step's sandbox.
+  const { api, client } = taskApi(folder());
+  settings.quick_tasks = true;
+  judging(api, QUICK);
+  let created = (await client.post("/api/tasks", { json: { prompt: "画一张海边女孩的头像" }, headers: ORIGIN })).json();
+  assert.equal(created.allow_network, false); // no image server: nothing changes
+  settings.mcp_servers = { minimax: { command: ["minimax-mcp"], makes_images: true } };
+  created = (await client.post("/api/tasks", { json: { prompt: "画一张海边女孩的头像" }, headers: ORIGIN })).json();
+  assert.equal(created.allow_network, true);
+  assert.equal(api.db.events(created.id)[0].data.allow_network, true);
+});
+
 for (const answer of ['{"quick": false}', "不确定", '{"quick": "yes"}']) {
   test(`anything else is planned as before: ${answer}`, async () => {
     const { api, client } = taskApi(folder());

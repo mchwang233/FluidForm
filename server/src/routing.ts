@@ -2,7 +2,7 @@
 // cost; retries, reviewers, diagnosers, engineers; and the task's estimate.
 import { tokenCost } from "./budget.js";
 import { settings } from "./config.js";
-import { available as imageModels } from "./images.js";
+import { imageServers } from "./mcp.js";
 import {
   CostEstimateSchema, DIFFICULTY_THRESHOLDS, type CostEstimate, type ModelProfile, overall, type PlanPart, routingReady,
   scoreFor, type TaskNode, TaskNodeSchema, type ExecutionRun,
@@ -56,7 +56,7 @@ export function nodeCost(node: TaskNode, model: ModelProfile): number {
 }
 
 export function eligibleForNode(node: TaskNode, models: ModelProfile[], configured: Set<string>, needsVision = false): ModelProfile[] {
-  const pictures = Boolean(node.needs_images && imageModels().length);
+  const pictures = Boolean(node.needs_images && imageServers().length);
   return models.filter((model) => model.enabled
     && routingReady(model)
     && configured.has(model.id)
@@ -66,7 +66,7 @@ export function eligibleForNode(node: TaskNode, models: ModelProfile[], configur
     && (!node.needs_workspace || canAct(model))
     // Attached images reach API models only as image inputs; CLIs open the files themselves.
     && (!needsVision || model.channel === "cli" || model.supports_vision !== false)
-    // Pictures are made with the GenerateImage tool, which only API models are given.
+    // Pictures are made with an MCP server's image tool, which only API models are given.
     && (!node.needs_images || model.channel !== "cli" || !pictures));
 }
 

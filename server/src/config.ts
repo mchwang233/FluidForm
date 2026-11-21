@@ -15,7 +15,9 @@ export const PROFILES: Record<string, Record<string, unknown>> = {
 // Profiles there were before the defaults did what they did: read as no profile.
 export const FORMER_PROFILES = new Set(["fast", "balanced"]);
 // Settings there are no more (docs/design/fewer-settings.md): an old .env naming them still loads.
-export const RETIRED = new Set(["direct_task_planning", "adaptive_refinement",
+export const RETIRED = new Set([
+  // Built-in tools replaced by MCP servers (mcp_servers): pictures, web search, reading a page.
+  "image_models", "web_search_models", "web_fetch", "direct_task_planning", "adaptive_refinement",
   // Removed by the user's decision with the move to TypeScript: tools and hooks are added with MCP or skills.
   "api_tool_extensions", "api_tool_hooks"]);
 

@@ -125,3 +125,16 @@ test("a reply to an older report is still in the next prompt", () => {
   run.diagnoses[0].messages = [DiagnosisMessageSchema.parse({ text: "纠正最早的判断：保留旧接口。" })];
   assert.ok(diagnosis.repairPrompt(run, run.plan.nodes[0], "workspace", "tools", [], []).includes("纠正最早的判断：保留旧接口。"));
 });
+
+test("a repair is given the skills of the tools its failure is about", () => {
+  // A license server's ports are knowledge in skills/steps/flexlm-license, not code in the platform.
+  const node = TaskNodeSchema.parse({ id: "n", title: "仿真", instructions: "运行 vcs 回归", capability: "coding",
+    attempts: [NodeAttemptSchema.parse({ model_id: "x", outcome: "error", reason: "Failed to obtain license: FlexNet Licensing error:-15" })] });
+  const run = ExecutionRunSchema.parse({ id: "r", prompt: "p", status: "running", budget_usd: 1, plan: { summary: "s", nodes: [node] } });
+  const prompt = diagnosis.repairPrompt(run, node, "/w", "/tools", [], []);
+  assert.ok(prompt.includes("### Skill: flexlm-license") && prompt.includes("VENDOR snpslmd PORT=27021"));
+  assert.ok(prompt.includes("### Skill: synopsys-vcs"));
+  assert.ok(!prompt.includes("tracing `lmutil lmstat`"));
+  const quiet = TaskNodeSchema.parse({ ...node, instructions: "写一个网页", attempts: [] });
+  assert.ok(!diagnosis.repairPrompt({ ...run, plan: { ...run.plan, nodes: [quiet] } }, quiet, "/w", "/tools", [], []).includes("### Skill:"));
+});

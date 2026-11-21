@@ -174,7 +174,7 @@ npm run dev
 - **重启后接着做**：服务重启打断的任务，启动后从已完成的步骤接着做。在项目里的任务仍然暂停，等你确认。
 - **对话里动手做小事**：对话里的 API 模型可以在自己的文件夹里跑命令、联网查资料，每条消息最多 5 分钟、50 次工具调用；大的事排成任务。排任务、发文件、请平台工程师都用工具调用。
 - **记住偏好**：对话会记住人说过的长期偏好（网页对话和飞书这类自动化的会话分开记），新开的对话先知道这些。在 **设置 → 记住的事** 里能看到、能删；看着像密码或密钥的不记。
-- **画图和搜索**：这台机器有哪家的密钥就用哪家，不用配置。画图用 MiniMax（不加水印）或智谱 CogView，按张计费；搜索用智谱，按次计费。`WebFetch` 读网页，只读公网地址。这几个工具只给允许联网的步骤和对话。
+- **画图、搜索、读网页**：用各家官方的 MCP 服务，在 `MCP_SERVERS` 里配（比如 MiniMax 画图，智谱的联网搜索和网页读取，见 docs/design/mcp-and-web.md）。标了 `makes_images` 的服务负责计划里要画的图，这样的任务自动允许联网。远程服务只给允许联网的工作用。
 - **修复都交给平台工程师**：负责人只说"请平台工程师"，由平台工程师判断是修本机还是改源码。
 
 **设置 → 工作方式** 里还可以选 **稳妥**：每件事都由负责人排计划，每一步都另请模型验收。也可以在 `.env` 里写 `SUPER_PARTNER_PROFILE=careful`。
@@ -186,11 +186,11 @@ npm run dev
 - 沙箱要放行的本地端口和环境变量：`SANDBOX_HOST_PORTS`、`SANDBOX_ENV`。
 - 想用的 MCP 服务器：`MCP_SERVERS`。例如：
   ```
-  SUPER_PARTNER_MCP_SERVERS='{"github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
+  SUPER_PARTNER_MCP_SERVERS='{"web-search": {"url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", "headers": {"Authorization": "Bearer ${ZHIPU_API_KEY}"}}, "github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
   ```
-  密钥存在系统 keyring 里，名字是 `capability/mcp-<服务器>/<变量>`。
+  密钥存在系统 keyring 里，名字是 `capability/mcp-<服务器>/<变量>`；FluidForm 已经保管的 key（`ZHIPU_API_KEY`、`MINIMAX_API_KEY`、`GITHUB_TOKEN` 等）可以直接写名字。
 
-上面这些默认做法也都能单独关掉，例如 `SUPER_PARTNER_QUICK_TASKS=false`、`SUPER_PARTNER_IMAGE_MODELS='[]'`。
+上面这些默认做法也都能单独关掉，例如 `SUPER_PARTNER_QUICK_TASKS=false`。
 
 ### 评测
 

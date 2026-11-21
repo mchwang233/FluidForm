@@ -16,7 +16,6 @@ import { ArtifactBlocked } from "./contracts.js";
 import * as memory from "./conversation.js";
 import type { Conversation } from "./conversation.js";
 import type { Database } from "./db.js";
-import { available as imageModels } from "./images.js";
 import * as mcp from "./mcp.js";
 import type { Attachment, ModelProfile, SupervisorSession } from "./models.js";
 import * as progress from "./progress.js";
@@ -25,7 +24,6 @@ import { REVIEW_MARKER } from "./quality.js";
 import { ModelUnavailable, QuotaTracker } from "./quota.js";
 import { PROVIDER_ENV } from "./secret-names.js";
 import * as streaming from "./streaming.js";
-import * as web from "./web.js";
 
 export const TOOL_LIMIT_REQUIREMENTS = { counting_unit: "tool_call", hard_limit: true } as const;
 type Json = Record<string, any>;
@@ -564,10 +562,9 @@ export class ProviderRegistry {
     let prompt = given;
     let tools: Json[] = agent ? [...agentTools.toolsFor(agentTools.sandboxAvailable(), agent.readOnly)] : [];
     if (agent) {
-      if (!agent.readOnly && !agent.host && imageModels().length) tools = [...tools, agentTools.IMAGE_TOOL];
       if (!agent.readOnly && !agent.host) {
-        tools = [...tools, ...web.toolsFor(agent), ...chatActions.offered(), ...(await mcp.definitions(agent))];
-        // Pictures and searches are paid by the piece, from the same budget as the call.
+        tools = [...tools, ...chatActions.offered(), ...(await mcp.definitions(agent))];
+        // An MCP tool with a price (a picture, a search) is paid by the call, from the same budget.
         agent.budget = spendOk;
       }
     }

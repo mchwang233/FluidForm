@@ -8,8 +8,8 @@
 // folder hidden, no network, an empty environment (no API keys), and write access to the working
 // directory and this attempt's own /tmp; its working directory carries over between commands.
 // Scripts listed in sandbox_profiles (environment.profiles) are sourced first. Ports listed in
-// sandbox_host_ports are the one way out: each is bridged in through a Unix socket, together with
-// the vendor daemons of a license server listed by its lmgrd port (environment.ts). A task that
+// sandbox_host_ports (and recorded in sandbox.json, environment.ts) are the one way out: each is
+// bridged in through a Unix socket. A task that
 // allows the network gets its own network namespace from pasta instead: the internet is
 // reachable, this machine's local services are not, except a local proxy the user relies on.
 import { spawn, spawnSync } from "node:child_process";
@@ -23,12 +23,10 @@ import * as capabilities from "./capabilities.js";
 import * as chatActions from "./chat-actions.js";
 import { settings } from "./config.js";
 import * as environment from "./environment.js";
-import * as images from "./images.js";
 import * as mcp from "./mcp.js";
 import { fnmatch, formatG, head, pyFloat2, pyInt, pyRegex, shlexQuote, splitlines, tail, universalNewlines } from "./py.js";
 import { privatePaths, reviewPath, SKIP_DIRS } from "./quality.js";
 import { SECRET_ENV } from "./secret-names.js";
-import * as web from "./web.js";
 
 // Bash output returned to the model (its start and end when longer), as Claude Code's.
 export const MAX_BASH_OUTPUT = 30_000;
@@ -174,24 +172,6 @@ export const TOOLS: ToolSpec[] = [
     } },
   },
 ];
-// Makes a picture with an image model, for a model that may write; offered only when this machine
-// has one (images.available).
-export const IMAGE_TOOL: ToolSpec = {
-  name: "GenerateImage",
-  description: "Makes a picture from a description with an image model and saves it in the working directory.\n"
-    + "- Describe what is in it, its style, light and composition; any language works.\n"
-    + "- shape: square, portrait (9:16) or landscape (16:9).\n"
-    + "- It costs money per picture: make the ones asked for. The picture is made as described: "
-    + "Read does not show pictures, and you need not look at it. Report it as done; not being able "
-    + "to look at it is not something you could not do.\n"
-    + "- This is the way to make real pictures; do not draw them with code instead.",
-  parameters: { type: "object", properties: {
-    prompt: { type: "string", description: "What the picture shows, and how" },
-    file_path: { type: "string", description: "Where to save it, e.g. avatar.png (the format follows what the model gives)" },
-    shape: { type: "string", enum: ["square", "portrait", "landscape"] },
-  }, required: ["prompt", "file_path"] },
-};
-
 export const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
 // A reviewer also runs commands, in a sandbox where the workspace cannot be changed.
 export const REVIEW_TOOLS = new Set([...READ_ONLY_TOOLS, "Bash"]);
@@ -343,7 +323,7 @@ export function pictureNote(name: string, path: string): string {
   const size = pictureSize(data);
   const shape = size ? `, ${size[0]}×${size[1]}` : "";
   return `${name} is a picture (${suffixOf(path).replace(/^\./, "").toUpperCase()}${shape}, ${Math.floor(data.length / 1024)} KB). Read does not `
-    + "show pictures. One made with GenerateImage is what was described; not being able to look at it is "
+    + "show pictures. One made with an image tool is what was described; not being able to look at it is "
     + "not a reason to report the work as not done.";
 }
 
@@ -358,9 +338,9 @@ export function describeCall(name: string, args: unknown): string {
     const where = ["glob", "path"].filter((key) => given[key]).map((key) => str(given[key])).join(" ");
     return `${given.pattern ? str(given.pattern) : ""}` + head(where ? ` (${where})` : "", 200);
   }
-  // What the web, a chat action or a picture is about.
-  for (const key of ["query", "url", "request", "name", "fact", "words", "prompt"]) {
-    if (["WebSearch", "WebFetch", "GenerateImage", ...Object.keys(chatActions.TOOLS)].includes(name) && typeof given[key] === "string") {
+  // What a chat action or an MCP tool (a search, a page, a picture) is about.
+  for (const key of ["query", "url", "request", "name", "fact", "words", "prompt", "search_query"]) {
+    if ((name.startsWith(mcp.PREFIX) || name in chatActions.TOOLS) && typeof given[key] === "string") {
       return head(given[key] as string, 200);
     }
   }
@@ -482,7 +462,9 @@ export function withoutEnvArgs(args: string[]): [string[], Record<string, string
   if (!args.includes("--clearenv")) return [args, { ...process.env } as Record<string, string>];
   const kept: string[] = [];
   const env: Record<string, string> = {};
-  const end = args.includes("--") ? args.indexOf("--") : args.length;
+  // bwrap's own options end at the "--" after it: pasta, before it, has one of its own.
+  const start = Math.max(0, args.indexOf("bwrap"));
+  const end = args.indexOf("--", start) >= 0 ? args.indexOf("--", start) : args.length;
   for (let index = 0; index < args.length;) {
     const arg = args[index];
     if (index < end && arg === "--clearenv") index += 1;
@@ -697,12 +679,8 @@ export class Workspace {
       if (!args || typeof args !== "object" || Array.isArray(args) || "__invalid__" in args) throw new ToolError("arguments must be a JSON object");
       const acting = !this.readOnly && !this.host;
       if (name === "Bash") return await this.bash(args.command, args.timeout);
-      if (name === IMAGE_TOOL.name && acting) return await this.generateImage(args);
       if (name in chatActions.TOOLS && acting) return chatActions.run(name, args);
       if (name.startsWith(mcp.PREFIX) && acting) return await mcp.call(this, name, args);
-      if ((name === "WebSearch" || name === "WebFetch") && acting && this.network) {
-        return await (name === "WebSearch" ? this.webSearch(args) : this.webFetch(args));
-      }
       const handlers: Record<string, (args: Record<string, unknown>) => string> = { Read: (a) => this.read(a), Write: (a) => this.write(a),
         Edit: (a) => this.edit(a), MultiEdit: (a) => this.multiEdit(a), Glob: (a) => this.glob(a), Grep: (a) => this.grep(a), LS: (a) => this.ls(a) };
       if (!(name in handlers)) throw new ToolError(`unknown tool ${name}; the tools are ${TOOLS.map((tool) => tool.name).join(", ")}`);
@@ -763,66 +741,6 @@ export class Workspace {
     const end = start + lines.length - 1;
     const note = start !== 1 || end !== total ? `\n[lines ${start}-${end} of ${total}; pass offset to read more]` : "";
     return numbered(lines, start) + note;
-  }
-
-  /** GenerateImage: a picture made by an image model, saved in the working directory, with the
-   *  extension of what came back; charged to the call's budget. */
-  async generateImage(args: Record<string, unknown>): Promise<[string, boolean]> {
-    let path = this.path(args.file_path || "picture.png");
-    const shape = (args.shape as string) || "square";
-    const models = images.available();
-    if (!models.length) throw new ToolError("no image model is set up on this machine");
-    const cost = images.price(models[0]);
-    if (this.budget?.canSpend && !this.budget.canSpend(cost)) throw new ToolError(`the budget left cannot pay for a picture (about $${formatG(cost)})`);
-    let data: Buffer;
-    let modelId: string;
-    try {
-      [data, modelId] = await images.deps.generate(str(args.prompt || ""), shape);
-    } catch (error) {
-      if (error instanceof images.ImageError) throw new ToolError(error.message);
-      throw error;
-    }
-    if (this.budget?.recordUsd) await this.budget.recordUsd(images.price(modelId));
-    const type = attachments.imageType(data) ?? "";
-    const ext = ({ "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" } as Record<string, string>)[type] ?? "";
-    const current = suffixOf(path).toLowerCase();
-    if (ext && current !== ext && !(ext === ".jpg" && current === ".jpeg")) path = (current ? path.slice(0, -current.length) : path) + ext;
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, data);
-    return [`Saved ${this.relative(path)} (${Math.floor(data.length / 1024)} KB, made by ${modelId}). It is a real picture of what you described: report it as done.`, true];
-  }
-
-  /** WebSearch: results from a search service, charged to the call's budget. */
-  async webSearch(args: Record<string, unknown>): Promise<[string, boolean]> {
-    const services = web.searchServices();
-    if (!services.length) throw new ToolError("no search service is set up on this machine");
-    if (this.budget?.canSpend && !this.budget.canSpend(web.price(services[0]))) throw new ToolError("the budget left cannot pay for a search");
-    let count = 5;
-    try {
-      count = pyInt(args.count || 5);
-    } catch {
-      count = 5;
-    }
-    let results: web.Result[];
-    let service: string;
-    try {
-      [results, service] = await web.deps.search(str(args.query || ""), count);
-    } catch (error) {
-      if (error instanceof web.WebError) throw new ToolError(error.message);
-      throw error;
-    }
-    if (this.budget?.recordUsd) await this.budget.recordUsd(web.price(service));
-    return [web.formatResults(results), true];
-  }
-
-  /** WebFetch: a public page as text. */
-  async webFetch(args: Record<string, unknown>): Promise<[string, boolean]> {
-    try {
-      return [await web.fetchPage(args.url), true];
-    } catch (error) {
-      if (error instanceof web.WebError) throw new ToolError(error.message);
-      throw error;
-    }
   }
 
   write(args: Record<string, unknown>): string {

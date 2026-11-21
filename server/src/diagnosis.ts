@@ -10,6 +10,7 @@ import { timeKey } from "./lax.js";
 import { type ExecutionRun, type NodeAttempt, Outcome, type TaskNode } from "./models.js";
 import { fixed, head, pyRegex, pyStr, sortedBy } from "./py.js";
 import { recentFailures, SWITCH_AFTER } from "./recovery.js";
+import * as skills from "./skills.js";
 
 export const MAX_RESULT_CHARS = 2_000;
 // Tool calls of a node's latest attempt shown to a diagnosis.
@@ -212,12 +213,9 @@ export function repairPrompt(run: ExecutionRun, node: TaskNode, workspace: strin
     `- environment variables, and local TCP ports (such as a license server) that sandboxed `
       + `commands must reach, go in ${tools}/sandbox.json: `
       + '`{"env": {"NAME": "value"}, "host_ports": [26585]}`; keep what is already there. '
-      + "For a FlexLM license server list only lmgrd's port: the ports of its vendor daemons "
-      + "(snpslmd, ...) are found and bridged automatically, from lmgrd's process tree or, when "
-      + "lmgrd runs as another user, by tracing `lmutil lmstat` with strace (both must be on the "
-      + "host's PATH or next to lmgrd). Only if that fails, pin the vendor daemon's port in the "
-      + "license file (`VENDOR snpslmd PORT=27021`), restart lmgrd and add that port too, or ask "
-      + "the user to.",
+      + "Only the ports listed are reachable: a service that picks new ports at each start must "
+      + "have them fixed in its own configuration first (the skills below say how for the tools "
+      + "they cover), or ask the user to.",
     "The folder is mounted read-only into the sandbox at the same path, so symlinks to elsewhere "
       + "under the home folder do not work there; copy or install into the folder instead.",
     "Then check the repair the way the step will use it, e.g. run the tool by its name with PATH "
@@ -229,6 +227,8 @@ export function repairPrompt(run: ExecutionRun, node: TaskNode, workspace: strin
       + "records follow; only fixed/activated records succeeded. Verify applicability before reuse:",
     ...sharedRepairs.map((item) => `- ${item.id} scope=${item.scope ?? "environment"} status=${item.status ?? "fixed"}: `
       + `files=${pyStr(item.files ?? [])}\n${head(item.report ?? "", 2000)}\n${item.error || ""}`),
+    // How the tools the failure is about work on any machine (a license server's ports, say).
+    skills.section(skills.forStep([node.title, node.instructions, last?.reason ?? "", ...events].join("\n"))),
     ...(earlier.length ? ["", "# The same kind of problem in earlier tasks",
       "It has happened before. Find the cause that keeps bringing it back, not only this "
         + "occurrence; if an earlier repair did not hold, say why and repair it for good:",

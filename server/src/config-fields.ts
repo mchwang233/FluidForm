@@ -44,13 +44,10 @@ export const SettingsFields = {
   chat_tools_network: lax.bool().default(() => (true)),
   chat_tool_seconds: lax.int(z.number().int().min(10).max(1800)).default(() => (300)),
   chat_tool_turns: lax.int(z.number().int().min(1).max(200)).default(() => (50)),
-  image_models: z.array(z.string()).nullable().default(() => (null)),
   cli_quota_soft_percent: lax.number(z.number().min(0).max(100)).default(() => (70)),
   cli_quota_stop_percent: lax.number(z.number().min(0).max(100)).default(() => (90)),
   reasoning_fallback: z.enum(["report", "strict"]).default(() => ("report" as const)),
   mcp_servers: z.record(z.string(), z.record(z.string(), z.any())).default(() => ({})),
-  web_search_models: z.array(z.string()).nullable().default(() => (null)),
-  web_fetch: lax.bool().default(() => (true)),
   progress_check_minutes: lax.number(z.number().gt(0)).default(() => (10)),
   lead_idle_minutes: lax.number(z.number().gt(0)).default(() => (10)),
   lead_call_max_minutes: lax.number(z.number().gt(0)).default(() => (60)),
@@ -107,5 +104,5 @@ export const SettingsFields = {
 };
 
 // Fields whose value is JSON in the environment (lists and objects).
-export const JSON_SETTINGS = new Set(["project_roots", "provider_limits", "cli_plans", "image_models", "mcp_servers", "web_search_models", "helper_only_models", "reasoning_by_difficulty", "sandbox_host_ports", "sandbox_profiles", "sandbox_env", "allowed_hosts", "allowed_origins"]);
+export const JSON_SETTINGS = new Set(["project_roots", "provider_limits", "cli_plans", "mcp_servers", "helper_only_models", "reasoning_by_difficulty", "sandbox_host_ports", "sandbox_profiles", "sandbox_env", "allowed_hosts", "allowed_origins"]);
 

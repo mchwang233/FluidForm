@@ -35,8 +35,6 @@ afterEach(() => {
   Object.assign(process.env, env);
   Object.assign(agent.deps, deps);
   environment.deps.overrides = overrides;
-  environment.probes.clear();
-  environment.timing.PROBE_TTL = 60;
   rmSync(folder, { recursive: true, force: true });
 });
 
@@ -181,139 +179,11 @@ test("only listed host ports reach the sandbox", async () => {
   }
 });
 
-/** A /proc with ``processes``: [pid, name, parent pid, listening ports, uid?]; ports in ``tcp6`` go
- *  to net/tcp6. The uid defaults to 1000. */
-function fakeProc(root: string, processes: [number, string, number, number[], number?][], tcp6: Set<number> = new Set()): string {
-  const header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
-  const rows: Record<string, string[]> = { tcp: [header], tcp6: [header] };
-  for (const [pid, name, parent, ports, owner = 1000] of processes) {
-    const place = join(root, String(pid));
-    mkdirSync(join(place, "fd"), { recursive: true });
-    writeFileSync(join(place, "stat"), `${pid} (${name}) S ${parent} ${pid} ${pid} 0 -1 4194560\n`);
-    writeFileSync(join(place, "status"), `Name:\t${name}\nUid:\t${owner}\t${owner}\t${owner}\t${owner}\n`);
-    symlinkSync("/dev/null", join(place, "fd", "0"));
-    ports.forEach((port, index) => {
-      const fd = index + 3;
-      const inode = String(pid * 100 + fd);
-      symlinkSync(`socket:[${inode}]`, join(place, "fd", String(fd)));
-      const [table, address] = tcp6.has(port) ? ["tcp6", "00000000000000000000000000000000"] : ["tcp", "0100007F"];
-      const hex = port.toString(16).toUpperCase().padStart(4, "0");
-      rows[table].push(`   0: ${address}:${hex} 00000000:0000 0A 00000000:00000000 00:00000000 00000000  ${owner}        0 ${inode}\n`);
-      // A connection on the same port is not a listener.
-      rows[table].push(`   1: ${address}:${hex} 0100007F:9C40 01 00000000:00000000 00:00000000 00000000  ${owner}        0 9${inode}\n`);
-    });
-  }
-  mkdirSync(join(root, "net"), { recursive: true });
-  for (const [table, lines] of Object.entries(rows)) writeFileSync(join(root, "net", table), lines.join(""));
-  return root;
-}
-
-const withProc = async <T>(proc: string, work: () => Promise<T>): Promise<T> => {
-  const before = environment.places.proc;
-  environment.places.proc = proc;
-  try {
-    return await work();
-  } finally {
-    environment.places.proc = before;
-  }
-};
-
-test("the vendor daemon ports of an lmgrd reach the sandbox", () => withProc(fakeProc(join(folder, "proc"),
-  [[100, "lmgrd", 1, [26585]], [101, "snpslmd", 100, [41237]], [200, "python", 1, [8000]]]), async () => {
+test("the host ports are the setting's and this machine's record, nothing found by itself", async () => {
   settings.sandbox_host_ports = [26585];
-  assert.deepEqual(await environment.hostPorts(), [26585, 41237]);
-  // The vendor daemon restarts on another port: the next command follows it.
-  const tcp = join(environment.places.proc, "net", "tcp");
-  writeFileSync(tcp, readFileSync(tcp, "utf8").replaceAll(`:${(41237).toString(16).toUpperCase()} `, `:${(43001).toString(16).toUpperCase()} `));
-  assert.deepEqual(await environment.hostPorts(), [26585, 43001]);
-}));
-
-test("only lmgrd's children count", () => withProc(fakeProc(join(folder, "proc"), [[100, "lmgrd", 1, [26585]], [101, "snpslmd", 100, [41237]],
-  [150, "snpslmd", 1, [41500]], [200, "python", 1, [8000]], [201, "worker", 200, [8001]]]), async () => {
-  settings.sandbox_host_ports = [8000];
-  assert.deepEqual(await environment.hostPorts(), [8000]);
-  settings.sandbox_host_ports = [26585];
-  assert.deepEqual(await environment.hostPorts(), [26585, 41237]);
-  assert.deepEqual(await environment.licenseDaemonPorts([], environment.places.proc), new Set());
-}));
-
-test("unreadable daemon fds fall back to the listed ports", () => {
-  const proc = fakeProc(join(folder, "proc"), [[300, "lmgrd", 1, [26585], 0], [301, "snpslmd", 300, [41237], 0]]);
-  return withProc(proc, async () => {
-    settings.sandbox_host_ports = [26585];
-    process.env.PATH = join(folder, "empty"); // no strace or lmutil to probe with
-    const warnings: string[] = [];
-    log.capture((level, message) => level === "warning" && warnings.push(message));
-    chmodSync(join(proc, "300", "fd"), 0);
-    try {
-      assert.deepEqual(await environment.hostPorts(), [26585]);
-    } finally {
-      chmodSync(join(proc, "300", "fd"), 0o755);
-      log.capture(null);
-    }
-    assert.ok(warnings.join("\n").includes("VENDOR snpslmd PORT="));
-  });
+  environment.deps.overrides = () => ({ host_ports: [27021, 26585, "x", 0, 70000] });
+  assert.deepEqual(await environment.hostPorts(), [26585, 27021]);
 });
-
-/** strace and lmutil in ``place``: strace prints connect() lines to the ports in the file ``connects``
- *  ("address port" per line) and counts its runs in ``runs``. */
-function fakeTracer(place: string, connects: string): () => number {
-  mkdirSync(place, { recursive: true });
-  writeFileSync(join(place, "connects"), connects);
-  writeFileSync(join(place, "strace"), `#!/bin/sh
-echo run >> ${place}/runs
-while read address port; do
-  case "$address" in
-    *:*) echo "[pid 7] connect(3, {sa_family=AF_INET6, sin6_port=htons($port), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, \\"$address\\", &sin6_addr), sin6_scope_id=0}, 28) = 0" >&2 ;;
-    *) echo "connect(3, {sa_family=AF_INET, sin_port=htons($port), sin_addr=inet_addr(\\"$address\\")}, 16) = -1 EINPROGRESS" >&2 ;;
-  esac
-done < ${place}/connects
-`);
-  writeFileSync(join(place, "lmutil"), "#!/bin/sh\n");
-  chmodSync(join(place, "strace"), 0o755);
-  chmodSync(join(place, "lmutil"), 0o755);
-  return () => (existsSync(join(place, "runs")) ? readFileSync(join(place, "runs"), "utf8").split(/\s+/).filter(Boolean).length : 0);
-}
-
-test("a root lmgrd's vendor daemons are found by tracing lmstat", () => {
-  const proc = fakeProc(join(folder, "proc"), [[300, "lmgrd", 1, [26585], 0], [301, "snpslmd", 300, [48457], 0],
-    [400, "sshd", 1, [2222], 0], [500, "uvicorn", 1, [8000]]]); // sshd: root, but lmstat never connects to it
-  for (const pid of [300, 301, 400]) chmodSync(join(proc, String(pid), "fd"), 0);
-  const tools = join(folder, "eda", "bin");
-  const runs = fakeTracer(tools, "127.0.0.53 53\n127.0.0.1 26585\n127.0.0.1 48457\n127.0.0.1 8000\n10.0.0.9 2222\n");
-  writeFileSync(join(proc, "300", "cmdline"), `${tools}/lmgrd\0-c\0/opt/license.dat\0`);
-  settings.sandbox_host_ports = [26585];
-  // strace is on PATH; lmutil only next to lmgrd, found from its command line.
-  const path = join(folder, "path");
-  mkdirSync(path);
-  symlinkSync(join(tools, "strace"), join(path, "strace"));
-  process.env.PATH = path;
-  return withProc(proc, async () => {
-    try {
-      assert.deepEqual(await environment.hostPorts(), [26585, 48457]);
-      assert.deepEqual(await environment.hostPorts(), [26585, 48457]);
-      assert.equal(runs(), 1); // reused, not traced for every command
-      // snpslmd restarts on another port: the old one stops listening, so it is traced again.
-      const tcp = join(proc, "net", "tcp");
-      writeFileSync(tcp, readFileSync(tcp, "utf8").replaceAll(`:${(48457).toString(16).toUpperCase()} `, `:${(50111).toString(16).toUpperCase()} `));
-      writeFileSync(join(tools, "connects"), "127.0.0.1 26585\n::1 50111\n");
-      assert.deepEqual(await environment.hostPorts(), [26585, 50111]);
-      assert.equal(runs(), 2);
-      // And at the latest after PROBE_TTL.
-      environment.timing.PROBE_TTL = 0;
-      assert.deepEqual(await environment.hostPorts(), [26585, 50111]);
-      assert.equal(runs(), 3);
-    } finally {
-      for (const pid of [300, 301, 400]) chmodSync(join(proc, String(pid), "fd"), 0o755);
-    }
-  });
-});
-
-test("tcp6 listeners are found", () => withProc(fakeProc(join(folder, "proc"), [[100, "lmgrd", 1, [26585]], [101, "snpslmd", 100, [41237]]],
-  new Set([26585, 41237])), async () => {
-  settings.sandbox_host_ports = [26585];
-  assert.deepEqual(await environment.hostPorts(), [26585, 41237]);
-}));
 
 test("a task allowing the network reaches out, but not local services", { skip: !networkAllowed() && "The task disabled network access" }, async () => {
   const [proxy, port] = await server("hello-from-proxy\n");
@@ -483,3 +353,15 @@ test("the environment leaves the command line", () => {
   assert.ok(kept[0].endsWith("bwrap"));
 });
 
+
+test("the environment leaves the command line of a sandbox allowed the internet too", () => {
+  // Regression: pasta's own "--" came first, so bwrap kept --clearenv and every --setenv on its command
+  // line: a proxy's password could be read by any user, and an MCP server's key never reached it.
+  const args = [...agent.networkPrefix([]), "bwrap", "--ro-bind", "/", "/", "--clearenv", "--setenv", "HTTPS_PROXY", "http://u:pw@proxy:1",
+    "--chdir", "/x", "--", "/bin/bash", "-c", "echo hi"];
+  const [kept, found] = agent.withoutEnvArgs(args);
+  assert.deepEqual(found, { HTTPS_PROXY: "http://u:pw@proxy:1" });
+  assert.ok(!kept.join(" ").includes("pw@proxy") && !kept.includes("--clearenv"));
+  assert.ok(kept[0].endsWith("pasta") && kept.includes("bwrap"));
+  assert.deepEqual(kept.slice(kept.lastIndexOf("--")), ["--", "/bin/bash", "-c", "echo hi"]);
+});

@@ -20,6 +20,7 @@ import * as folders from "./folders.js";
 import { INTERNET_NOTE } from "./lead-planning.js";
 import * as learning from "./learning.js";
 import { log } from "./log.js";
+import { imageServers } from "./mcp.js";
 import { pyDumps, pyRound } from "./py.js";
 import {
   type Attachment, type ExecutionRun, ExecutionRunSchema, EventSchema, FINISHED, folderId, type ModelProfile,
@@ -288,9 +289,12 @@ export class Api {
    *  that continues that task in its folder; ``context`` is what it grew out of (a conversation). */
   async newTask(body: CreateTask, parent: ExecutionRun | null = null, context = ""): Promise<ExecutionRun> {
     const { plan, session, attached, projectDir, background, lessons } = await this.makePlan(body, parent, "", context);
+    // Pictures are made by an image MCP server, which reaches its service from the step's sandbox:
+    // a task that must make pictures is allowed the internet.
+    const pictures = plan.nodes.some((node) => node.needs_images) && imageServers().length > 0;
     const run = ExecutionRunSchema.parse({
       id: randomUUID(), prompt: body.prompt, status: "awaiting_confirmation", plan, budget_usd: body.budget_usd, use_cli: body.use_cli,
-      allow_network: body.allow_network, project_dir: projectDir, attachments: attached, actual_cost_usd: plan.planning_cost_usd,
+      allow_network: body.allow_network || pictures, project_dir: projectDir, attachments: attached, actual_cost_usd: plan.planning_cost_usd,
       background, parent_run_id: parent?.id ?? null, workspace_id: parent ? folderId(parent) : null,
       supervisor: session.model_id ? session : null, improvement_uses: lessons,
     });
@@ -298,7 +302,7 @@ export class Api {
     if (!parent && !projectDir) run.folder_name = folders.taskFolder(plan.folder || plan.summary || body.prompt);
     this.db.saveRun(run);
     this.db.addEvent(EventSchema.parse({ run_id: run.id, kind: "plan.created", data: {
-      estimate: run.plan.estimate, use_cli: body.use_cli, allow_network: body.allow_network, project_dir: run.project_dir,
+      estimate: run.plan.estimate, use_cli: body.use_cli, allow_network: run.allow_network, project_dir: run.project_dir,
       parent_run_id: run.parent_run_id, planning_method: plan.planning_method, planner_model_id: plan.planner_model_id, planning_note: plan.planning_note,
     } }));
     return run;

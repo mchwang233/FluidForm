@@ -20,10 +20,10 @@ export const allowRealClis = () => {
 // What these settings default to now (docs/design/fewer-settings.md); a test of something else runs
 // without them, as before.
 export const ON_BY_DEFAULT: Record<string, unknown> = { quick_tasks: false, solo_tasks: false, resume_after_restart: false, chat_tools: false,
-  chat_tools_network: false, chat_action_tools: false, user_memory: false, web_fetch: false, engineer_repairs: false, preflight_cache_minutes: 0,
+  chat_tools_network: false, chat_action_tools: false, user_memory: false, engineer_repairs: false, preflight_cache_minutes: 0,
   head_start: false, capability_proposals: false, capability_packages: false, chat_tool_seconds: 120, chat_tool_turns: 20,
   // Nothing taken from keys a test machine may have in its environment.
-  image_models: [], web_search_models: [] };
+  mcp_servers: {} };
 
 /** Registers the hooks for the tests of the calling file; ``folder()`` is the test's own temporary folder. */
 export function conftest(): { folder: () => string } {

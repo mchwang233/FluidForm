@@ -10,9 +10,9 @@ import { builtinModels } from "../src/catalog.js";
 import { settings } from "../src/config.js";
 import { recall, reopen } from "../src/conversation.js";
 import { Database } from "../src/db.js";
-import { commit, EngineerError, plainLines, readReply } from "../src/engineer.js";
+import { commit, EngineerError, plainLines, planPrompt, readReply } from "../src/engineer.js";
 import { Executor } from "../src/executor.js";
-import { type ExecutionRun, ExecutionRunSchema, NodeAttemptSchema, type TaskNode, TaskNodeSchema } from "../src/models.js";
+import { EngineerJobSchema, type ExecutionRun, ExecutionRunSchema, NodeAttemptSchema, type TaskNode, TaskNodeSchema } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
 import { Cancelled } from "../src/tasks.js";
 import { contractNode, mockAcceptance, restoreAcceptance, setupExecutor } from "./helpers/artifacts.js";
@@ -62,6 +62,12 @@ test("a commit takes only the changed files", () => {
   assert.deepEqual(git("show", "--name-only", "--format=", "HEAD").split(/\s+/).filter(Boolean).sort(), ["a.py", "new.py"]);
   // The user's own staged change stays staged, outside the commit.
   assert.deepEqual(git("diff", "--cached", "--name-only").split(/\s+/).filter(Boolean), ["staged.py"]);
+});
+
+test("a plan says what existing solution it uses before building one", () => {
+  const prompt = planPrompt(EngineerJobSchema.parse({ request: "接入钉钉" }), "guide");
+  assert.ok(prompt.includes("现成方案") && prompt.includes("official or mature open-source"));
+  assert.ok(prompt.indexOf("现成方案") < prompt.indexOf("改动"));
 });
 
 test("a reply without plain lines is kept whole", () => {

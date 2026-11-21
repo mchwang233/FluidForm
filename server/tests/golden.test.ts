@@ -1,5 +1,6 @@
 // Inputs and what the Python backend gave for them, recorded before it was removed (tests/golden/*.json):
-// the TS modules must still give the same.
+// the TS modules must still give the same. A behaviour changed on purpose is recorded again with
+// GOLDEN_UPDATE=1 (the diff of tests/golden/ shows what changed).
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +10,6 @@ import * as quality from "../src/quality.js";
 import * as capabilities from "../src/capabilities.js";
 import * as skills from "../src/skills.js";
 import * as team from "../src/team.js";
-import * as web from "../src/web.js";
 import * as quota from "../src/quota.js";
 import * as environment from "../src/environment.js";
 import { CapabilitySchema } from "../src/models.js";
@@ -201,10 +201,6 @@ const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] }> 
     data();
     return { result: withData(capabilities.section(c.args[0].map((item: unknown) => CapabilitySchema.parse(item)))), after: [] };
   },
-  "web.public_address": (c) => ({ result: web.isPublicAddress(c.args[0]), after: [] }),
-  "web.page_text": (c) => ({ result: web.pageText(c.args[0]), after: c.args }),
-  "web.unescape": (c) => ({ result: web.unescape(c.args[0]), after: [] }),
-  "web.format_results": (c) => ({ result: web.formatResults(c.args[0]), after: c.args }),
   "quota.reset_time": (c) => ({ result: quota.resetTime(c.args[0], new Date((c as any).now * 1000)).getTime() / 1000, after: [] }),
   "quota.kind": (c) => ({ result: [quota.isQuotaError(c.args[0]), quota.failureKind(c.args[0])], after: [] }),
   "quota.signature": (c) => ({ result: quota.signature(c.args[0]), after: [] }),
@@ -392,10 +388,24 @@ const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] }> 
   "catalog.builtin_models": () => ({ result: builtinModels().map(({ effective_at, discovered_at, ...rest }) => rest), after: [] }),
 };
 
+/** The recorded file with each changed result put in place as text, so the rest stays as Python
+ *  wrote it (its floats, 65.0, are not rewritten as 65). */
+function record(file: string, changes: [unknown, unknown][]): void {
+  const path = new URL(`./golden/${file}.json`, import.meta.url);
+  let text = readFileSync(path, "utf8");
+  for (const [before, after] of changes) {
+    const old = JSON.stringify(before, null, 1).replaceAll("\n", "\n  ");
+    assert.ok(text.includes(old), `cannot find a recorded result of ${file} to replace; record it by hand`);
+    text = text.replace(old, JSON.stringify(after, null, 1).replaceAll("\n", "\n  "));
+  }
+  writeFileSync(path, text);
+}
+
 for (const file of ["conversation", "chat_actions", "py", "remembering", "scoring", "routing_feedback", "folders",
-  "catalog", "routing", "recovery", "progress", "diagnosis", "triage", "files", "contracts", "prompts", "web", "quota", "environment"]) {
+  "catalog", "routing", "recovery", "progress", "diagnosis", "triage", "files", "contracts", "prompts", "quota", "environment"]) {
   test(`${file}: the same as the Python backend`, () => {
     const cases = load(file);
+    const changes: [unknown, unknown][] = [];
     assert.ok(cases.length > 0);
     cases.forEach((c, index) => {
       const run = CALLS[c.call];
@@ -407,8 +417,14 @@ for (const file of ["conversation", "chat_actions", "py", "remembering", "scorin
       }
       const got = run(c);
       const wrong = same(plain(got.result), plain(c.result));
+      // A behaviour changed on purpose: GOLDEN_UPDATE=1 records what the TS modules give now.
+      if (wrong && process.env.GOLDEN_UPDATE === "1") {
+        changes.push([plain(c.result), plain(got.result)]);
+        return;
+      }
       assert.equal(wrong, null, `${label}: ${wrong}`);
       if (c.after.length) assert.equal(same(plain(got.after), plain(c.after)), null, `${label} (arguments after)`);
     });
+    if (changes.length) record(file, changes);
   });
 }

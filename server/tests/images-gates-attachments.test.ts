@@ -1,4 +1,4 @@
-// images.ts, call-control.ts and attachments.ts: tests from test_images, test_call_runtime and
+// Routing a step that makes pictures, call-control.ts and attachments.ts: tests from test_images, test_call_runtime and
 // test_recovery_regressions, ported.
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, renameSync, rmdirSync } from "node:fs";
@@ -9,20 +9,18 @@ import * as attachments from "../src/attachments.js";
 import { ProviderError } from "../src/budget.js";
 import { ProviderGate } from "../src/call-control.js";
 import { settings } from "../src/config.js";
-import * as images from "../src/images.js";
 import { ModelProfileSchema, TaskNodeSchema } from "../src/models.js";
 import { AsyncEvent } from "../src/py.js";
 import * as routing from "../src/routing.js";
 
 const PNG = Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "latin1"), Buffer.alloc(32)]);
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(32)]);
-const saved = { image_models: settings.image_models, data_dir: settings.data_dir };
+const saved = { mcp_servers: settings.mcp_servers, data_dir: settings.data_dir };
 const env = { ZHIPU_API_KEY: process.env.ZHIPU_API_KEY, MINIMAX_API_KEY: process.env.MINIMAX_API_KEY };
 
 beforeEach(() => {
   process.env.ZHIPU_API_KEY = "g";
   process.env.MINIMAX_API_KEY = "m";
-  settings.image_models = ["minimax:image-01", "glm:cogview-4"];
   settings.data_dir = mkdtempSync(join(tmpdir(), "attachments-"));
 });
 afterEach(() => {
@@ -35,56 +33,18 @@ afterEach(() => {
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 
-test("a picture comes from the first model, and the next when it fails", async () => {
-  const seen: [string, string, string | null][] = [];
-  const fetcher: typeof fetch = async (input, init) => {
-    const url = new URL(String(input));
-    seen.push([url.host, url.pathname, new Headers(init?.headers).get("authorization")]);
-    if (url.host === "api.minimax.io") return json({ base_resp: { status_code: 1026, status_msg: "sensitive" } });
-    if (url.pathname.endsWith("/images/generations")) {
-      const body = JSON.parse(String(init!.body));
-      assert.ok(body.size === "768x1344" && body.prompt === "海边的女孩");
-      return json({ data: [{ url: "https://files.example/p.jpg" }] });
-    }
-    return new Response(JPEG);
-  };
-  const [data, modelId] = await images.generate("海边的女孩", "portrait", fetcher);
-  assert.ok(data.equals(JPEG) && modelId === "glm:cogview-4");
-  assert.deepEqual(seen[0], ["api.minimax.io", "/v1/image_generation", "Bearer m"]);
-  assert.equal(seen[1][2], "Bearer g");
-});
-
-test("MiniMax gives its picture inline", async () => {
-  const fetcher: typeof fetch = async (_input, init) => {
-    assert.equal(JSON.parse(String(init!.body)).aspect_ratio, "1:1");
-    return json({ base_resp: { status_code: 0 }, data: { image_base64: [PNG.toString("base64")] } });
-  };
-  const [data, modelId] = await images.generate("猫", "square", fetcher);
-  assert.ok(data.equals(PNG) && modelId === "minimax:image-01");
-});
-
-test("no picture without a model, a key, or a real picture", async () => {
-  settings.image_models = ["minimax:image-01"];
-  const fake: typeof fetch = async () => json({ data: { image_base64: [Buffer.from("not a picture").toString("base64")] } });
-  await assert.rejects(images.generate("猫", "square", fake), /不是图片/);
-  delete process.env.MINIMAX_API_KEY;
-  assert.deepEqual(images.available(), []);
-  await assert.rejects(images.generate("猫"), /没有可用的画图模型/);
-  settings.image_models = ["nobody:x"];
-  assert.deepEqual(images.available(), []);
-});
-
-test("a step that makes pictures goes to an API model when there is an image model", () => {
+test("a step that makes pictures goes to an API model when an MCP server makes them", () => {
   const model = (id: string, channel: string) => ModelProfileSchema.parse({ id, provider: "x", display_name: id, channel,
     context_window: 1_000_000, input_per_million: 1, output_per_million: 1, scores: { coding: 90, planning: 90, reliability: 90 } });
   const models = [model("cli:codex", "cli"), model("x:api", "api")];
   const both = new Set(["cli:codex", "x:api"]);
+  settings.mcp_servers = { minimax: { command: ["minimax-mcp"], makes_images: true } };
   const node = TaskNodeSchema.parse({ id: "n", title: "头像", instructions: "画", capability: "coding", needs_images: true });
   assert.deepEqual(routing.eligibleForNode(node, models, both).map((item) => item.id), ["x:api"]);
   // Other steps, or a machine without an image model, keep every model.
   const other = TaskNodeSchema.parse({ id: "o", title: "写", instructions: "写", capability: "coding" });
   assert.equal(routing.eligibleForNode(other, models, both).length, 2);
-  settings.image_models = [];
+  settings.mcp_servers = {};
   assert.equal(routing.eligibleForNode(node, models, both).length, 2);
 });
 

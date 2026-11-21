@@ -1,5 +1,5 @@
-// agent.ts's pictures, web, MCP and review reads; quota.ts; web.ts: tests from test_images,
-// test_web, test_mcp, test_review_evidence, test_continue, test_preflight, test_defaults and
+// agent.ts's pictures, MCP (local and remote servers) and review reads; quota.ts: tests from
+// test_images, test_mcp, test_review_evidence, test_continue, test_preflight, test_defaults and
 // test_quota, ported.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -10,16 +10,14 @@ import * as agent from "../src/agent.js";
 import { Workspace } from "../src/agent.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
-import * as images from "../src/images.js";
 import * as mcp from "../src/mcp.js";
 import { ExecutionRunSchema, TaskNodeSchema } from "../src/models.js";
 import * as quality from "../src/quality.js";
 import { isQuotaError, QuotaTracker, resetTime } from "../src/quota.js";
-import * as web from "../src/web.js";
 
 const saved = { ...settings };
 const env = { ...process.env };
-const deps = { images: { ...images.deps }, web: { ...web.deps }, mcp: { ...mcp.deps } };
+const deps = { mcp: { ...mcp.deps } };
 let folder = "";
 beforeEach(() => {
   folder = mkdtempSync(join(tmpdir(), "online-"));
@@ -28,8 +26,6 @@ afterEach(() => {
   Object.assign(settings, saved);
   for (const key of Object.keys(process.env)) if (!(key in env)) delete process.env[key];
   Object.assign(process.env, env);
-  Object.assign(images.deps, deps.images);
-  Object.assign(web.deps, deps.web);
   Object.assign(mcp.deps, deps.mcp);
   mcp.LISTED.clear();
   rmSync(folder, { recursive: true, force: true });
@@ -71,50 +67,11 @@ test("a long file is read whole in one call", async () => {
   assert.ok((await ws.call("Read", { file_path: "app.js", offset: 2001 })).includes("line 2499"));
 });
 
-test("pictures and searches use the keys there are", () => {
-  process.env.ZHIPU_API_KEY = "g";
-  delete process.env.MINIMAX_API_KEY;
-  settings.image_models = null;
-  settings.web_search_models = null;
-  assert.deepEqual([images.available(), web.searchServices()], [["glm:cogview-4"], ["glm:search_std"]]);
-  process.env.MINIMAX_API_KEY = "m";
-  assert.deepEqual(images.available(), ["minimax:image-01", "glm:cogview-4"]);
-  // [] still means none.
-  settings.image_models = [];
-  settings.web_search_models = [];
-  assert.deepEqual([images.available(), web.searchServices()], [[], []]);
-  delete process.env.ZHIPU_API_KEY;
-  settings.web_search_models = null;
-  assert.deepEqual(web.searchServices(), []);
-});
-
-test("the image tool saves the picture in its own format and charges it", async () => {
-  process.env.ZHIPU_API_KEY = "g";
-  process.env.MINIMAX_API_KEY = "m";
-  settings.image_models = ["minimax:image-01", "glm:cogview-4"];
-  images.deps.generate = async (prompt, shape = "square") => {
-    assert.deepEqual([prompt, shape], ["头像", "square"]);
-    return [JPEG, "minimax:image-01"];
-  };
-  const workspace = new Workspace(folder);
-  const budget = new Budget(1);
-  workspace.budget = budget;
-  let [output, ok] = await workspace.run("GenerateImage", { prompt: "头像", file_path: "out/avatar.png" });
-  assert.ok(ok && output.includes("avatar.jpg") && readFileSync(join(folder, "out", "avatar.jpg")).equals(JPEG));
-  assert.deepEqual(budget.charged, [images.price("minimax:image-01")]);
-  // Not when the budget cannot pay for it, nor for a reviewer.
-  workspace.budget = new Budget(0);
-  [output, ok] = await workspace.run("GenerateImage", { prompt: "头像", file_path: "b.png" });
-  assert.ok(!ok && output.includes("budget"));
-  [output, ok] = await new Workspace(folder, { readOnly: true }).run("GenerateImage", { prompt: "x", file_path: "c.png" });
-  assert.ok(!ok);
-});
-
 const jpeg = (width: number, height: number) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from("JFIF\0"),
   Buffer.alloc(9), Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, height >> 8, height & 255, width >> 8, width & 255, 0x03]), Buffer.alloc(9 + 16)]);
 
 test("reading a picture says what it is instead of failing", async () => {
-  // Regression: Read answered "is a binary file" (an error) for a picture GenerateImage had just
+  // Regression: Read answered "is a binary file" (an error) for a picture an image tool had just
   // made, and a model that tried to look at it reported the finished step as UNABLE.
   writeFileSync(join(folder, "avatar.jpg"), jpeg(1024, 1024));
   const png = Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n\0\0\0\rIHDR", "latin1"), Buffer.from([0, 0, 0, 64, 0, 0, 0, 32]), Buffer.alloc(8)]);
@@ -124,10 +81,9 @@ test("reading a picture says what it is instead of failing", async () => {
   assert.ok(ok && output.includes("is a picture (JPG, 1024×1024") && output.includes("not a reason to report the work as not done"), output);
   [output, ok] = await workspace.run("Read", { file_path: "icon.png" });
   assert.ok(ok && output.includes("64×32"));
-  // Other binary files are still refused, and the image tool no longer sends models to look.
+  // Other binary files are still refused.
   writeFileSync(join(folder, "a.zip"), "PK");
   assert.ok(!(await workspace.run("Read", { file_path: "a.zip" }))[1]);
-  assert.ok(agent.IMAGE_TOOL.description.includes("Read does not show pictures"));
 });
 
 // A fake MCP server, in Node.
@@ -180,6 +136,9 @@ test("a server's tools are listed once and called", async () => {
   // Its secrets reach it as its environment.
   assert.deepEqual(await server.run("mcp__calc__secret", {}), ["s3cret", true]);
   assert.equal(mcp.LISTED.size, 1);
+  // Only the tools it names, when its settings name some.
+  settings.mcp_servers = { calc: { ...settings.mcp_servers.calc, tools: ["add"] } };
+  assert.deepEqual((await mcp.definitions(server)).map((tool) => tool.name), ["mcp__calc__add"]);
 });
 
 test("a reviewer gets no MCP tools, and a broken server is skipped", async () => {
@@ -362,73 +321,80 @@ test("explicit build logs cannot bypass private paths or link targets", async ()
   for (const name of blocked) assert.ok((await ws.call("Read", { file_path: name })).startsWith("Error:"), name);
 });
 
-function services(): void {
-  process.env.ZHIPU_API_KEY = "g";
-  settings.web_search_models = ["glm:search_std"];
-  settings.web_fetch = true;
+// ---- A remote MCP server (Streamable HTTP), asked by FluidForm itself ----
+
+/** A remote server answering as JSON, or as server-sent events; ``seen`` keeps each request. */
+function remoteServer(events = false, seen: { headers: Headers; body: any }[] = []) {
+  mcp.deps.fetch = async (_url, init) => {
+    const body = JSON.parse(String(init.body));
+    seen.push({ headers: new Headers(init.headers), body });
+    if (!("id" in body)) return new Response(null, { status: 202 });
+    const result = body.method === "initialize" ? { protocolVersion: mcp.PROTOCOL, capabilities: {} }
+      : body.method === "tools/list" ? { tools: [{ name: "webSearchPrime", description: "Search the web", inputSchema: { type: "object", properties: { search_query: { type: "string" } } } }] }
+        : { content: [{ type: "text", text: `结果：${body.params.arguments.search_query}` }] };
+    const message = JSON.stringify({ jsonrpc: "2.0", id: body.id, result });
+    const headers = { "content-type": events ? "text/event-stream" : "application/json", ...(body.method === "initialize" ? { "mcp-session-id": "s-1" } : {}) };
+    return new Response(events ? `event: message\ndata: ${message}\n\n` : message, { headers });
+  };
+  return seen;
 }
 
-test("a search asks the service with its key", async () => {
-  services();
-  const fetcher: typeof fetch = async (input, init) => {
-    const body = JSON.parse(String(init!.body));
-    assert.ok(new Headers(init?.headers).get("authorization") === "Bearer g" && String(input).endsWith("/web_search"));
-    assert.deepEqual([body.search_engine, body.search_query, body.count], ["search_std", "北京天气", 3]);
-    return new Response(JSON.stringify({ search_result: [{ title: "北京天气预报", link: "https://weather.example/bj", content: "晴，5°C", publish_date: "2026-11-19" }] }));
-  };
-  const [results, service] = await web.search("北京天气", 3, fetcher);
-  assert.equal(service, "glm:search_std");
-  assert.equal(web.formatResults(results), "1. 北京天气预报\nhttps://weather.example/bj\n2026-11-19\n晴，5°C");
-});
-
-test("the web tools are for steps allowed the internet, and searches are charged", async () => {
-  services();
-  assert.deepEqual(web.toolsFor(new Workspace(folder)), []);
-  assert.deepEqual(web.toolsFor(new Workspace(folder, { network: true, readOnly: true })), []);
-  const online = new Workspace(folder, { network: true });
-  assert.deepEqual(web.toolsFor(online).map((tool) => tool.name), ["WebSearch", "WebFetch"]);
-  web.deps.search = async () => [[{ title: "t", url: "https://a.example", date: null, excerpt: null, site: null }], "glm:search_std"];
-  const budget = new Budget(1);
-  online.budget = budget;
-  let [output, ok] = await online.run("WebSearch", { query: "x" });
-  assert.ok(ok && output.includes("https://a.example"));
-  assert.deepEqual(budget.charged, [web.price("glm:search_std")]);
-  online.budget = new Budget(0);
-  [output, ok] = await online.run("WebSearch", { query: "x" });
-  assert.ok(!ok && output.includes("budget"));
-  // A step without the internet cannot use them, even by name.
-  assert.ok(!(await new Workspace(folder).run("WebSearch", { query: "x" }))[1]);
-});
-
-test("a page is read as text", async () => {
-  services();
-  web.deps.isPublic = async () => true;
-  const html = "<html><head><title>天气</title><script>var x=1</script></head><body><h1>北京</h1><p>晴，5°C</p><style>p{}</style></body></html>";
-  const fetcher: typeof fetch = async (input) => (new URL(String(input)).pathname === "/old"
-    ? new Response(null, { status: 301, headers: { location: "/new" } })
-    : new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } }));
-  const text = await web.fetchPage("https://weather.example/old", fetcher);
-  assert.ok(text.startsWith("https://weather.example/new") && text.includes("# 天气") && text.includes("北京") && text.includes("晴，5°C"), text);
-  assert.ok(!text.includes("var x") && !text.includes("p{}"));
-});
-
-for (const url of ["http://127.0.0.1:8000/api/tasks", "http://localhost/", "http://10.0.0.5/", "http://[::1]/", "file:///etc/passwd", "http://user:pw@example.com/"]) {
-  test(`addresses of this machine or its network are refused: ${url}`, async () => {
-    services();
-    await assert.rejects(web.fetchPage(url, async () => new Response("secret")), web.WebError);
+for (const events of [false, true]) {
+  test(`a remote MCP server is asked by FluidForm, only for work allowed the internet (${events ? "events" : "JSON"})`, async () => {
+    const seen = remoteServer(events);
+    process.env.ZHIPU_API_KEY = "zhipu-key";
+    settings.mcp_servers = { "web-search": { url: "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", headers: { Authorization: "Bearer ${ZHIPU_API_KEY}" }, price_usd: 0.01 } };
+    // Without the internet it is not offered, nor run by name.
+    assert.deepEqual(await mcp.definitions(new Workspace(folder)), []);
+    const online = new Workspace(folder, { network: true });
+    assert.deepEqual((await mcp.definitions(online)).map((tool) => tool.name), ["mcp__web_search__webSearchPrime"]);
+    const budget = new Budget(1);
+    online.budget = budget;
+    assert.deepEqual(await online.run("mcp__web_search__webSearchPrime", { search_query: "北京天气" }), ["结果：北京天气", true]);
+    assert.deepEqual(budget.charged, [0.01]);
+    assert.ok(!(await new Workspace(folder).run("mcp__web_search__webSearchPrime", { search_query: "x" }))[1]);
+    // The key reaches only the header, as the provider's key variable; the session id goes along.
+    assert.ok(seen.every((item) => item.headers.get("authorization") === "Bearer zhipu-key"));
+    assert.ok(seen.filter((item) => item.body.method !== "initialize").every((item) => item.headers.get("mcp-session-id") === "s-1"));
+    // Out of budget, it is not asked.
+    online.budget = new Budget(0);
+    const [output, ok] = await online.run("mcp__web_search__webSearchPrime", { search_query: "x" });
+    assert.ok(!ok && output.includes("budget"));
   });
 }
 
-test("a redirect to this machine is refused", async () => {
-  services();
-  web.deps.isPublic = async (host) => host !== "127.0.0.1";
-  await assert.rejects(web.fetchPage("https://public.example/", async () => new Response(null, { status: 302, headers: { location: "http://127.0.0.1:8000/api/tasks" } })),
-    /not a public address/);
+test("a remote MCP server needs https, and its key stored", async () => {
+  remoteServer();
+  delete process.env.ZHIPU_API_KEY;
+  settings.mcp_servers = { plain: { url: "http://example.com/mcp" }, keyless: { url: "https://example.com/mcp", headers: { Authorization: "Bearer ${ZHIPU_API_KEY}" } },
+    other: { url: "https://example.com/mcp", headers: { Authorization: "Bearer ${HOME}" } } };
+  assert.deepEqual(Object.keys(mcp.servers()), ["keyless", "other"]);
+  // A key not stored, or a variable that is neither its secret nor a provider's key: not asked.
+  assert.deepEqual(await mcp.definitions(new Workspace(folder, { network: true })), []);
 });
 
-test("the log says what was searched or read", () => {
-  assert.equal(agent.describeCall("WebSearch", { query: "北京天气" }), "北京天气");
-  assert.equal(agent.describeCall("WebFetch", { url: "https://a.example/x" }), "https://a.example/x");
+test("a server may be given a key FluidForm already keeps, and plain settings", async (t) => {
+  const { deps: keyring } = await import("../src/secrets.js");
+  const original = keyring.runWorker;
+  t.after(() => (keyring.runWorker = original));
+  keyring.runWorker = async () => ({ code: 0, stdout: '{"value": null}', timedOut: false }); // nothing stored for it
+  process.env.MINIMAX_API_KEY = "mm-key";
+  process.env.HOME_SECRET = "no";
+  const spec = { command: ["minimax-mcp-js"], secrets: ["MINIMAX_API_KEY", "HOME_SECRET"], env: { MINIMAX_RESOURCE_MODE: "local", BAD: 1, "x y": "z" } };
+  // A provider's key, under its own name; any other variable of FluidForm's environment is not.
+  assert.deepEqual(await mcp.secretsFor("minimax", spec), { MINIMAX_API_KEY: "mm-key" });
+  assert.deepEqual(mcp.plainEnv(spec), { MINIMAX_RESOURCE_MODE: "local" });
+});
+
+test("a server that makes pictures is known as one", () => {
+  settings.mcp_servers = { minimax: { command: ["minimax-mcp"], makes_images: true }, fetch: { command: ["mcp-server-fetch"] } };
+  assert.deepEqual(mcp.imageServers(), ["minimax"]);
+});
+
+test("the log says what was searched, read or drawn", () => {
+  assert.equal(agent.describeCall("mcp__web_search__webSearchPrime", { search_query: "北京天气" }), "北京天气");
+  assert.equal(agent.describeCall("mcp__fetch__fetch", { url: "https://a.example/x" }), "https://a.example/x");
+  assert.equal(agent.describeCall("mcp__minimax__text_to_image", { prompt: "海边的女孩" }), "海边的女孩");
   assert.equal(agent.describeCall("StartTask", { request: "做网站" }), "做网站");
   assert.equal(agent.describeCall("Read", { file_path: "a.txt" }), "a.txt");
 });

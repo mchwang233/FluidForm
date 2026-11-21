@@ -15,6 +15,12 @@ Super Partner gives it to the platform engineer for every component it plans or 
 - Keep unrelated existing changes. Never delete or weaken an existing test.
 - Every component comes with tests that fail without it and pass with it.
 - Build on what exists: find the owning module in `docs/ARCHITECTURE.md` and extend it.
+- Take what already works (拿来主义). Before writing anything that talks to an outside service or
+  solves a common problem (a chat app, a file format, a protocol, retries, parsing), look for the
+  official way first (the vendor's SDK, API or integration), then a mature open-source one
+  (maintained, widely used, a licence that allows it). Use it as it is meant to be used, not a
+  copy of its code. Write it yourself only when neither exists or neither fits; say in the plan
+  what you looked at and why it did not fit.
 - The product is called FluidForm. Every word a user sees (UI text, replies, errors, reports)
   and every prompt given to a model says FluidForm. "Super Partner" stays only in the package
   names, `SUPER_PARTNER_` settings and code identifiers.
@@ -31,7 +37,9 @@ Super Partner gives it to the platform engineer for every component it plans or 
    - a web UI feature: the component in `frontend/` named in the map, styles in `style.css`;
    - scheduling, steps, checks: `executor.ts` (and the class chain before it), `review.ts`, `quality.ts`, `planner.ts`;
    - an API route: `app.ts`, with what routes share in `api.ts`.
-3. Write the plan the user approves: 目标, 改动 (each file), 测试, 风险. A web UI change names the
+3. Write the plan the user approves: 目标, 现成方案 (the official or open-source solution it uses, or
+   what was looked at and why none fits), 改动 (each file), 测试, 风险. A new dependency is named
+   in the plan with its source and licence; the user's approval of the plan is their agreement to it. A web UI change names the
    existing piece of UI it follows (see Web UI below). Keep it small enough to
    build and check in one go, within the job's budget: about five files and one layer's worth
    of new tests. If it is bigger, plan the first useful part and name the rest.

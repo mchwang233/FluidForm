@@ -28085,6 +28085,23 @@
   "after": [],
   "result": [
    [
+    "flexlm-license",
+    [
+     "lmgrd",
+     "lmutil",
+     "lmstat",
+     "snpslmd",
+     "cdslmd",
+     "mgcld",
+     "flexlm",
+     "flexnet",
+     "snpslmd_license_file",
+     "lm_license_file"
+    ],
+    false,
+    2369
+   ],
+   [
     "github-reference",
     [
      "github",

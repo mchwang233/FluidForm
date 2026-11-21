@@ -91,10 +91,10 @@ test("a chat has tools only when allowed, and answered by an API model", () => {
 
 test("a running call is replaced by its result", () => {
   const log = new supervisor.ChatActivity();
-  log.starting("GenerateImage", "海边的女孩");
+  log.starting("mcp__minimax__text_to_image", "海边的女孩");
   log.starting("Read", "a.txt");
-  log.push({ turn: 1, tool: "GenerateImage", detail: "海边的女孩", ok: true });
-  assert.deepEqual(log.map((item) => [item.tool, item.running ?? false]), [["GenerateImage", false], ["Read", true]]);
+  log.push({ turn: 1, tool: "mcp__minimax__text_to_image", detail: "海边的女孩", ok: true });
+  assert.deepEqual(log.map((item) => [item.tool, item.running ?? false]), [["mcp__minimax__text_to_image", false], ["Read", true]]);
 });
 
 test("tool calls become the lines the answer is read by", async () => {

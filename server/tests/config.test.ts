@@ -28,10 +28,10 @@ test("every profile names real settings", () => {
 test("without any setting the features are on", () => {
   const plain = loadSettings({}, {}, none);
   assert.ok([plain.quick_tasks, plain.solo_tasks, plain.resume_after_restart, plain.chat_tools,
-    plain.chat_tools_network, plain.chat_action_tools, plain.user_memory, plain.web_fetch,
+    plain.chat_tools_network, plain.chat_action_tools, plain.user_memory,
     plain.engineer_repairs].every(Boolean));
   assert.deepEqual([plain.preflight_cache_minutes, plain.chat_tool_seconds, plain.chat_tool_turns], [60, 300, 50]);
-  assert.ok(plain.image_models === null && plain.web_search_models === null && !plain.acceptance);
+  assert.ok(!plain.acceptance);
   // Still switched off on purpose: they widen the sandbox, or cost money nobody asked for.
   assert.ok(!plain.allow_host_shell);
   assert.deepEqual(plain.project_roots, [homedir()]);
@@ -77,6 +77,13 @@ test("values out of range or of the wrong kind are refused", () => {
 test("an old .env naming the removed tool extensions and hooks still loads", () => {
   const loaded = loadSettings({}, { SUPER_PARTNER_API_TOOL_HOOKS: '{"before_tool": []}', SUPER_PARTNER_API_TOOL_EXTENSIONS: "{}" }, none) as unknown as Record<string, unknown>;
   assert.ok(!("api_tool_hooks" in loaded) && !("api_tool_extensions" in loaded));
+});
+
+test("an old .env naming the built-in picture and web tools still loads", () => {
+  // Replaced by MCP servers (mcp_servers).
+  const loaded = loadSettings({}, { SUPER_PARTNER_IMAGE_MODELS: '["glm:cogview-4"]', SUPER_PARTNER_WEB_SEARCH_MODELS: "[]",
+    SUPER_PARTNER_WEB_FETCH: "true" }, none) as unknown as Record<string, unknown>;
+  assert.ok(!("image_models" in loaded) && !("web_search_models" in loaded) && !("web_fetch" in loaded));
 });
 
 test("switching profile while running keeps what was given alone", () => {

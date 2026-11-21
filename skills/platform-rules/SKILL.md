@@ -52,7 +52,8 @@ say in the report what steps can reach now that they could not before.
 
 ## 5. Small, compatible, reversible
 
-- No new dependencies (npm, pip, system packages) unless the user agreed.
+- No new dependencies (npm, pip, system packages) unless the user agreed: a platform engineer
+  names it in the plan the user approves (see the platform engineer's guide on using what exists).
 - Stored records (tasks, jobs, settings files) written by the old version must still load: give
   new fields defaults.
 - Few settings. A feature the user asked for is how FluidForm works from then on: no switch that

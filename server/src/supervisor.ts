@@ -183,7 +183,7 @@ export function forPerson(text: string): string {
 export const CHAT_ACTIVITY = new Map<string, ChatActivity>();
 // What each tool is doing, said to the person waiting.
 export const TOOL_DOING: Record<string, string> = { Bash: "运行命令", Read: "读文件", Write: "写文件", Edit: "改文件", MultiEdit: "改文件",
-  Glob: "找文件", Grep: "搜索", LS: "看目录", GenerateImage: "画图", WebSearch: "搜索网页", WebFetch: "读网页", StartTask: "安排任务",
+  Glob: "找文件", Grep: "搜索", LS: "看目录", StartTask: "安排任务",
   SendFile: "准备发送文件", CallEngineer: "请平台工程师", Remember: "记下来", Forget: "忘掉" };
 
 /** A chat's tool calls as they happen: each starts as running and is replaced by its result
