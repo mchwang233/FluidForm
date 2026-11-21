@@ -1,0 +1,123 @@
+[
+ {
+  "call": "environment.state",
+  "args": [
+   null
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "env": {},
+   "profiles": [
+    "/opt/eda/setup.sh",
+    "it's here.sh"
+   ],
+   "setup": "if [ -r /opt/eda/setup.sh ]; then . /opt/eda/setup.sh || exit $?; fi\nif [ -r 'it'\"'\"'s here.sh' ]; then . 'it'\"'\"'s here.sh' || exit $?; fi\n",
+   "command_env": {
+    "PATH": "<data>/tools/bin:/usr/bin",
+    "HOME": "/h",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "command_env_empty": {
+    "PATH": "<data>/tools/bin:/usr/local/bin:/usr/bin:/bin",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "listed_ports": [
+    27000
+   ]
+  }
+ },
+ {
+  "call": "environment.state",
+  "args": [
+   "{bad"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "env": {},
+   "profiles": [
+    "/opt/eda/setup.sh",
+    "it's here.sh"
+   ],
+   "setup": "if [ -r /opt/eda/setup.sh ]; then . /opt/eda/setup.sh || exit $?; fi\nif [ -r 'it'\"'\"'s here.sh' ]; then . 'it'\"'\"'s here.sh' || exit $?; fi\n",
+   "command_env": {
+    "PATH": "<data>/tools/bin:/usr/bin",
+    "HOME": "/h",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "command_env_empty": {
+    "PATH": "<data>/tools/bin:/usr/local/bin:/usr/bin:/bin",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "listed_ports": [
+    27000
+   ]
+  }
+ },
+ {
+  "call": "environment.state",
+  "args": [
+   "[\"list\"]"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "env": {},
+   "profiles": [
+    "/opt/eda/setup.sh",
+    "it's here.sh"
+   ],
+   "setup": "if [ -r /opt/eda/setup.sh ]; then . /opt/eda/setup.sh || exit $?; fi\nif [ -r 'it'\"'\"'s here.sh' ]; then . 'it'\"'\"'s here.sh' || exit $?; fi\n",
+   "command_env": {
+    "PATH": "<data>/tools/bin:/usr/bin",
+    "HOME": "/h",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "command_env_empty": {
+    "PATH": "<data>/tools/bin:/usr/local/bin:/usr/bin:/bin",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "listed_ports": [
+    27000
+   ]
+  }
+ },
+ {
+  "call": "environment.state",
+  "args": [
+   "{\"env\": {\"VCS_HOME\": \"/opt/vcs\", \"PATH\": \"/x\", \"bad name\": \"1\", \"N\": 3, \"LM_LICENSE_FILE\": \"27000@lic\"}, \"host_ports\": [26585, 0, 70000, \"x\", 27000], \"profiles\": [\"/rec.sh\", \"/opt/eda/setup.sh\", 5]}"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "env": {
+    "VCS_HOME": "/opt/vcs",
+    "LM_LICENSE_FILE": "27000@lic"
+   },
+   "profiles": [
+    "/opt/eda/setup.sh",
+    "it's here.sh",
+    "/rec.sh"
+   ],
+   "setup": "if [ -r /opt/eda/setup.sh ]; then . /opt/eda/setup.sh || exit $?; fi\nif [ -r 'it'\"'\"'s here.sh' ]; then . 'it'\"'\"'s here.sh' || exit $?; fi\nif [ -r /rec.sh ]; then . /rec.sh || exit $?; fi\n",
+   "command_env": {
+    "PATH": "<data>/tools/bin:/usr/bin",
+    "HOME": "/h",
+    "VCS_HOME": "/opt/vcs",
+    "LM_LICENSE_FILE": "27000@lic",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "command_env_empty": {
+    "VCS_HOME": "/opt/vcs",
+    "LM_LICENSE_FILE": "27000@lic",
+    "PATH": "<data>/tools/bin:/usr/local/bin:/usr/bin:/bin",
+    "PYTHONPATH": "<data>/tools/python"
+   },
+   "listed_ports": [
+    26585,
+    27000
+   ]
+  }
+ }
+]

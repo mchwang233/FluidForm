@@ -90,7 +90,7 @@ cd FluidForm
 
 - **不需要密钥**：内置的离线演示模型就能走完整个流程。
 - **接入真实模型**：在 **模型** 页填 API 密钥；会员 CLI 装好并登录后会自动出现。
-- **环境要求**：Python 3.9+、Node.js；步骤沙箱需要 Linux 的 bubblewrap。
+- **环境要求**：Node.js 22+（用 Python 写的能力包还需要 Python 3）；步骤沙箱需要 Linux 的 bubblewrap。
 - **停止**：`./stop.sh`。
 
 也可以用 `docker compose up --build`，或参考 [手动启动](docs/guide.zh-CN.md#手动启动)。

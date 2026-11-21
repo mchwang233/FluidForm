@@ -1,0 +1,193 @@
+[
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "{\"kind\": \"chat\"}"
+  ],
+  "kwargs": {},
+  "result": "chat",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "x \"kind\" : \"task\" y"
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "{\"kind\":\"chat\"}"
+  ],
+  "kwargs": {},
+  "result": "chat",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "chat"
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "{\"kind\": \"Chat\"}"
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   ""
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   null
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "[1]"
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": []
+ },
+ {
+  "call": "triage.read_kind",
+  "args": [
+   "{\"kind\": \"chat\", \"x\": 1}"
+  ],
+  "kwargs": {},
+  "result": "chat",
+  "after": []
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   5,
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 5.0
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   "5",
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 5.0
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   "2.5",
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 2.5
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   -3,
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 0.0
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   null,
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 9
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   "abc",
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 9
+ },
+ {
+  "call": "call_control.retry_after",
+  "args": [
+   "Wed, 21 Oct 2015 07:28:00 GMT",
+   9
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 0.0
+ },
+ {
+  "call": "call_control.input_bound",
+  "args": [
+   {
+    "a": "中文"
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 271
+ },
+ {
+  "call": "call_control.input_bound",
+  "args": [
+   [
+    1,
+    2.5,
+    null
+   ]
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 270
+ },
+ {
+  "call": "call_control.input_bound",
+  "args": [
+   {
+    "messages": [
+     {
+      "role": "user",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+     }
+    ]
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 403
+ }
+]

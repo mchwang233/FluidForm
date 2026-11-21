@@ -94,15 +94,20 @@ launch_service() {
   fi
 }
 
+# The API runs on Node: server/, built to server/dist.
 prepare() {
-  if [[ ! -x "$PROJECT_DIR/.venv/bin/python" ]]; then
-    echo "[setup] Creating Python environment..."
-    python3 -m venv "$PROJECT_DIR/.venv"
+  local major
+  major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+  if (( major < 22 )); then
+    echo "[error] The server needs Node.js 22 or newer."
+    exit 1
   fi
-  if ! "$PROJECT_DIR/.venv/bin/python" -c 'import fastapi, openpyxl, super_partner' 2>/dev/null; then
-    echo "[setup] Installing backend dependencies..."
-    "$PROJECT_DIR/.venv/bin/python" -m pip install -e "$PROJECT_DIR"
+  if [[ ! -d "$PROJECT_DIR/server/node_modules" ]]; then
+    echo "[setup] Installing server dependencies..."
+    npm install --prefix "$PROJECT_DIR/server"
   fi
+  echo "[setup] Building the server..."
+  npm run --silent --prefix "$PROJECT_DIR/server" build
   if [[ ! -x "$PROJECT_DIR/frontend/node_modules/.bin/vite" ]]; then
     echo "[setup] Installing frontend dependencies..."
     npm install --prefix "$PROJECT_DIR/frontend"
@@ -115,11 +120,11 @@ start() {
   prepare
   if ! is_running "$API_PID_FILE"; then
     echo "[start] Starting API..."
+    local -a api=("$(command -v node)" --disable-warning=ExperimentalWarning "$PROJECT_DIR/server/dist/main.js" --host 127.0.0.1 --port 8000)
     launch_service "$API_PID_FILE" "$LOG_DIR/api.log" /usr/bin/env \
       SUPER_PARTNER_DATA_DIR="$PROJECT_DIR/.super-partner" \
       SUPER_PARTNER_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
-      "$PROJECT_DIR/.venv/bin/uvicorn" super_partner.api:app \
-      --app-dir "$PROJECT_DIR" --host 127.0.0.1 --port 8000
+      "${api[@]}"
     api_started=1
   fi
   if ! is_running "$WEB_PID_FILE"; then

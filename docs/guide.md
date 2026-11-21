@@ -198,7 +198,7 @@ Module-level details are in [`docs/ARCHITECTURE.md`](ARCHITECTURE.md). The secti
 ./start.sh
 ```
 
-The first run installs missing backend and frontend dependencies. Open <http://127.0.0.1:5173>, then stop everything with `./stop.sh`. Runtime logs are stored under `.super-partner/logs/`; use `./scripts/service.sh status` or `restart` for service management.
+The first run installs missing server and frontend dependencies; every start builds the server (`server/dist`). Open <http://127.0.0.1:5173>, then stop everything with `./stop.sh`. Runtime logs are stored under `.super-partner/logs/`; use `./scripts/service.sh status` or `restart` for service management.
 
 When a systemd user manager is available, the launcher runs the API and web console as
 separate user services, independent of the terminal or automation session that started them.
@@ -208,10 +208,9 @@ the launcher uses detached background processes. Logs are appended across starts
 ### Manual startup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-uvicorn super_partner.api:app --reload
+cd server
+npm install
+npx tsx src/main.ts
 ```
 
 In another terminal:
@@ -263,6 +262,9 @@ Each default above can still be turned off on its own, for example `SUPER_PARTNE
 `super-partner eval` runs the fixed tasks in `evals/basic.json` on the running service and prints, for each one, whether it passed, how long it took and what it cost. `--out` saves the report, `--against` compares it with an earlier one, and `--only` runs just the cases you name. The tasks cost real money and stay in the task list.
 
 ## CLI
+
+`cd server && npm run build && npm link` puts the `super-partner` command on PATH (or run
+`node server/dist/cli.js`).
 
 ```bash
 super-partner models
@@ -541,7 +543,7 @@ deepest; `none` turns thinking off). Deeper thinking is slower and spends more o
   verification, errors and running out of turns all count, the last even when the model claimed
   the step cannot be done; provider limits, cancellations and unverified reviews do not), the next retry goes to the strongest other eligible model, a
   membership CLI included, even under the API-first policy. Later retries do not go back to a
-  model that failed the node twice. The rules are in `backend/super_partner/recovery.py`.
+  model that failed the node twice. The rules are in `server/src/recovery.ts`.
 - Models marked as not supporting tools, and the offline demo model, only answer with text
   and are not routed to project nodes. `SUPER_PARTNER_API_AGENT=false` turns tools off.
 
@@ -613,8 +615,8 @@ problems, and defects in this application's scheduler, provider handling, persis
 web UI. `STATUS: PLATFORM_REPAIR` automatically starts a separate source-editing phase.
 It copies application source and tests into `<data_dir>/platform-repairs/<id>/source`,
 preserving existing local edits as its baseline. The repair model works in that copy and must
-add a regression check. The controller independently checks Python syntax, compatibility with
-a temporary copy of existing database records, backend tests, frontend tests and a frontend
+add a regression check. The controller independently checks the TypeScript types, compatibility with
+a temporary copy of existing database records, server tests, frontend tests and a frontend
 build. A failed check feeds back into a bounded repair attempt; it is not treated as success.
 
 Every model that diagnoses or repairs the platform, CLI or API, follows one procedure:

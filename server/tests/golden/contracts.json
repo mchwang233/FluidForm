@@ -1,0 +1,2678 @@
+[
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "采集覆盖率 VDB",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "art/run.vdb"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "coverage_vdb",
+       "inputs": [],
+       "outputs": [
+        {
+         "path": "art/run.vdb",
+         "kind": "directory"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "有 VDB",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "b",
+      "title": "生成 URG 文本报告",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "a"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "art/report.txt"
+      ],
+      "reads": [
+       "art/run.vdb"
+      ],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "urg_report",
+       "inputs": [
+        {
+         "path": "art/run.vdb",
+         "kind": "directory",
+         "source": "dependency"
+        }
+       ],
+       "outputs": [
+        {
+         "path": "art/report.txt",
+         "kind": "file"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "报告",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "c",
+      "title": "交付审计",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "b"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "audit.md"
+      ],
+      "reads": [
+       "art/report.txt"
+      ],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "delivery_audit",
+       "inputs": [
+        {
+         "path": "art/report.txt",
+         "kind": "file",
+         "source": "dependency"
+        }
+       ],
+       "outputs": [
+        {
+         "path": "audit.md",
+         "kind": "file"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "审计",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "coverage_vdb"
+    ],
+    [
+     "urg_report"
+    ],
+    [
+     "delivery_audit"
+    ]
+   ],
+   "node_problems": [
+    [],
+    [],
+    []
+   ],
+   "plan_problems": [],
+   "partial": [],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"coverage_vdb\",\n  \"inputs\": [],\n  \"outputs\": [\n    {\n      \"path\": \"art/run.vdb\",\n      \"kind\": \"directory\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (art/run.vdb), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts.",
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"urg_report\",\n  \"inputs\": [\n    {\n      \"path\": \"art/run.vdb\",\n      \"kind\": \"directory\",\n      \"source\": \"dependency\"\n    }\n  ],\n  \"outputs\": [\n    {\n      \"path\": \"art/report.txt\",\n      \"kind\": \"file\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (art/report.txt), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts.",
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"delivery_audit\",\n  \"inputs\": [\n    {\n      \"path\": \"art/report.txt\",\n      \"kind\": \"file\",\n      \"source\": \"dependency\"\n    }\n  ],\n  \"outputs\": [\n    {\n      \"path\": \"audit.md\",\n      \"kind\": \"file\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (audit.md), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts."
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "采集覆盖率 VDB",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "art/run.vdb"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "coverage_vdb",
+       "inputs": [],
+       "outputs": [
+        {
+         "path": "art/run.vdb",
+         "kind": "directory"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "有 VDB",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "b",
+      "title": "生成 URG 文本报告",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "a"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "art/report.txt"
+      ],
+      "reads": [
+       "art/run.vdb"
+      ],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "urg_report",
+       "inputs": [
+        {
+         "path": "art/run.vdb",
+         "kind": "directory",
+         "source": "dependency"
+        }
+       ],
+       "outputs": [
+        {
+         "path": "art/report.txt",
+         "kind": "file"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "报告",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "c",
+      "title": "交付审计",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "b"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "audit.md"
+      ],
+      "reads": [
+       "art/report.txt"
+      ],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "delivery_audit",
+       "inputs": [
+        {
+         "path": "art/report.txt",
+         "kind": "file",
+         "source": "dependency"
+        }
+       ],
+       "outputs": [
+        {
+         "path": "audit.md",
+         "kind": "file"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "审计",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "coverage_vdb"
+    ],
+    [
+     "urg_report"
+    ],
+    [
+     "delivery_audit"
+    ]
+   ],
+   "node_problems": [
+    [],
+    [],
+    []
+   ],
+   "plan_problems": [],
+   "partial": [],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"coverage_vdb\",\n  \"inputs\": [],\n  \"outputs\": [\n    {\n      \"path\": \"art/run.vdb\",\n      \"kind\": \"directory\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (art/run.vdb), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts.",
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"urg_report\",\n  \"inputs\": [\n    {\n      \"path\": \"art/run.vdb\",\n      \"kind\": \"directory\",\n      \"source\": \"dependency\"\n    }\n  ],\n  \"outputs\": [\n    {\n      \"path\": \"art/report.txt\",\n      \"kind\": \"file\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (art/report.txt), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts.",
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"delivery_audit\",\n  \"inputs\": [\n    {\n      \"path\": \"art/report.txt\",\n      \"kind\": \"file\",\n      \"source\": \"dependency\"\n    }\n  ],\n  \"outputs\": [\n    {\n      \"path\": \"audit.md\",\n      \"kind\": \"file\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (audit.md), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts."
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "从 VDB 生成 URG 报告并做交付审计",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "delivery_audit",
+     "urg_report"
+    ]
+   ],
+   "node_problems": [
+    [
+     "从 VDB 生成 URG 报告并做交付审计: separate artifact stages: delivery_audit, urg_report"
+    ]
+   ],
+   "plan_problems": [
+    "从 VDB 生成 URG 报告并做交付审计: separate artifact stages: delivery_audit, urg_report"
+   ],
+   "partial": [
+    "从 VDB 生成 URG 报告并做交付审计: separate artifact stages: delivery_audit, urg_report"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "从 VDB 生成 URG 报告并做交付审计",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "delivery_audit",
+     "urg_report"
+    ]
+   ],
+   "node_problems": [
+    [
+     "从 VDB 生成 URG 报告并做交付审计: separate artifact stages: delivery_audit, urg_report"
+    ]
+   ],
+   "plan_problems": [
+    "从 VDB 生成 URG 报告并做交付审计: separate artifact stages: delivery_audit, urg_report"
+   ],
+   "partial": [
+    "从 VDB 生成 URG 报告并做交付审计: separate artifact stages: delivery_audit, urg_report"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "Generate report from VDB using urg",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "r.txt"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "urg_report"
+    ]
+   ],
+   "node_problems": [
+    [
+     "Generate report from VDB using urg: artifact_contract is required"
+    ]
+   ],
+   "plan_problems": [
+    "Generate report from VDB using urg: artifact_contract is required"
+   ],
+   "partial": [
+    "Generate report from VDB using urg: artifact_contract is required"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "Generate report from VDB using urg",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "r.txt"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "urg_report"
+    ]
+   ],
+   "node_problems": [
+    [
+     "Generate report from VDB using urg: artifact_contract is required"
+    ]
+   ],
+   "plan_problems": [
+    "Generate report from VDB using urg: artifact_contract is required"
+   ],
+   "partial": [
+    "Generate report from VDB using urg: artifact_contract is required"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "写 URG 报告解析脚本",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "parse.py"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    []
+   ],
+   "node_problems": [
+    []
+   ],
+   "plan_problems": [],
+   "partial": [],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "写 URG 报告解析脚本",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "parse.py"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    []
+   ],
+   "node_problems": [
+    []
+   ],
+   "plan_problems": [],
+   "partial": [],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "Write urg report docs",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "README.md"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "urg_report"
+    ]
+   ],
+   "node_problems": [
+    [
+     "Write urg report docs: artifact_contract is required"
+    ]
+   ],
+   "plan_problems": [
+    "Write urg report docs: artifact_contract is required"
+   ],
+   "partial": [
+    "Write urg report docs: artifact_contract is required"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "Write urg report docs",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "README.md"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "urg_report"
+    ]
+   ],
+   "node_problems": [
+    [
+     "Write urg report docs: artifact_contract is required"
+    ]
+   ],
+   "plan_problems": [
+    "Write urg report docs: artifact_contract is required"
+   ],
+   "partial": [
+    "Write urg report docs: artifact_contract is required"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "x",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "out/x.vdb/"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "coverage_vdb"
+    ]
+   ],
+   "node_problems": [
+    [
+     "x: artifact_contract is required"
+    ]
+   ],
+   "plan_problems": [
+    "x: artifact_contract is required"
+   ],
+   "partial": [
+    "x: artifact_contract is required"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "x",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "out/x.vdb/"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "coverage_vdb"
+    ]
+   ],
+   "node_problems": [
+    [
+     "x: artifact_contract is required"
+    ]
+   ],
+   "plan_problems": [
+    "x: artifact_contract is required"
+   ],
+   "partial": [
+    "x: artifact_contract is required"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "采集",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "a.vdb"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "coverage_vdb",
+       "inputs": [
+        {
+         "path": "a.vdb",
+         "kind": "file",
+         "source": "external"
+        }
+       ],
+       "outputs": [
+        {
+         "path": "a.vdb",
+         "kind": "file"
+        },
+        {
+         "path": "../bad",
+         "kind": "file"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": " ",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "b",
+      "title": "review",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "a"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [
+       "a"
+      ],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "coverage_vdb"
+    ],
+    []
+   ],
+   "node_problems": [
+    [
+     "采集: artifact paths must be safe, relative, concrete paths",
+     "采集: inputs and outputs must be distinct; own outputs are not prerequisites",
+     "采集: list every output in files",
+     "采集: list every input in reads",
+     "采集: retain concrete acceptance_criteria",
+     "采集: coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)"
+    ],
+    []
+   ],
+   "plan_problems": [
+    "采集: artifact paths must be safe, relative, concrete paths",
+    "采集: inputs and outputs must be distinct; own outputs are not prerequisites",
+    "采集: list every output in files",
+    "采集: list every input in reads",
+    "采集: retain concrete acceptance_criteria",
+    "采集: coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)",
+    "review: audit of artifact work requires artifact_contract"
+   ],
+   "partial": [
+    "采集: artifact paths must be safe, relative, concrete paths",
+    "采集: inputs and outputs must be distinct; own outputs are not prerequisites",
+    "采集: list every output in files",
+    "采集: list every input in reads",
+    "采集: retain concrete acceptance_criteria",
+    "采集: coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)",
+    "review: audit of artifact work requires artifact_contract"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"coverage_vdb\",\n  \"inputs\": [\n    {\n      \"path\": \"a.vdb\",\n      \"kind\": \"file\",\n      \"source\": \"external\"\n    }\n  ],\n  \"outputs\": [\n    {\n      \"path\": \"a.vdb\",\n      \"kind\": \"file\"\n    },\n    {\n      \"path\": \"../bad\",\n      \"kind\": \"file\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (a.vdb, ../bad), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts.",
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "采集",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "a.vdb"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": {
+       "stage": "coverage_vdb",
+       "inputs": [
+        {
+         "path": "a.vdb",
+         "kind": "file",
+         "source": "external"
+        }
+       ],
+       "outputs": [
+        {
+         "path": "a.vdb",
+         "kind": "file"
+        },
+        {
+         "path": "../bad",
+         "kind": "file"
+        }
+       ],
+       "acceptance_commands": [
+        "make check"
+       ],
+       "blocked_when": [
+        "no license"
+       ],
+       "max_turns": 20,
+       "max_cost_usd": 0.5
+      },
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": " ",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "b",
+      "title": "review",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "a"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [
+       "a"
+      ],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [
+     "coverage_vdb"
+    ],
+    []
+   ],
+   "node_problems": [
+    [
+     "采集: artifact paths must be safe, relative, concrete paths",
+     "采集: inputs and outputs must be distinct; own outputs are not prerequisites",
+     "采集: list every output in files",
+     "采集: list every input in reads",
+     "采集: retain concrete acceptance_criteria",
+     "采集: coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)"
+    ],
+    []
+   ],
+   "plan_problems": [
+    "采集: artifact paths must be safe, relative, concrete paths",
+    "采集: inputs and outputs must be distinct; own outputs are not prerequisites",
+    "采集: list every output in files",
+    "采集: list every input in reads",
+    "采集: retain concrete acceptance_criteria",
+    "采集: coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)",
+    "review: audit of artifact work requires artifact_contract"
+   ],
+   "partial": [
+    "采集: artifact paths must be safe, relative, concrete paths",
+    "采集: inputs and outputs must be distinct; own outputs are not prerequisites",
+    "采集: list every output in files",
+    "采集: list every input in reads",
+    "采集: retain concrete acceptance_criteria",
+    "采集: coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)",
+    "review: audit of artifact work requires artifact_contract"
+   ],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    "Artifact contract (additional to the original acceptance criteria):\n{\n  \"stage\": \"coverage_vdb\",\n  \"inputs\": [\n    {\n      \"path\": \"a.vdb\",\n      \"kind\": \"file\",\n      \"source\": \"external\"\n    }\n  ],\n  \"outputs\": [\n    {\n      \"path\": \"a.vdb\",\n      \"kind\": \"file\"\n    },\n    {\n      \"path\": \"../bad\",\n      \"kind\": \"file\"\n    }\n  ],\n  \"acceptance_commands\": [\n    \"make check\"\n  ],\n  \"blocked_when\": [\n    \"no license\"\n  ],\n  \"max_turns\": 20,\n  \"max_cost_usd\": 0.5\n}\nAlready used: 0 of 20 tool calls, $0.000000.\nWrite every declared output first (a.vdb, ../bad), then check them with the acceptance commands. Check only your own outputs: work that other steps own (their testbenches, simulations, synthesis, reports) is not yours, however useful it looks. Create your own outputs; they need not exist before you start. Do not expand scope. Missing prerequisite evidence: preserve logs and end with BLOCKED: <why>. At a declared limit stop with diagnostic evidence. Audit only accepted artifacts.",
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "build",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "a.py"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "python test_a.py && ./run.sh",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "b",
+      "title": "test",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "a"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "tests/"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "python a.py tests/t.py",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "c",
+      "title": "done",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "python zz.py",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "succeeded",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": false,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [],
+    [],
+    []
+   ],
+   "node_problems": [
+    [],
+    [],
+    []
+   ],
+   "plan_problems": [],
+   "partial": [],
+   "unwritten": [
+    "build: its check runs run.sh, test_a.py, which no step writes (the folder starts empty); add it to the files of this step or of a step it depends on, or check without it"
+   ],
+   "unwritten_some": [
+    "build: its check runs test_a.py, which no step writes (the folder starts empty); add it to the files of this step or of a step it depends on, or check without it"
+   ],
+   "prompts": [
+    "",
+    "",
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.plan",
+  "args": [
+   {
+    "summary": "s",
+    "nodes": [
+     {
+      "id": "a",
+      "title": "build",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "a.py"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "python test_a.py && ./run.sh",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "b",
+      "title": "test",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [
+       "a"
+      ],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [
+       "tests/"
+      ],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "python a.py tests/t.py",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "pending",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     },
+     {
+      "id": "c",
+      "title": "done",
+      "instructions": "i",
+      "capability": "coding",
+      "dependencies": [],
+      "estimated_input_tokens": 1500,
+      "estimated_output_tokens": 800,
+      "quality_threshold": 65.0,
+      "difficulty": "normal",
+      "needs_workspace": false,
+      "needs_images": false,
+      "files": [],
+      "reads": [],
+      "folders": [],
+      "provides": "",
+      "check": "python zz.py",
+      "artifact_contract": null,
+      "artifact_evidence": null,
+      "contract_turns": 0,
+      "contract_tool_calls": 0,
+      "contract_cost_usd": 0.0,
+      "contract_generation": null,
+      "artifact_baseline": {},
+      "artifact_inputs": {},
+      "part_id": null,
+      "employee_id": null,
+      "delegation_parent_id": null,
+      "delegation_request_id": null,
+      "delegation_payload_hash": "",
+      "after_parts": [],
+      "model_id": null,
+      "routing_note": null,
+      "started_at": null,
+      "waiting_for_folder": false,
+      "preparing": false,
+      "head_start": "",
+      "head_start_generation": null,
+      "estimated_cost_usd": 0.0,
+      "status": "succeeded",
+      "result": null,
+      "acceptance_criteria": "",
+      "verifies": [],
+      "attempts": [],
+      "failed_attempts": 0,
+      "environment_fixes": 0,
+      "feedback": null,
+      "review_passed": null,
+      "review": null,
+      "unable_reason": null,
+      "summary": null,
+      "changed_files": [],
+      "changed_files_total": null,
+      "inputs": [],
+      "generation": 0
+     }
+    ],
+    "parts": [],
+    "employees": [],
+    "team_brief": "",
+    "request": "",
+    "in_project": true,
+    "requires": [],
+    "folder": "",
+    "title": "",
+    "estimate": null,
+    "planning_method": "heuristic",
+    "planner_model_id": null,
+    "planning_cost_usd": 0.0,
+    "planning_note": null,
+    "choices": []
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "stages": [
+    [],
+    [],
+    []
+   ],
+   "node_problems": [
+    [],
+    [],
+    []
+   ],
+   "plan_problems": [],
+   "partial": [],
+   "unwritten": [],
+   "unwritten_some": [],
+   "prompts": [
+    "",
+    "",
+    ""
+   ]
+  }
+ },
+ {
+  "call": "contracts.declarations",
+  "args": [
+   {
+    "difficulty": "hard",
+    "artifact_contract": {
+     "stage": null,
+     "inputs": [],
+     "outputs": [
+      {
+       "path": "art/report.txt",
+       "kind": "file"
+      }
+     ],
+     "acceptance_commands": [
+      "make check"
+     ],
+     "blocked_when": [
+      "no license"
+     ],
+     "max_turns": 30,
+     "max_cost_usd": 0.5
+    }
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "artifact_contract": {
+    "stage": null,
+    "inputs": [],
+    "outputs": [
+     {
+      "path": "art/report.txt",
+      "kind": "file"
+     }
+    ],
+    "acceptance_commands": [
+     "make check"
+    ],
+    "blocked_when": [
+     "no license"
+    ],
+    "max_turns": 80,
+    "max_cost_usd": 1.333333
+   }
+  }
+ },
+ {
+  "call": "contracts.declarations",
+  "args": [
+   {
+    "difficulty": "easy",
+    "artifact_contract": {
+     "stage": null,
+     "inputs": [],
+     "outputs": [
+      {
+       "path": "art/report.txt",
+       "kind": "file"
+      }
+     ],
+     "acceptance_commands": [
+      "make check"
+     ],
+     "blocked_when": [
+      "no license"
+     ],
+     "max_turns": 100,
+     "max_cost_usd": 0.5
+    }
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "artifact_contract": {
+    "stage": null,
+    "inputs": [],
+    "outputs": [
+     {
+      "path": "art/report.txt",
+      "kind": "file"
+     }
+    ],
+    "acceptance_commands": [
+     "make check"
+    ],
+    "blocked_when": [
+     "no license"
+    ],
+    "max_turns": 100,
+    "max_cost_usd": 0.5
+   }
+  }
+ },
+ {
+  "call": "contracts.declarations",
+  "args": [
+   {
+    "artifact_contract": {
+     "stage": null,
+     "inputs": [],
+     "outputs": [
+      {
+       "path": "art/report.txt",
+       "kind": "file"
+      }
+     ],
+     "acceptance_commands": [
+      "make check"
+     ],
+     "blocked_when": [
+      "no license"
+     ],
+     "max_turns": 20,
+     "max_cost_usd": 1
+    }
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "artifact_contract": {
+    "stage": null,
+    "inputs": [],
+    "outputs": [
+     {
+      "path": "art/report.txt",
+      "kind": "file"
+     }
+    ],
+    "acceptance_commands": [
+     "make check"
+    ],
+    "blocked_when": [
+     "no license"
+    ],
+    "max_turns": 40,
+    "max_cost_usd": 2.0
+   }
+  }
+ },
+ {
+  "call": "contracts.declarations",
+  "args": [
+   {
+    "x": 1
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {}
+ }
+]

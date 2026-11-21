@@ -1,0 +1,91 @@
+[
+ {
+  "call": "routing_feedback.expected",
+  "args": [
+   null,
+   0.3
+  ],
+  "kwargs": {},
+  "result": [
+   0.3,
+   ""
+  ],
+  "after": []
+ },
+ {
+  "call": "routing_feedback.expected",
+  "args": [
+   {
+    "samples": 7,
+    "successes": 7,
+    "cost_usd": 1,
+    "seconds": 10,
+    "timed": 7
+   },
+   0.3
+  ],
+  "kwargs": {},
+  "result": [
+   0.3,
+   ""
+  ],
+  "after": []
+ },
+ {
+  "call": "routing_feedback.expected",
+  "args": [
+   {
+    "samples": 8,
+    "successes": 4,
+    "cost_usd": 4,
+    "seconds": 0,
+    "timed": 0
+   },
+   0.3
+  ],
+  "kwargs": {},
+  "result": [
+   0.7666666666666666,
+   " 同类历史 8 个步骤、4 个通过；已结合返工费用和有记录的耗时排序（观察数据，非因果结论）。"
+  ],
+  "after": []
+ },
+ {
+  "call": "routing_feedback.expected",
+  "args": [
+   {
+    "samples": 12,
+    "successes": 11,
+    "cost_usd": 0.5,
+    "seconds": 10800,
+    "timed": 9
+   },
+   0.3
+  ],
+  "kwargs": {},
+  "result": [
+   0.3876923076923076,
+   " 同类历史 12 个步骤、11 个通过；已结合返工费用和有记录的耗时排序（观察数据，非因果结论）。"
+  ],
+  "after": []
+ },
+ {
+  "call": "routing_feedback.expected",
+  "args": [
+   {
+    "samples": 20,
+    "successes": 0,
+    "cost_usd": 30,
+    "seconds": 2000,
+    "timed": 20
+   },
+   0.3
+  ],
+  "kwargs": {},
+  "result": [
+   15.81,
+   " 同类历史 20 个步骤、0 个通过；已结合返工费用和有记录的耗时排序（观察数据，非因果结论）。"
+  ],
+  "after": []
+ }
+]

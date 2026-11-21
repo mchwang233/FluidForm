@@ -24,8 +24,8 @@ Super Partner gives it to every model that diagnoses or repairs the platform.
 3. Report where the defect is, one line per place, then the status line:
 
    ```
-   LOCATION: backend/super_partner/executor.py:847 _retry_or_fail — retries keep the same model
-   LOCATION: tests/test_turns.py — add: two rejections in a row switch the model
+   LOCATION: server/src/executor-base.ts:417 retryOrFail — retries keep the same model
+   LOCATION: server/tests/turns.test.ts — add: two rejections in a row switch the model
    STATUS: PLATFORM_REPAIR
    ```
 
@@ -43,8 +43,9 @@ Super Partner gives it to every model that diagnoses or repairs the platform.
      parameter must cross layers, keep it to the call path that needs it.
    If the proper fix needs more than about three modules, fix the defect now with the smallest
    safe change and describe the larger change in the report.
-4. Check what you changed: `python -m pytest -q tests/<area>.py`. Do not run the whole
-   backend suite or the frontend build: FluidForm runs every check itself afterwards, in a clean
+4. Check what you changed: `cd server && npm run check` (types), then the test file,
+   `node --import tsx --import ./tests/helpers/tmp.ts --test tests/<area>.test.ts`. Do not run the
+   whole server suite or the frontend build: FluidForm runs every check itself afterwards, in a clean
    sandbox, and gives you any failure to fix. Fix every failure your change causes. A failure that also happens without your change
    (for example a sandbox limit of your own session) is noted in the report, not hidden.
 5. If you moved a responsibility between modules, update `docs/ARCHITECTURE.md`.

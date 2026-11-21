@@ -1,0 +1,351 @@
+[
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "Claude AI usage limit reached|1795154400"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795154400.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "You've hit your usage limit, try again in 2 hours 30 minutes"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795154415.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "resets in 1 day, 3h and 10m"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795243215.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "try again at 5pm"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795165200.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "resets 2pm (Asia/Shanghai)"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795154400.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "resets at 11:45 am"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795146300.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "resets 3 (Bad/Zone)"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795201200.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "try again at 25:00"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795149015.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "rate limit exceeded"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795145715.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "429 too many requests"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795145715.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "quota exceeded"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795149015.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "Claude AI usage limit reached|1700000000"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795145475.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "available again in 30 seconds"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795145475.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   ""
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795149015.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.reset_time",
+  "args": [
+   "resets 9pm (America/New_York)"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": 1795226400.0,
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "usage limit reached"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "Rate-limit"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "insufficient_balance"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "余额不足"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "credit balance is too low"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "returned 429"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "returned 503"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   false,
+   "unavailable"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "service unavailable"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   false,
+   "unavailable"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "overloaded_error"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   false,
+   "unavailable"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "glm request failed: boom"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   false,
+   "unavailable"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "fine"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   false,
+   null
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "returned 500x"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   false,
+   null
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.kind",
+  "args": [
+   "billing"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   true,
+   "quota"
+  ],
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.signature",
+  "args": [
+   "Error: request_id: abc-123  failed"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "c9b9057f93fd744d0040e805982c42fb67a7dce19c2c31ba21a20fc616e59f21",
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.signature",
+  "args": [
+   "Error: REQUEST_ID=xyz failed"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "c9b9057f93fd744d0040e805982c42fb67a7dce19c2c31ba21a20fc616e59f21",
+  "now": 1795145415.0
+ },
+ {
+  "call": "quota.signature",
+  "args": [
+   "  多个   空格\n换行 "
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "01705b7f1f0b2053f7bdf4f2ff1a699748b09b1fb8b925f8aacc4415547a7462",
+  "now": 1795145415.0
+ }
+]

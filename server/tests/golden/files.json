@@ -1,0 +1,1608 @@
+[
+ {
+  "call": "quality.review_path",
+  "args": [
+   "src/a.py",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/a.py"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "src/a.py",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/a.py"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "src/中文.txt",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/中文.txt"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "src/中文.txt",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/中文.txt"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "build/out.log",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "build/out.log",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "build/out.log"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   ".hidden/h.log",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   ".hidden/h.log",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ".hidden/h.log"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   ".env",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   ".env",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "credentials.json",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "credentials.json",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "notes.md",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "notes.md"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "notes.md",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "notes.md"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "logs/run.log",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "logs/run.log"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "logs/run.log",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "logs/run.log"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "../outside",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "../outside",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "src/../src/a.py",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "src/../src/a.py",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "./src/a.py",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/a.py"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "./src/a.py",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/a.py"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "link_in.py",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/a.py"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "link_in.py",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/a.py"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "link_out",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "link_out",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "node_modules/m/i.js",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "node_modules/m/i.js",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "deep/.git/config",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "deep/.git/config",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "deep/token.json",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "deep/token.json",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "missing.txt",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "missing.txt"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "missing.txt",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "missing.txt"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "bin.dat",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "bin.dat"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "bin.dat",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "bin.dat"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "<root>/src/b.v",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/b.v"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "<root>/src/b.v",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "src/b.v"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "/etc/passwd",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "/etc/passwd",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "build/obj.o",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "build/obj.o",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "art",
+   false
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "art"
+ },
+ {
+  "call": "quality.review_path",
+  "args": [
+   "art",
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "art"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/a.py",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/a.py",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "\n[..."
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/a.py",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "print('a')\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/a.py",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "print('a')\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/a.py",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "print('a')\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/中文.txt",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/中文.txt",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "\n[..."
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/中文.txt",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "中文内容\n[... clipped; Read can inspect omitted content ...]\n内容\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/中文.txt",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "src/中文.txt",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n中文内容\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "notes.md",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "notes.md",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "\n[..."
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "notes.md",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "# no\n[... clipped; Read can inspect omitted content ...]\nes\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "notes.md",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# note\n[... clipped; Read can inspect omitted content ...]\notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "notes.md",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "logs/run.log",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "logs/run.log",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "\n[..."
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "logs/run.log",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "line\n[... clipped; Read can inspect omitted content ...]\nED\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "logs/run.log",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "line\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\n[... clipped; Read can inspect omitted content ...]\n\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nTEST PASSED\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "logs/run.log",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "line\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\n[... clipped; Read can inspect omitted content ...]\n\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nTEST PASSED\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "bin.dat",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "bin.dat",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "bin.dat",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "bin.dat",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "bin.dat",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "missing.txt",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "(deleted)"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "missing.txt",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "(deleted)"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "missing.txt",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "(deleted)"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "missing.txt",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "(deleted)"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "missing.txt",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "(deleted)"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   ".env",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   ".env",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   ".env",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   ".env",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   ".env",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": null
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "build/out.log",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "build/out.log",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "\n[..."
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "build/out.log",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "PASS\n[... clipped; Read can inspect omitted content ...]\nll\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "build/out.log",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "PASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "build/out.log",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "PASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\n"
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "empty.txt",
+   0,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "empty.txt",
+   5,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "empty.txt",
+   60,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "empty.txt",
+   400,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.file_text",
+  "args": [
+   "empty.txt",
+   5000,
+   true
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": ""
+ },
+ {
+  "call": "quality.mentioned_files",
+  "args": [
+   "I changed src/a.py and ./src/b.v, read <root>/notes.md, logs/run.log. and build/out.log; see /etc/passwd, credentials.json, missing.py, art/report.txt and src/a.py again."
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   "src/a.py",
+   "src/b.v",
+   "notes.md",
+   "logs/run.log",
+   "build/out.log",
+   "art/report.txt"
+  ]
+ },
+ {
+  "call": "quality.workspace_listing",
+  "args": [],
+  "kwargs": {},
+  "after": [],
+  "result": "bin.dat (5 bytes)\nempty.txt (0 bytes)\nlink_in.py (11 bytes)\nnotes.md (3200 bytes)\nart/report.txt (13 bytes)\nart/a/b.txt (1 bytes)\nart/a-b/c.txt (1 bytes)\nart/run.vdb/shared (4 bytes)\nart/run.vdb/snps/meta.txt (4 bytes)\ndeep/ok.txt (2 bytes)\nlogs/run.log (25012 bytes)\nord/a.txt (1 bytes)\nord/a/b.txt (1 bytes)\nord/a-b/c.txt (1 bytes)\nsrc/a.py (11 bytes)\nsrc/b.v (20 bytes)\nsrc/中文.txt (650 bytes)"
+ },
+ {
+  "call": "quality.change_evidence",
+  "args": [
+   [
+    "notes.md",
+    "src/a.py",
+    "logs/run.log",
+    "src/a.py",
+    ".env",
+    "build/out.log"
+   ],
+   [
+    "build/out.log"
+   ]
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "--- src/a.py (contents) ---\nprint('a')\n\n--- logs/run.log (contents) ---\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\n\n[... clipped; Read can inspect omitted content ...]\nne\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nTEST PASSED\n\n--- build/out.log (contents) ---\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\nPASS all\n\n--- notes.md (contents) ---\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n# notes\n\n--- files in the workspace ---\nbin.dat (5 bytes)\nempty.txt (0 bytes)\nlink_in.py (11 bytes)\nnotes.md (3200 bytes)\nart/report.txt (13 bytes)\nart/a/b.txt (1 bytes)\nart/a-b/c.txt (1 bytes)\nart/run.vdb/shared (4 bytes)\nart/run.vdb/snps/meta.txt (4 bytes)\ndeep/ok.txt (2 bytes)\nlogs/run.log (25012 bytes)\nord/a.txt (1 bytes)\nord/a/b.txt (1 bytes)\nord/a-b/c.txt (1 bytes)\nsrc/a.py (11 bytes)\nsrc/b.v (20 bytes)\nsrc/中文.txt (650 bytes)"
+ },
+ {
+  "call": "quality.private_paths",
+  "args": [],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "deep/.ssh"
+   ],
+   [
+    ".env",
+    "art/real.key",
+    "art/run.vdb/snps/data.db",
+    "art/ucli.key",
+    "credentials.json",
+    "deep/.git/config",
+    "deep/token.json"
+   ]
+  ]
+ },
+ {
+  "call": "quality.file_state",
+  "args": [],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   ".env",
+   ".hidden/h.log",
+   "art/a-b/c.txt",
+   "art/a/b.txt",
+   "art/real.key",
+   "art/report.txt",
+   "art/run.vdb/shared",
+   "art/run.vdb/snps/data.db",
+   "art/run.vdb/snps/meta.txt",
+   "art/ucli.key",
+   "bin.dat",
+   "credentials.json",
+   "deep/.ssh/id_rsa",
+   "deep/ok.txt",
+   "deep/token.json",
+   "empty.txt",
+   "link_in.py",
+   "link_out",
+   "logs/run.log",
+   "notes.md",
+   "ord/a-b/c.txt",
+   "ord/a.txt",
+   "ord/a/b.txt",
+   "src/a.py",
+   "src/b.v",
+   "src/中文.txt"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "notes.md"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "notes.md"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "a b.txt"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "a b.txt"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "creds.pem"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "creds.pem"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "id_rsa.pub"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "id_rsa.pub"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "secrets.yaml"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "secrets.yaml"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "token.txt"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "token.txt"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "token.py"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "token.py"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   "data.sqlite"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "data.sqlite"
+  ]
+ },
+ {
+  "call": "quality.private",
+  "args": [
+   ".envrc"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   ".envrc"
+  ]
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "art/run.vdb",
+   "directory"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "96c24172a391dffccffabff98c25a5e42302f57fdb3493a71aca6ea50ab709dd"
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "art/report.txt",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "58251f2fb025e3adfd737a0554fb715686ab322d2eb216ad78c39ba977e9b6a4"
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "art/ucli.key",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "f517bbe9b389726bfd28685ba31feaf76d2dd54b3fda220482f64e4fc33a70c6"
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "art/real.key",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "产物像是私钥，不能读取：art/real.key"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "empty.txt",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "产物为空：empty.txt"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "missing.txt",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "不是普通文件：missing.txt"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "art",
+   "directory"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "产物像是私钥，不能读取：art"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "link_in.py",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "产物不能通过符号链接读取：link_in.py"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "../x",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "不安全的产物路径：../x"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "src",
+   "file"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "不是普通文件：src"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "art/report.txt",
+   "directory"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": {
+   "blocked": "缺少目录产物：art/report.txt"
+  }
+ },
+ {
+  "call": "contracts.fingerprint",
+  "args": [
+   "ord",
+   "directory"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "8fdb3ed616b9dbcce7c7b5402f805ccdd58d1e3bbe99e202e035d243b4884518"
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "a.py"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "a.py"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "rtl/fifo.sv"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "rtl/fifo.sv"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "../a"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "../a"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "/abs"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "/abs"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "a//b"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "a//b"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "a/./b"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "a/./b"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "a/"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "a/"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   ".env.local"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   ".env.local"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "x/.git/y"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "x/.git/y"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "keys/id_rsa"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "keys/id_rsa"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "c.PEM"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "c.PEM"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "credentials/x"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "credentials/x"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "ok-file_1.txt"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "ok-file_1.txt"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "a*b"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "a*b"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "a\\b"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "a\\b"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   ""
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   ""
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   " "
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   " "
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "secrets.json"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   "secrets.json"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   "dir/token.json"
+  ],
+  "kwargs": {},
+  "result": true,
+  "after": [
+   "dir/token.json"
+  ]
+ },
+ {
+  "call": "contracts.safe_name",
+  "args": [
+   ".super-partner/x"
+  ],
+  "kwargs": {},
+  "result": false,
+  "after": [
+   ".super-partner/x"
+  ]
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "python run.py"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   "run.py"
+  ]
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "./check.sh && make"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   "check.sh"
+  ]
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "cd sub && python t.py"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": []
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "bash -c 'python x.py'"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": []
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "python a.py # b.py"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   "a.py"
+  ]
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "node --test tests/x.mjs"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   "tests/x.mjs"
+  ]
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "python ../up.py"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": []
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "pytest -q tests/"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": []
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "sh 'unclosed"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": []
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "./bin/tool --flag"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   "bin/tool"
+  ]
+ },
+ {
+  "call": "contracts.scripts",
+  "args": [
+   "-x.py"
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": []
+ }
+]

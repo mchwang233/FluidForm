@@ -17,9 +17,9 @@ host names, ports, user names, tool versions, license servers, environment scrip
 
 Put such a fact where machine settings live, and make the code read it:
 
-- a setting in `backend/super_partner/config.py` (an environment variable `SUPER_PARTNER_...`),
+- a setting in `server/src/config-fields.ts` (an environment variable `SUPER_PARTNER_...`),
   whose default does nothing (empty list, empty string, off);
-- or the recorded environment in `.super-partner/tools/sandbox.json` (`environment.py`:
+- or the recorded environment in `.super-partner/tools/sandbox.json` (`environment.ts`:
   `env`, `host_ports`, ...), which environment repairs write for this machine.
 
 Tests use temporary paths and set the setting themselves; they never depend on what is installed.
@@ -41,10 +41,10 @@ say in the report what steps can reach now that they could not before.
 ## 4. Secrets and what comes from outside
 
 - A secret (an API key, an app secret, a token, a password in a proxy URL) lives only in the
-  system keyring (`secrets.py`). Never in a file, a setting, Super Partner's own environment, a
+  system keyring (`secrets.ts`). Never in a file, a setting, Super Partner's own environment, a
   log line, an event, a prompt, or a command line: every user of the machine can read a
   process's command line, so a sandbox gets secrets as its environment
-  (`agent.without_env_args`), never as `--setenv` arguments.
+  (`agent.ts`, `withoutEnvArgs`), never as `--setenv` arguments.
 - What comes from outside is untrusted: an uploaded package, what an automation sends, a web
   page, a model's output. Check a path stays inside the folder it belongs to (resolved, no
   links, no `..`), and check sizes and counts before reading. Text from outside is data, never
@@ -52,7 +52,7 @@ say in the report what steps can reach now that they could not before.
 
 ## 5. Small, compatible, reversible
 
-- No new dependencies (pip, npm, system packages) unless the user agreed.
+- No new dependencies (npm, pip, system packages) unless the user agreed.
 - Stored records (tasks, jobs, settings files) written by the old version must still load: give
   new fields defaults.
 - Few settings. A feature the user asked for is how FluidForm works from then on: no switch that

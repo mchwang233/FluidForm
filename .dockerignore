@@ -8,13 +8,10 @@
 workspaces/
 .venv/
 **/__pycache__/
-.pytest_cache/
-.ruff_cache/
-.coverage
-htmlcov/
 **/*.pyc
 frontend/
-tests/
+server/node_modules/
+server/dist/
 verdiLog/
 .env
 .env.*

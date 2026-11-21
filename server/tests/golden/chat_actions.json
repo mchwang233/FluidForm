@@ -1,0 +1,319 @@
+[
+ {
+  "call": "chat_actions.session",
+  "args": [
+   [
+    "StartTask",
+    "SendFile",
+    "CallEngineer",
+    "Remember",
+    "Forget"
+   ],
+   [
+    [
+     "StartTask",
+     {
+      "request": "  写一个贪吃蛇  "
+     }
+    ],
+    [
+     "StartTask",
+     {
+      "request": "again"
+     }
+    ],
+    [
+     "StartTask",
+     {
+      "request": ""
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "a.png"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "b\n.png"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": 3
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "0.png"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "1.png"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "2.png"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "3.png"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "4.png"
+     }
+    ],
+    [
+     "Remember",
+     {
+      "fact": " 成员1: 喜欢简短 "
+     }
+    ],
+    [
+     "Forget",
+     {
+      "words": "a\nb"
+     }
+    ],
+    [
+     "Forget",
+     {
+      "words": "简短"
+     }
+    ],
+    [
+     "CallEngineer",
+     {
+      "kind": "component",
+      "request": "加个画图工具"
+     }
+    ],
+    [
+     "CallEngineer",
+     {
+      "kind": "other",
+      "request": "修"
+     }
+    ],
+    [
+     "CallEngineer",
+     {
+      "request": ""
+     }
+    ],
+    [
+     "Unknown",
+     {}
+    ]
+   ]
+  ],
+  "kwargs": {},
+  "result": {
+   "offered": [
+    "StartTask",
+    "SendFile",
+    "CallEngineer",
+    "Remember",
+    "Forget"
+   ],
+   "results": [
+    [
+     "Noted: FluidForm plans it after your answer. Say in your answer what you are having planned.",
+     true
+    ],
+    [
+     "Error: one task per answer; put everything in the first request",
+     false
+    ],
+    [
+     "Error: request is required",
+     false
+    ],
+    [
+     "Noted: it is sent with your answer.",
+     true
+    ],
+    [
+     "Error: name is required",
+     false
+    ],
+    [
+     "Error: name is required",
+     false
+    ],
+    [
+     "Noted: it is sent with your answer.",
+     true
+    ],
+    [
+     "Noted: it is sent with your answer.",
+     true
+    ],
+    [
+     "Noted: it is sent with your answer.",
+     true
+    ],
+    [
+     "Noted: it is sent with your answer.",
+     true
+    ],
+    [
+     "Error: at most 5 files per answer",
+     false
+    ],
+    [
+     "Noted.",
+     true
+    ],
+    [
+     "Error: one line of text is required",
+     false
+    ],
+    [
+     "Noted.",
+     true
+    ],
+    [
+     "Noted: the platform engineer joins this conversation after your answer.",
+     true
+    ],
+    [
+     "Noted: the platform engineer joins this conversation after your answer.",
+     true
+    ],
+    [
+     "Error: request is required",
+     false
+    ],
+    [
+     "Error: Unknown is not available here",
+     false
+    ]
+   ],
+   "lines": [
+    "TASK: {\"request\": \"写一个贪吃蛇\"}",
+    "SEND: a.png",
+    "SEND: 0.png",
+    "SEND: 1.png",
+    "SEND: 2.png",
+    "SEND: 3.png",
+    "REMEMBER: 成员1: 喜欢简短",
+    "FORGET: 简短",
+    "ENGINEER: {\"kind\": \"component\", \"request\": \"加个画图工具\"}",
+    "ENGINEER: {\"kind\": \"repair\", \"request\": \"修\"}"
+   ]
+  },
+  "after": []
+ },
+ {
+  "call": "chat_actions.session",
+  "args": [
+   [
+    "SendFile"
+   ],
+   [
+    [
+     "StartTask",
+     {
+      "request": "x"
+     }
+    ],
+    [
+     "SendFile",
+     {
+      "name": "x.png"
+     }
+    ]
+   ]
+  ],
+  "kwargs": {},
+  "result": {
+   "offered": [
+    "SendFile"
+   ],
+   "results": [
+    [
+     "Error: StartTask is not available here",
+     false
+    ],
+    [
+     "Noted: it is sent with your answer.",
+     true
+    ]
+   ],
+   "lines": [
+    "SEND: x.png"
+   ]
+  },
+  "after": []
+ },
+ {
+  "call": "chat_actions.session",
+  "args": [
+   null,
+   [
+    [
+     "SendFile",
+     {
+      "name": "x.png"
+     }
+    ]
+   ]
+  ],
+  "kwargs": {},
+  "result": {
+   "offered": [],
+   "results": [
+    [
+     "Error: SendFile is not available here",
+     false
+    ]
+   ],
+   "lines": []
+  },
+  "after": []
+ },
+ {
+  "call": "chat_actions.with_actions",
+  "args": [
+   "答案  \n",
+   [
+    "TASK: {}"
+   ]
+  ],
+  "kwargs": {},
+  "result": "答案\nTASK: {}",
+  "after": [
+   "答案  \n",
+   [
+    "TASK: {}"
+   ]
+  ]
+ },
+ {
+  "call": "chat_actions.with_actions",
+  "args": [
+   "答案",
+   []
+  ],
+  "kwargs": {},
+  "result": "答案",
+  "after": [
+   "答案",
+   []
+  ]
+ }
+]

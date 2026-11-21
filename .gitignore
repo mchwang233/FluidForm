@@ -2,14 +2,12 @@
 workspaces/
 .venv/
 __pycache__/
-.pytest_cache/
-.ruff_cache/
-.coverage
-htmlcov/
 *.pyc
 frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
+server/node_modules/
+server/dist/
 
 # Local secrets and credentials
 .env

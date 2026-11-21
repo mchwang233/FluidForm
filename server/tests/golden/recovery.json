@@ -1,0 +1,2603 @@
+[
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   0,
+   "easy"
+  ],
+  "kwargs": {},
+  "result": null,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   0,
+   "normal"
+  ],
+  "kwargs": {},
+  "result": null,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   0,
+   "hard"
+  ],
+  "kwargs": {},
+  "result": null,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   0,
+   "odd"
+  ],
+  "kwargs": {},
+  "result": null,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   7,
+   "easy"
+  ],
+  "kwargs": {},
+  "result": 7,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   7,
+   "normal"
+  ],
+  "kwargs": {},
+  "result": 10,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   7,
+   "hard"
+  ],
+  "kwargs": {},
+  "result": 14,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   7,
+   "odd"
+  ],
+  "kwargs": {},
+  "result": 7,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   40,
+   "easy"
+  ],
+  "kwargs": {},
+  "result": 40,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   40,
+   "normal"
+  ],
+  "kwargs": {},
+  "result": 60,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   40,
+   "hard"
+  ],
+  "kwargs": {},
+  "result": 80,
+  "after": []
+ },
+ {
+  "call": "recovery.turns_for",
+  "args": [
+   40,
+   "odd"
+  ],
+  "kwargs": {},
+  "result": 40,
+  "after": []
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [],
+   []
+  ]
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "rejected",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117496Z"
+     }
+    ],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "rejected"
+   ],
+   []
+  ]
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "rejected",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117527Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "error",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117529Z"
+     }
+    ],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "rejected",
+    "error"
+   ],
+   [
+    "a"
+   ]
+  ]
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "rejected",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117552Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "passed",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117554Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "error",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117555Z"
+     }
+    ],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "error"
+   ],
+   []
+  ]
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "error",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117578Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "quota",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117580Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "verify_failed",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117581Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "b",
+      "outcome": "rejected",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117583Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "b",
+      "outcome": "rejected",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117584Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "c",
+      "outcome": "unable",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117585Z"
+     }
+    ],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "error",
+    "verify_failed",
+    "rejected",
+    "rejected"
+   ],
+   [
+    "a",
+    "b"
+   ]
+  ]
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": null,
+      "outcome": "error",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117618Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": null,
+      "outcome": "error",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": false,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117620Z"
+     }
+    ],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "error",
+    "error"
+   ],
+   []
+  ]
+ },
+ {
+  "call": "recovery.failures",
+  "args": [
+   {
+    "id": "n",
+    "title": "t",
+    "instructions": "i",
+    "capability": "coding",
+    "dependencies": [],
+    "estimated_input_tokens": 1500,
+    "estimated_output_tokens": 800,
+    "quality_threshold": 65.0,
+    "difficulty": "normal",
+    "needs_workspace": false,
+    "needs_images": false,
+    "files": [],
+    "reads": [],
+    "folders": [],
+    "provides": "",
+    "check": "",
+    "artifact_contract": null,
+    "artifact_evidence": null,
+    "contract_turns": 0,
+    "contract_tool_calls": 0,
+    "contract_cost_usd": 0.0,
+    "contract_generation": null,
+    "artifact_baseline": {},
+    "artifact_inputs": {},
+    "part_id": null,
+    "employee_id": null,
+    "delegation_parent_id": null,
+    "delegation_request_id": null,
+    "delegation_payload_hash": "",
+    "after_parts": [],
+    "model_id": null,
+    "routing_note": null,
+    "started_at": null,
+    "waiting_for_folder": false,
+    "preparing": false,
+    "head_start": "",
+    "head_start_generation": null,
+    "estimated_cost_usd": 0.0,
+    "status": "pending",
+    "result": null,
+    "acceptance_criteria": "",
+    "verifies": [],
+    "attempts": [
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "passed",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": true,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117641Z"
+     },
+     {
+      "duration_seconds": null,
+      "result": null,
+      "result_source": null,
+      "interrupted": false,
+      "model_id": "a",
+      "outcome": "superseded",
+      "reason": null,
+      "reviewer_model_id": null,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "turn_limit": true,
+      "tool_calls": [],
+      "trace": null,
+      "finished_at": "2026-11-20T08:50:19.117643Z"
+     }
+    ],
+    "failed_attempts": 0,
+    "environment_fixes": 0,
+    "feedback": null,
+    "review_passed": null,
+    "review": null,
+    "unable_reason": null,
+    "summary": null,
+    "changed_files": [],
+    "changed_files_total": null,
+    "inputs": [],
+    "generation": 0
+   }
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": [
+   [
+    "superseded"
+   ],
+   []
+  ]
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   null,
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   null,
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   null,
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   null,
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "platform_pending",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "platform_pending",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "platform_pending",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "platform_pending",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "needs_input",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "needs_input",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "needs_input",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "needs_input",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "quota_exhausted",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "switch_model"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "quota_exhausted",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "switch_model"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "quota_exhausted",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "quota_exhausted",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "model_unavailable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "switch_model"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "model_unavailable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "switch_model"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "model_unavailable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "model_unavailable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "fixed",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "fixed",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "fixed",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "fixed",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "unable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "unable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "unable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "unable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "blocked",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "blocked",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "blocked",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "blocked",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "retry",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "retry",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "retry",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "error",
+   "retry",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   null,
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   null,
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   null,
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   null,
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "platform_pending",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "platform_pending",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "platform_pending",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "platform_pending",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "needs_input",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "needs_input",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "needs_input",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "needs_input",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "quota_exhausted",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "quota_exhausted",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "quota_exhausted",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "quota_exhausted",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "model_unavailable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "model_unavailable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "model_unavailable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "model_unavailable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "fixed",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "fixed",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "fixed",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "fixed",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "unable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "unable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "unable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "unable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "blocked",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "blocked",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "blocked",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "blocked",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "retry",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "retry",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "retry",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "unable",
+   "retry",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   null,
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   null,
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   null,
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   null,
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "platform_pending",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "platform_pending",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "platform_pending",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "platform_pending",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "needs_input",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "needs_input",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "needs_input",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "needs_input",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "quota_exhausted",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "quota_exhausted",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "quota_exhausted",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "quota_exhausted",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "model_unavailable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "model_unavailable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "model_unavailable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "model_unavailable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "fixed",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "fixed",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "fixed",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "fixed",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "unable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "unable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "unable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "unable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "blocked",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "blocked",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "blocked",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "blocked",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "retry",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "retry",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "retry",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "verify_failed",
+   "retry",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause_rework"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   null,
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   null,
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   null,
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   null,
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "platform_pending",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "platform_pending",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "platform_pending",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "platform_pending",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "hold_for_platform"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "needs_input",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "needs_input",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "needs_input",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "needs_input",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "ask_user"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "quota_exhausted",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "quota_exhausted",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "quota_exhausted",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "quota_exhausted",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "model_unavailable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "model_unavailable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "model_unavailable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "model_unavailable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "fixed",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "fixed",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "fixed",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry_fixed"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "fixed",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "unable",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "unable",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "unable",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "unable",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "unable"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "blocked",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "blocked",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "blocked",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "blocked",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "pause"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "retry",
+   true,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "retry",
+   true,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "retry",
+   false,
+   0
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ },
+ {
+  "call": "recovery.after_diagnosis",
+  "args": [
+   "rejected",
+   "retry",
+   false,
+   2
+  ],
+  "kwargs": {},
+  "after": [],
+  "result": "retry"
+ }
+]

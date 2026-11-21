@@ -20,9 +20,9 @@ const TOOL_LABELS: Record<string, string> = { Bash: "运行命令", Read: "读�
   Glob: "找文件", Grep: "搜索", LS: "列目录",
   // Attempts recorded before the tools followed Claude Code's.
   list_dir: "列目录", read_file: "读文件", write_file: "写文件", edit_file: "改文件", run_command: "运行命令",
-  // What a membership CLI does, as it prints it (activity.py).
+  // What a membership CLI does, as it prints it (server: activity.ts).
   command: "运行命令", file_change: "改文件", message: "说明", plan: "计划",
-  // The platform engineer's checks of its change (engineer.py).
+  // The platform engineer's checks of its change (server: engineer.ts).
   check: "检查" };
 
 /** A tool call's output left out of an opened task (output_size), read when it is opened. */
@@ -81,7 +81,7 @@ export function nodeLine(node: PlanNode, nodes: PlanNode[], number: Map<string, 
 
 const DIFFICULTY_LABELS: Record<string, string> = { easy: "简单", normal: "一般", hard: "困难" };
 
-/** Why the router picked this model for the node, in the router's own terms (routing.py). */
+/** Why the router picked this model for the node, in the router's own terms (server: routing.ts). */
 function selectionReason(node: PlanNode, model?: Model): string {
   if (node.routing_note) return `${DIFFICULTY_LABELS[node.difficulty ?? "normal"] ?? ""}任务：${node.routing_note}`;
   const label = CAPABILITY_LABELS[node.capability ?? ""] ?? node.capability ?? "";

@@ -95,7 +95,7 @@ Open <http://127.0.0.1:5173>.
 - **No keys needed:** the built-in offline demo model runs the whole flow.
 - **Real models:** add API keys on the **模型** (Models) page. Membership CLIs show up once they
   are installed and signed in.
-- **Requirements:** Python 3.9+ and Node.js. The step sandbox needs bubblewrap, on Linux.
+- **Requirements:** Node.js 22+ (Python 3 too, for capability packages written in it). The step sandbox needs bubblewrap, on Linux.
 - **Stop:** `./stop.sh`.
 
 `docker compose up --build` works too, or see [Manual startup](docs/guide.md#manual-startup).

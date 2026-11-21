@@ -1,0 +1,4247 @@
+[
+ {
+  "call": "scoring.apply_aa_scores",
+  "args": [
+   {
+    "cli:codex": {
+     "id": "cli:codex",
+     "provider": "openai",
+     "display_name": "Codex CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897072Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897081Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:claude": {
+     "id": "cli:claude",
+     "provider": "anthropic",
+     "display_name": "Claude Code CLI (membership)",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897091Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897092Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:gemini": {
+     "id": "cli:gemini",
+     "provider": "google",
+     "display_name": "Gemini CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897096Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897097Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:qwen": {
+     "id": "cli:qwen",
+     "provider": "qwen",
+     "display_name": "Qwen Code CLI (membership)",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897104Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897105Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-sol": {
+     "id": "openai:gpt-5.6-sol",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Sol",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 4.0,
+     "output_per_million": 20.0,
+     "cached_input_per_million": 0.4,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897109Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897110Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-terra": {
+     "id": "openai:gpt-5.6-terra",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Terra",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": 0.2,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897112Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897113Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-luna": {
+     "id": "openai:gpt-5.6-luna",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Luna",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 0.2,
+     "output_per_million": 1.2,
+     "cached_input_per_million": 0.02,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897116Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897117Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "anthropic:claude-sonnet-5": {
+     "id": "anthropic:claude-sonnet-5",
+     "provider": "anthropic",
+     "display_name": "Claude Sonnet 5",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "artificial_analysis",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897120Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897121Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "google:gemini-pro": {
+     "id": "google:gemini-pro",
+     "provider": "google",
+     "display_name": "Gemini Pro",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897123Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897124Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-chat": {
+     "id": "deepseek:deepseek-chat",
+     "provider": "deepseek",
+     "display_name": "DeepSeek Chat",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.3,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897127Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897128Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "qwen:qwen-plus": {
+     "id": "qwen:qwen-plus",
+     "provider": "qwen",
+     "display_name": "Qwen Plus",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897135Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897136Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "doubao:doubao-pro": {
+     "id": "doubao:doubao-pro",
+     "provider": "doubao",
+     "display_name": "Doubao Pro",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897138Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897140Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "glm:glm-5.2": {
+     "id": "glm:glm-5.2",
+     "provider": "glm",
+     "display_name": "GLM-5.2",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://docs.bigmodel.cn/cn/api/introduction",
+     "effective_at": "2026-11-20T08:50:18.897142Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897143Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "minimax:MiniMax-M2.7": {
+     "id": "minimax:MiniMax-M2.7",
+     "provider": "minimax",
+     "display_name": "MiniMax M2.7",
+     "enabled": true,
+     "context_window": 204800,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.minimax.io/docs/api-reference/api-overview",
+     "effective_at": "2026-11-20T08:50:18.897148Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897149Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "kimi:kimi-k3": {
+     "id": "kimi:kimi-k3",
+     "provider": "kimi",
+     "display_name": "Kimi K3",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.kimi.com/docs/api/overview",
+     "effective_at": "2026-11-20T08:50:18.897152Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897153Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "mock:local": {
+     "id": "mock:local",
+     "provider": "mock",
+     "display_name": "Local Demo Model",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.01,
+     "output_per_million": 0.02,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 80.0,
+      "planning": 80.0,
+      "research": 80.0,
+      "chinese": 80.0,
+      "tool_use": 80.0,
+      "structured_output": 80.0,
+      "reliability": 80.0
+     },
+     "scores_source": "demo",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897168Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 1000,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897169Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-flash": {
+     "id": "deepseek:deepseek-flash",
+     "provider": "deepseek",
+     "display_name": "Flash",
+     "enabled": true,
+     "context_window": null,
+     "max_output_tokens": null,
+     "input_per_million": null,
+     "output_per_million": null,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897236Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897238Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    }
+   },
+   {
+    "openai:gpt-5.6-sol": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 21.158
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 67.6
+       },
+       {
+        "key": "aa_hle",
+        "value": 60.3
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 74.5
+       },
+       {
+        "key": "aa_lcr",
+        "value": 50.0
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 17.0
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 28.059
+       }
+      ]
+     },
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 53.9
+       },
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 68.343
+       },
+       {
+        "key": "aa_scicode",
+        "value": 50.955
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 34.0
+       },
+       {
+        "key": "aa_hle",
+        "value": 79.369
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 58.9
+       },
+       {
+        "key": "aa_lcr",
+        "value": 73.329
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 54.308
+       }
+      ]
+     }
+    ],
+    "openai:gpt-5.6-terra": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "aa_scicode",
+        "value": 76.4
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 28.436
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 32.0
+       },
+       {
+        "key": "aa_lcr",
+        "value": 36.4
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 37.034
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 17.18
+       }
+      ]
+     }
+    ],
+    "anthropic:claude-sonnet-5": [
+     {
+      "source": "other",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 26.0
+       },
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 78.0
+       },
+       {
+        "key": "aa_scicode",
+        "value": 13.155
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 23.9
+       },
+       {
+        "key": "aa_hle",
+        "value": 10.92
+       },
+       {
+        "key": "aa_lcr",
+        "value": 27.0
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 38.963
+       }
+      ]
+     }
+    ],
+    "deepseek:deepseek-flash": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 50
+       }
+      ]
+     }
+    ],
+    "google:gemini-pro": [
+     {
+      "source": "other",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 43.691
+       },
+       {
+        "key": "aa_scicode",
+        "value": 65.0
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 26.0
+       },
+       {
+        "key": "aa_hle",
+        "value": 64.0
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 70.0
+       },
+       {
+        "key": "aa_lcr",
+        "value": 64.0
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 59.0
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 28.0
+       }
+      ]
+     }
+    ],
+    "mock:local": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 54.4
+       },
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 31.1
+       },
+       {
+        "key": "aa_scicode",
+        "value": 48.0
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 79.1
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 54.0
+       },
+       {
+        "key": "aa_lcr",
+        "value": 33.3
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 34.68
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 44.265
+       }
+      ]
+     }
+    ]
+   },
+   [
+    {
+     "source": "other",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 48.1
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 43.184
+      },
+      {
+       "key": "aa_hle",
+       "value": 28.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 60.2
+      },
+      {
+       "key": "aa_lcr",
+       "value": 43.345
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 26.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 46.623
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 21.158
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 67.6
+      },
+      {
+       "key": "aa_hle",
+       "value": 60.3
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 74.5
+      },
+      {
+       "key": "aa_lcr",
+       "value": 50.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 17.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 28.059
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 53.9
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 68.343
+      },
+      {
+       "key": "aa_scicode",
+       "value": 50.955
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 34.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 79.369
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 58.9
+      },
+      {
+       "key": "aa_lcr",
+       "value": 73.329
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 54.308
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 18.7
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 79.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 15.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 39.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 13.146
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 48.6
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 79.9
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "aa_scicode",
+       "value": 76.4
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 28.436
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 32.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 36.4
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 37.034
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 17.18
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 54.4
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 31.1
+      },
+      {
+       "key": "aa_scicode",
+       "value": 48.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 79.1
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 54.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 33.3
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 34.68
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 44.265
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 77.4
+      },
+      {
+       "key": "aa_scicode",
+       "value": 30.905
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 35.5
+      },
+      {
+       "key": "aa_hle",
+       "value": 69.1
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 36.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 58.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 25.6
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 23.1
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 16.792
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 33.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 70.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 25.261
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 26.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 32.06
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 29.501
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 51.3
+      },
+      {
+       "key": "aa_scicode",
+       "value": 65.6
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 54.4
+      },
+      {
+       "key": "aa_hle",
+       "value": 38.7
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 10.326
+      },
+      {
+       "key": "aa_lcr",
+       "value": 40.405
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 62.187
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 77.436
+      }
+     ]
+    },
+    {
+     "source": "other",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 26.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 78.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 13.155
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 23.9
+      },
+      {
+       "key": "aa_hle",
+       "value": 10.92
+      },
+      {
+       "key": "aa_lcr",
+       "value": 27.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 38.963
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 48.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 23.813
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 18.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 75.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 10.525
+      },
+      {
+       "key": "aa_lcr",
+       "value": 38.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 53.266
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 43.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 64.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 70.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 44.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 34.59
+      },
+      {
+       "key": "aa_lcr",
+       "value": 31.3
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 33.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 65.67
+      },
+      {
+       "key": "aa_scicode",
+       "value": 36.129
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 47.893
+      },
+      {
+       "key": "aa_hle",
+       "value": 53.6
+      },
+      {
+       "key": "aa_lcr",
+       "value": 63.2
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 58.6
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 28.906
+      },
+      {
+       "key": "aa_scicode",
+       "value": 40.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 36.196
+      },
+      {
+       "key": "aa_hle",
+       "value": 28.4
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 75.734
+      },
+      {
+       "key": "aa_lcr",
+       "value": 72.1
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 61.361
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 66.813
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "aa_scicode",
+       "value": 13.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 56.1
+      },
+      {
+       "key": "aa_hle",
+       "value": 12.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 58.7
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 66.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 49.455
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 17.472
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 48.508
+      },
+      {
+       "key": "aa_hle",
+       "value": 15.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 41.79
+      },
+      {
+       "key": "aa_lcr",
+       "value": 37.6
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 75.714
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 15.828
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 75.064
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 39.069
+      },
+      {
+       "key": "aa_scicode",
+       "value": 57.17
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 20.9
+      },
+      {
+       "key": "aa_hle",
+       "value": 20.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 43.845
+      },
+      {
+       "key": "aa_lcr",
+       "value": 41.014
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 20.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 75.435
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 64.567
+      },
+      {
+       "key": "aa_scicode",
+       "value": 38.924
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 29.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 28.8
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 50.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 64.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 58.829
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 42.764
+      }
+     ]
+    },
+    {
+     "source": "other",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 43.691
+      },
+      {
+       "key": "aa_scicode",
+       "value": 65.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 26.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 64.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 70.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 64.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 59.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 28.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 39.631
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 18.3
+      },
+      {
+       "key": "aa_scicode",
+       "value": 30.4
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 61.4
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 40.5
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 62.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 48.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 15.3
+      },
+      {
+       "key": "aa_scicode",
+       "value": 74.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 59.049
+      },
+      {
+       "key": "aa_hle",
+       "value": 63.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 56.9
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 33.697
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 17.9
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 14.2
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 50.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 61.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 72.294
+      },
+      {
+       "key": "aa_hle",
+       "value": 17.575
+      },
+      {
+       "key": "aa_lcr",
+       "value": 60.433
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 31.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 32.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 18.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 48.019
+      },
+      {
+       "key": "aa_scicode",
+       "value": 17.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 71.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 28.989
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 34.8
+      },
+      {
+       "key": "aa_lcr",
+       "value": 41.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 69.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 51.308
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 61.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 49.696
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 67.102
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 70.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 22.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 27.5
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 72.4
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 73.4
+      },
+      {
+       "key": "aa_scicode",
+       "value": 78.388
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 72.699
+      },
+      {
+       "key": "aa_hle",
+       "value": 52.095
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 17.524
+      },
+      {
+       "key": "aa_lcr",
+       "value": 22.118
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 23.541
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 66.891
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 17.8
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 72.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 16.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 45.4
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 75.1
+      },
+      {
+       "key": "aa_lcr",
+       "value": 34.066
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 52.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 61.8
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 24.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 41.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 18.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 69.168
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 44.8
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 24.6
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 42.508
+      }
+     ]
+    },
+    {
+     "source": "other",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 23.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 35.7
+      },
+      {
+       "key": "aa_scicode",
+       "value": 35.3
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 10.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 35.9
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 21.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 38.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 19.748
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 44.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 38.2
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 59.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 12.7
+      },
+      {
+       "key": "aa_hle",
+       "value": 25.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 23.3
+      },
+      {
+       "key": "aa_lcr",
+       "value": 34.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 66.5
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 65.1
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 77.3
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 28.6
+      },
+      {
+       "key": "aa_scicode",
+       "value": 34.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 16.257
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 13.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 45.7
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 78.2
+      },
+      {
+       "key": "aa_scicode",
+       "value": 43.5
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 12.4
+      },
+      {
+       "key": "aa_hle",
+       "value": 54.2
+      },
+      {
+       "key": "aa_lcr",
+       "value": 69.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 48.308
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 75.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 70.5
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 49.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 39.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 59.2
+      },
+      {
+       "key": "aa_hle",
+       "value": 21.882
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 74.054
+      },
+      {
+       "key": "aa_lcr",
+       "value": 44.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 62.6
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 56.2
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 69.056
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 13.4
+      },
+      {
+       "key": "aa_hle",
+       "value": 61.3
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 10.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 77.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 31.8
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 27.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 75.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 11.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 24.613
+      },
+      {
+       "key": "aa_hle",
+       "value": 45.346
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 72.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 54.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 18.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 17.1
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 25.593
+      },
+      {
+       "key": "aa_scicode",
+       "value": 54.926
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 34.223
+      },
+      {
+       "key": "aa_hle",
+       "value": 64.4
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 51.6
+      },
+      {
+       "key": "aa_lcr",
+       "value": 47.7
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 55.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 44.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 58.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 55.389
+      },
+      {
+       "key": "aa_scicode",
+       "value": 27.0
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 40.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 32.626
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 60.845
+      },
+      {
+       "key": "aa_lcr",
+       "value": 75.194
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 36.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 76.5
+      }
+     ]
+    },
+    {
+     "source": "other",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 78.8
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 74.4
+      },
+      {
+       "key": "aa_scicode",
+       "value": 11.0
+      },
+      {
+       "key": "aa_hle",
+       "value": 45.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 12.839
+      },
+      {
+       "key": "aa_lcr",
+       "value": 44.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 61.946
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 20.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 39.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 44.112
+      },
+      {
+       "key": "aa_scicode",
+       "value": 36.25
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 21.3
+      },
+      {
+       "key": "aa_hle",
+       "value": 43.187
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 77.0
+      },
+      {
+       "key": "aa_lcr",
+       "value": 42.4
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 31.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 46.0
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 48.0
+      },
+      {
+       "key": "aa_scicode",
+       "value": 10.1
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 77.6
+      },
+      {
+       "key": "aa_hle",
+       "value": 12.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 29.4
+      },
+      {
+       "key": "aa_lcr",
+       "value": 52.0
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 28.321
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 39.3
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 12.0
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 57.266
+      },
+      {
+       "key": "aa_scicode",
+       "value": 19.5
+      },
+      {
+       "key": "aa_terminalbench_4",
+       "value": 68.17
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 14.2
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 56.584
+      }
+     ]
+    },
+    {
+     "source": "artificial_analysis",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 50
+      }
+     ]
+    }
+   ]
+  ],
+  "kwargs": {},
+  "result": {
+   "changed": [
+    "cli:codex",
+    "openai:gpt-5.6-sol",
+    "anthropic:claude-sonnet-5",
+    "deepseek:deepseek-flash"
+   ],
+   "models": {
+    "cli:codex": {
+     "id": "cli:codex",
+     "provider": "openai",
+     "display_name": "Codex CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 87.7,
+      "planning": 90.5,
+      "research": 91.0,
+      "chinese": 88.5,
+      "tool_use": 84.3,
+      "structured_output": 90.3,
+      "reliability": 88.8
+     },
+     "scores_source": "artificial_analysis",
+     "scores_basis": "CLI 使用会员账户的默认模型，沿用同厂商 AA 成绩最好的 GPT-5.6 Sol 的调度分。按 Artificial Analysis 成绩换算（综合智能指数 53.9）：代码前 40%，规划前 21%，调研前 14%，中文前 40%，工具使用前 68%，结构化输出前 40%，可靠性前 33%。按在全部 AA 已评测模型中的排名换算为调度分。",
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897072Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897081Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:claude": {
+     "id": "cli:claude",
+     "provider": "anthropic",
+     "display_name": "Claude Code CLI (membership)",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897091Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897092Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:gemini": {
+     "id": "cli:gemini",
+     "provider": "google",
+     "display_name": "Gemini CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897096Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897097Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:qwen": {
+     "id": "cli:qwen",
+     "provider": "qwen",
+     "display_name": "Qwen Code CLI (membership)",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897104Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897105Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-sol": {
+     "id": "openai:gpt-5.6-sol",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Sol",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 4.0,
+     "output_per_million": 20.0,
+     "cached_input_per_million": 0.4,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 87.7,
+      "planning": 90.5,
+      "research": 91.0,
+      "chinese": 88.5,
+      "tool_use": 84.3,
+      "structured_output": 90.3,
+      "reliability": 88.8
+     },
+     "scores_source": "artificial_analysis",
+     "scores_basis": "按 Artificial Analysis 成绩换算（综合智能指数 53.9）：代码前 40%，规划前 21%，调研前 14%，中文前 40%，工具使用前 68%，结构化输出前 40%，可靠性前 33%。按在全部 AA 已评测模型中的排名换算为调度分。",
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897109Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897110Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-terra": {
+     "id": "openai:gpt-5.6-terra",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Terra",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": 0.2,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897112Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897113Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-luna": {
+     "id": "openai:gpt-5.6-luna",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Luna",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 0.2,
+     "output_per_million": 1.2,
+     "cached_input_per_million": 0.02,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897116Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897117Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "anthropic:claude-sonnet-5": {
+     "id": "anthropic:claude-sonnet-5",
+     "provider": "anthropic",
+     "display_name": "Claude Sonnet 5",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897120Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897121Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "google:gemini-pro": {
+     "id": "google:gemini-pro",
+     "provider": "google",
+     "display_name": "Gemini Pro",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897123Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897124Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-chat": {
+     "id": "deepseek:deepseek-chat",
+     "provider": "deepseek",
+     "display_name": "DeepSeek Chat",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.3,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897127Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897128Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "qwen:qwen-plus": {
+     "id": "qwen:qwen-plus",
+     "provider": "qwen",
+     "display_name": "Qwen Plus",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897135Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897136Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "doubao:doubao-pro": {
+     "id": "doubao:doubao-pro",
+     "provider": "doubao",
+     "display_name": "Doubao Pro",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897138Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897140Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "glm:glm-5.2": {
+     "id": "glm:glm-5.2",
+     "provider": "glm",
+     "display_name": "GLM-5.2",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://docs.bigmodel.cn/cn/api/introduction",
+     "effective_at": "2026-11-20T08:50:18.897142Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897143Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "minimax:MiniMax-M2.7": {
+     "id": "minimax:MiniMax-M2.7",
+     "provider": "minimax",
+     "display_name": "MiniMax M2.7",
+     "enabled": true,
+     "context_window": 204800,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.minimax.io/docs/api-reference/api-overview",
+     "effective_at": "2026-11-20T08:50:18.897148Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897149Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "kimi:kimi-k3": {
+     "id": "kimi:kimi-k3",
+     "provider": "kimi",
+     "display_name": "Kimi K3",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.kimi.com/docs/api/overview",
+     "effective_at": "2026-11-20T08:50:18.897152Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897153Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "mock:local": {
+     "id": "mock:local",
+     "provider": "mock",
+     "display_name": "Local Demo Model",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.01,
+     "output_per_million": 0.02,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 80.0,
+      "planning": 80.0,
+      "research": 80.0,
+      "chinese": 80.0,
+      "tool_use": 80.0,
+      "structured_output": 80.0,
+      "reliability": 80.0
+     },
+     "scores_source": "demo",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897168Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 1000,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897169Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-flash": {
+     "id": "deepseek:deepseek-flash",
+     "provider": "deepseek",
+     "display_name": "Flash",
+     "enabled": true,
+     "context_window": null,
+     "max_output_tokens": null,
+     "input_per_million": null,
+     "output_per_million": null,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 86.8,
+      "planning": 84.5,
+      "research": 84.3,
+      "chinese": 87.7,
+      "tool_use": 89.2,
+      "structured_output": 89.8,
+      "reliability": 86.9
+     },
+     "scores_source": "artificial_analysis",
+     "scores_basis": "按 Artificial Analysis 成绩换算（综合智能指数 50）：代码前 44%，规划前 44%，调研前 44%，中文前 44%，工具使用前 44%，结构化输出前 44%，可靠性前 44%。按在全部 AA 已评测模型中的排名换算为调度分。",
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897236Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897238Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    }
+   }
+  },
+  "after": []
+ },
+ {
+  "call": "scoring.apply_aa_scores",
+  "args": [
+   {
+    "cli:codex": {
+     "id": "cli:codex",
+     "provider": "openai",
+     "display_name": "Codex CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897072Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897081Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:claude": {
+     "id": "cli:claude",
+     "provider": "anthropic",
+     "display_name": "Claude Code CLI (membership)",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897091Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897092Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:gemini": {
+     "id": "cli:gemini",
+     "provider": "google",
+     "display_name": "Gemini CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897096Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897097Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:qwen": {
+     "id": "cli:qwen",
+     "provider": "qwen",
+     "display_name": "Qwen Code CLI (membership)",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897104Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897105Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-sol": {
+     "id": "openai:gpt-5.6-sol",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Sol",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 4.0,
+     "output_per_million": 20.0,
+     "cached_input_per_million": 0.4,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897109Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897110Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-terra": {
+     "id": "openai:gpt-5.6-terra",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Terra",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": 0.2,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897112Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897113Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-luna": {
+     "id": "openai:gpt-5.6-luna",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Luna",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 0.2,
+     "output_per_million": 1.2,
+     "cached_input_per_million": 0.02,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897116Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897117Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "anthropic:claude-sonnet-5": {
+     "id": "anthropic:claude-sonnet-5",
+     "provider": "anthropic",
+     "display_name": "Claude Sonnet 5",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "artificial_analysis",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897120Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897121Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "google:gemini-pro": {
+     "id": "google:gemini-pro",
+     "provider": "google",
+     "display_name": "Gemini Pro",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897123Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897124Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-chat": {
+     "id": "deepseek:deepseek-chat",
+     "provider": "deepseek",
+     "display_name": "DeepSeek Chat",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.3,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897127Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897128Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "qwen:qwen-plus": {
+     "id": "qwen:qwen-plus",
+     "provider": "qwen",
+     "display_name": "Qwen Plus",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897135Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897136Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "doubao:doubao-pro": {
+     "id": "doubao:doubao-pro",
+     "provider": "doubao",
+     "display_name": "Doubao Pro",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897138Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897140Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "glm:glm-5.2": {
+     "id": "glm:glm-5.2",
+     "provider": "glm",
+     "display_name": "GLM-5.2",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://docs.bigmodel.cn/cn/api/introduction",
+     "effective_at": "2026-11-20T08:50:18.897142Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897143Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "minimax:MiniMax-M2.7": {
+     "id": "minimax:MiniMax-M2.7",
+     "provider": "minimax",
+     "display_name": "MiniMax M2.7",
+     "enabled": true,
+     "context_window": 204800,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.minimax.io/docs/api-reference/api-overview",
+     "effective_at": "2026-11-20T08:50:18.897148Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897149Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "kimi:kimi-k3": {
+     "id": "kimi:kimi-k3",
+     "provider": "kimi",
+     "display_name": "Kimi K3",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.kimi.com/docs/api/overview",
+     "effective_at": "2026-11-20T08:50:18.897152Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897153Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "mock:local": {
+     "id": "mock:local",
+     "provider": "mock",
+     "display_name": "Local Demo Model",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.01,
+     "output_per_million": 0.02,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 80.0,
+      "planning": 80.0,
+      "research": 80.0,
+      "chinese": 80.0,
+      "tool_use": 80.0,
+      "structured_output": 80.0,
+      "reliability": 80.0
+     },
+     "scores_source": "demo",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897168Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 1000,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897169Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-flash": {
+     "id": "deepseek:deepseek-flash",
+     "provider": "deepseek",
+     "display_name": "Flash",
+     "enabled": true,
+     "context_window": null,
+     "max_output_tokens": null,
+     "input_per_million": null,
+     "output_per_million": null,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897236Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897238Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    }
+   },
+   {
+    "openai:gpt-5.6-sol": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 21.158
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 67.6
+       },
+       {
+        "key": "aa_hle",
+        "value": 60.3
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 74.5
+       },
+       {
+        "key": "aa_lcr",
+        "value": 50.0
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 17.0
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 28.059
+       }
+      ]
+     },
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 53.9
+       },
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 68.343
+       },
+       {
+        "key": "aa_scicode",
+        "value": 50.955
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 34.0
+       },
+       {
+        "key": "aa_hle",
+        "value": 79.369
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 58.9
+       },
+       {
+        "key": "aa_lcr",
+        "value": 73.329
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 54.308
+       }
+      ]
+     }
+    ],
+    "openai:gpt-5.6-terra": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "aa_scicode",
+        "value": 76.4
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 28.436
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 32.0
+       },
+       {
+        "key": "aa_lcr",
+        "value": 36.4
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 37.034
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 17.18
+       }
+      ]
+     }
+    ],
+    "anthropic:claude-sonnet-5": [
+     {
+      "source": "other",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 26.0
+       },
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 78.0
+       },
+       {
+        "key": "aa_scicode",
+        "value": 13.155
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 23.9
+       },
+       {
+        "key": "aa_hle",
+        "value": 10.92
+       },
+       {
+        "key": "aa_lcr",
+        "value": 27.0
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 38.963
+       }
+      ]
+     }
+    ],
+    "deepseek:deepseek-flash": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 50
+       }
+      ]
+     }
+    ],
+    "google:gemini-pro": [
+     {
+      "source": "other",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 43.691
+       },
+       {
+        "key": "aa_scicode",
+        "value": 65.0
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 26.0
+       },
+       {
+        "key": "aa_hle",
+        "value": 64.0
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 70.0
+       },
+       {
+        "key": "aa_lcr",
+        "value": 64.0
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 59.0
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 28.0
+       }
+      ]
+     }
+    ],
+    "mock:local": [
+     {
+      "source": "artificial_analysis",
+      "metrics": [
+       {
+        "key": "artificial_analysis_intelligence_index",
+        "value": 54.4
+       },
+       {
+        "key": "artificial_analysis_coding_index",
+        "value": 31.1
+       },
+       {
+        "key": "aa_scicode",
+        "value": 48.0
+       },
+       {
+        "key": "aa_terminalbench_4",
+        "value": 79.1
+       },
+       {
+        "key": "aa_knowledge_accuracy",
+        "value": 54.0
+       },
+       {
+        "key": "aa_lcr",
+        "value": 33.3
+       },
+       {
+        "key": "artificial_analysis_agentic_index",
+        "value": 34.68
+       },
+       {
+        "key": "aa_non_hallucination",
+        "value": 44.265
+       }
+      ]
+     }
+    ]
+   },
+   [
+    {
+     "source": "other",
+     "metrics": [
+      {
+       "key": "artificial_analysis_intelligence_index",
+       "value": 48.1
+      },
+      {
+       "key": "artificial_analysis_coding_index",
+       "value": 43.184
+      },
+      {
+       "key": "aa_hle",
+       "value": 28.0
+      },
+      {
+       "key": "aa_knowledge_accuracy",
+       "value": 60.2
+      },
+      {
+       "key": "aa_lcr",
+       "value": 43.345
+      },
+      {
+       "key": "artificial_analysis_agentic_index",
+       "value": 26.0
+      },
+      {
+       "key": "aa_non_hallucination",
+       "value": 46.623
+      }
+     ]
+    }
+   ]
+  ],
+  "kwargs": {},
+  "result": {
+   "changed": [],
+   "models": {
+    "cli:codex": {
+     "id": "cli:codex",
+     "provider": "openai",
+     "display_name": "Codex CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897072Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897081Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:claude": {
+     "id": "cli:claude",
+     "provider": "anthropic",
+     "display_name": "Claude Code CLI (membership)",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897091Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897092Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:gemini": {
+     "id": "cli:gemini",
+     "provider": "google",
+     "display_name": "Gemini CLI (membership)",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897096Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897097Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "cli:qwen": {
+     "id": "cli:qwen",
+     "provider": "qwen",
+     "display_name": "Qwen Code CLI (membership)",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.0,
+     "output_per_million": 0.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897104Z",
+     "pricing_verified": true,
+     "channel": "cli",
+     "execution_priority": 0,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897105Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-sol": {
+     "id": "openai:gpt-5.6-sol",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Sol",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 4.0,
+     "output_per_million": 20.0,
+     "cached_input_per_million": 0.4,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897109Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897110Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-terra": {
+     "id": "openai:gpt-5.6-terra",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Terra",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": 0.2,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897112Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897113Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "openai:gpt-5.6-luna": {
+     "id": "openai:gpt-5.6-luna",
+     "provider": "openai",
+     "display_name": "GPT-5.6 Luna",
+     "enabled": true,
+     "context_window": 1050000,
+     "max_output_tokens": null,
+     "input_per_million": 0.2,
+     "output_per_million": 1.2,
+     "cached_input_per_million": 0.02,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://developers.openai.com/api/docs/models",
+     "effective_at": "2026-11-20T08:50:18.897116Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897117Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "anthropic:claude-sonnet-5": {
+     "id": "anthropic:claude-sonnet-5",
+     "provider": "anthropic",
+     "display_name": "Claude Sonnet 5",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "artificial_analysis",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897120Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897121Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "google:gemini-pro": {
+     "id": "google:gemini-pro",
+     "provider": "google",
+     "display_name": "Gemini Pro",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 2.0,
+     "output_per_million": 12.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897123Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897124Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-chat": {
+     "id": "deepseek:deepseek-chat",
+     "provider": "deepseek",
+     "display_name": "DeepSeek Chat",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.3,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897127Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897128Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "qwen:qwen-plus": {
+     "id": "qwen:qwen-plus",
+     "provider": "qwen",
+     "display_name": "Qwen Plus",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897135Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897136Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "doubao:doubao-pro": {
+     "id": "doubao:doubao-pro",
+     "provider": "doubao",
+     "display_name": "Doubao Pro",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.4,
+     "output_per_million": 1.2,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897138Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897140Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "glm:glm-5.2": {
+     "id": "glm:glm-5.2",
+     "provider": "glm",
+     "display_name": "GLM-5.2",
+     "enabled": true,
+     "context_window": 200000,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://docs.bigmodel.cn/cn/api/introduction",
+     "effective_at": "2026-11-20T08:50:18.897142Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897143Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "minimax:MiniMax-M2.7": {
+     "id": "minimax:MiniMax-M2.7",
+     "provider": "minimax",
+     "display_name": "MiniMax M2.7",
+     "enabled": true,
+     "context_window": 204800,
+     "max_output_tokens": null,
+     "input_per_million": 1.0,
+     "output_per_million": 4.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": false,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.minimax.io/docs/api-reference/api-overview",
+     "effective_at": "2026-11-20T08:50:18.897148Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897149Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "kimi:kimi-k3": {
+     "id": "kimi:kimi-k3",
+     "provider": "kimi",
+     "display_name": "Kimi K3",
+     "enabled": true,
+     "context_window": 1000000,
+     "max_output_tokens": null,
+     "input_per_million": 3.0,
+     "output_per_million": 15.0,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": true,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": "https://platform.kimi.com/docs/api/overview",
+     "effective_at": "2026-11-20T08:50:18.897152Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897153Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "mock:local": {
+     "id": "mock:local",
+     "provider": "mock",
+     "display_name": "Local Demo Model",
+     "enabled": true,
+     "context_window": 128000,
+     "max_output_tokens": null,
+     "input_per_million": 0.01,
+     "output_per_million": 0.02,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": {
+      "coding": 80.0,
+      "planning": 80.0,
+      "research": 80.0,
+      "chinese": 80.0,
+      "tool_use": 80.0,
+      "structured_output": 80.0,
+      "reliability": 80.0
+     },
+     "scores_source": "demo",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897168Z",
+     "pricing_verified": true,
+     "channel": "api",
+     "execution_priority": 1000,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897169Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    },
+    "deepseek:deepseek-flash": {
+     "id": "deepseek:deepseek-flash",
+     "provider": "deepseek",
+     "display_name": "Flash",
+     "enabled": true,
+     "context_window": null,
+     "max_output_tokens": null,
+     "input_per_million": null,
+     "output_per_million": null,
+     "cached_input_per_million": null,
+     "supports_tools": null,
+     "supports_vision": null,
+     "supports_reasoning": null,
+     "supports_structured_output": null,
+     "scores": null,
+     "scores_source": "none",
+     "scores_basis": null,
+     "source_url": null,
+     "effective_at": "2026-11-20T08:50:18.897236Z",
+     "pricing_verified": false,
+     "channel": "api",
+     "execution_priority": 100,
+     "usage_note": null,
+     "description": null,
+     "release_date": null,
+     "catalog_source": "builtin",
+     "catalog_status": "listed",
+     "catalog_checked_at": null,
+     "discovered_at": "2026-11-20T08:50:18.897238Z",
+     "pricing_source": "builtin",
+     "available_via_api": null,
+     "api_checked_at": null
+    }
+   }
+  },
+  "after": []
+ }
+]

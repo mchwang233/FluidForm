@@ -1,0 +1,92 @@
+[
+ {
+  "call": "folders.slug",
+  "args": [
+   null
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": [
+   null
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   ""
+  ],
+  "kwargs": {},
+  "result": "task",
+  "after": [
+   ""
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   "写一个异步 FIFO"
+  ],
+  "kwargs": {},
+  "result": "fifo",
+  "after": [
+   "写一个异步 FIFO"
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   "Async FIFO with UVM testbench and coverage closure please now"
+  ],
+  "kwargs": {},
+  "result": "async-fifo-with-uvm-testbench-and",
+  "after": [
+   "Async FIFO with UVM testbench and coverage closure please now"
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "kwargs": {},
+  "result": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "after": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   "--x--"
+  ],
+  "kwargs": {},
+  "result": "x",
+  "after": [
+   "--x--"
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   "Ünïcödé café 2 go"
+  ],
+  "kwargs": {},
+  "result": "n-c-d-caf-2-go",
+  "after": [
+   "Ünïcödé café 2 go"
+  ]
+ },
+ {
+  "call": "folders.slug",
+  "args": [
+   "中文",
+   "model"
+  ],
+  "kwargs": {},
+  "result": "model",
+  "after": [
+   "中文",
+   "model"
+  ]
+ }
+]

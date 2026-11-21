@@ -15,7 +15,7 @@ export type Capability = CapabilityCard & {
   source?: "task" | "upload"; version?: string; entry?: string;
 };
 export type CapabilityProposal = CapabilityCard & { status: "proposed" | "solidified" | "dismissed"; capability_id?: string | null };
-/** An uploaded package's secrets stored, and an automation's state (capability_runner.py). */
+/** An uploaded package's secrets stored, and an automation's state (server: capability-runner.ts). */
 type Runtime = {
   secrets: Record<string, boolean>; status?: string; text?: string; error?: string; log?: string[];
   daily_budget_usd?: number; spent_today_usd?: number; handled?: number; conversations?: number;

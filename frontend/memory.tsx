@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-// What chats remember about the people they talk with (remembering.py), by where it was said, and
+// What chats remember about the people they talk with (server: remembering.ts), by where it was said, and
 // how FluidForm works (config.PROFILES), picked in the 设置 menu.
 
 type Place = { key: string; label: string; facts: string[] };

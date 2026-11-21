@@ -1,8 +1,10 @@
-FROM python:3.12-slim
+FROM node:22-slim
 WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY backend ./backend
-RUN pip install --no-cache-dir .
+COPY server/package.json server/package-lock.json ./server/
+RUN npm ci --prefix server
+COPY server/tsconfig.json ./server/
+COPY server/src ./server/src
+COPY skills ./skills
+RUN npm run --prefix server build && npm prune --omit=dev --prefix server
 EXPOSE 8000
-CMD ["uvicorn", "super_partner.api:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["node", "--disable-warning=ExperimentalWarning", "server/dist/main.js", "--host", "0.0.0.0", "--port", "8000"]

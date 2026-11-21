@@ -3,7 +3,7 @@ import type { Model } from "./model-profiles";
 import { formatUsd, nodeStatusLabel } from "./mission-history";
 import { ModelCapabilityDialog, NodeProgress, PlanGraph, DONE_LINE, nodeLine, planStages, useLinks, type PlanNode } from "./plan-graph";
 
-/** A part of a plan made top-down (backend outline.py): 大项 at the top, then smaller parts, then tasks. */
+/** A part of a plan made top-down (older plans): 大项 at the top, then smaller parts, then tasks. */
 export type PlanPart = { employee_id?: string | null; id: string; title: string; goal?: string; acceptance?: string; parent_id?: string | null; dependencies?: string[];
   provides?: string; size?: number; status?: string; error?: string | null; difficulty?: string;
   refinement_effort?: string; refinement_reason?: string };

@@ -16,8 +16,8 @@ Super Partner gives it to the platform engineer for every component it plans or 
 - Every component comes with tests that fail without it and pass with it.
 - Build on what exists: find the owning module in `docs/ARCHITECTURE.md` and extend it.
 - The product is called FluidForm. Every word a user sees (UI text, replies, errors, reports)
-  and every prompt given to a model says FluidForm. "Super Partner" stays only in the package,
-  the `super-partner` command, `SUPER_PARTNER_` settings and code identifiers.
+  and every prompt given to a model says FluidForm. "Super Partner" stays only in the package
+  names, `SUPER_PARTNER_` settings and code identifiers.
 - The job has a budget and the user is waiting: work economically (see Building, step 4).
 
 ## Planning (nothing is edited yet)
@@ -25,11 +25,12 @@ Super Partner gives it to the platform engineer for every component it plans or 
 1. Read `docs/ARCHITECTURE.md`. Search (`grep -n`) for the names involved and read only those
    line ranges, not whole large files.
 2. Find the closest existing example and follow it:
-   - a model or channel: `catalog.py` (models), `providers.py` (API), `cli_channels.py` (`CLI_SPECS`);
-   - a tool for API models: `agent.py` (`Workspace`, its tool list and sandbox);
+   - a model or channel: `server/src/catalog.ts` (models), `providers.ts` (API), `cli-channels.ts` (`CLI_SPECS`);
+   - a tool for API models: `agent.ts` (`Workspace`, its tool list and sandbox);
    - a skill: a folder under `skills/` with a `SKILL.md`;
    - a web UI feature: the component in `frontend/` named in the map, styles in `style.css`;
-   - scheduling, steps, checks: `executor.py`, `review.py`, `quality.py`, `planner.py`.
+   - scheduling, steps, checks: `executor.ts` (and the class chain before it), `review.ts`, `quality.ts`, `planner.ts`;
+   - an API route: `app.ts`, with what routes share in `api.ts`.
 3. Write the plan the user approves: 目标, 改动 (each file), 测试, 风险. A web UI change names the
    existing piece of UI it follows (see Web UI below). Keep it small enough to
    build and check in one go, within the job's budget: about five files and one layer's worth
@@ -49,9 +50,10 @@ Super Partner gives it to the platform engineer for every component it plans or 
    with `state.poll()` (the first) or `state.pollAll()` (all); waiting for time does nothing.
 3. Prefer one place for a decision over the same check in several modules, and an existing helper
    over a new parameter threaded through every layer.
-4. Check only what you changed: `python -m pytest -q tests/<area>.py` (and the frontend test
-   file's matching tests, with `node --test --test-name-pattern=...`, if you changed the UI).
-   Do not run the whole backend suite or the frontend build: after you report, FluidForm runs
+4. Check only what you changed: `cd server && npm run check` (types) and the test file,
+   `node --import tsx --import ./tests/helpers/tmp.ts --test tests/<area>.test.ts` (and the
+   frontend test file's matching tests, with `node --test --test-name-pattern=...`, if you changed
+   the UI). Do not run the whole server suite or the frontend build: after you report, FluidForm runs
    every check itself in a clean sandbox, and if one fails it gives you the output to fix. A
    failure that also happens without your change (your own sandbox's limits: no network, no
    bwrap inside it) is named in the report, not chased.
