@@ -40,9 +40,10 @@ description: FluidForm 的飞书机器人：私聊或群里 @ 它，问题直接
 
 ## 检查
 
-`python bot.py --check`：SDK 装好，消息的文字和图片文件取得对、连发的话按人合并、回复里的 @ 对；不联网。
+`python bot.py --check`：SDK 装好，消息的文字和图片文件取得对、连发的话按人合并、回复里的 @ 对、FluidForm 的回答回到处理消息的那个循环；不联网。
 
 ## 需要
 
+- FluidForm 的**聊天能力**（`requires: ["chat"]`）：怎么回答由它决定。没有启用「聊天」时，这个包不能启用。
 - 密钥 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`
 - 访问 `*.feishu.cn`、`*.larksuite.com`

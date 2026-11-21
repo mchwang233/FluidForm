@@ -2,11 +2,14 @@
 
 Feishu's side is Feishu's own channel SDK (lark-channel-sdk, by Lark Technologies: the long
 connection, messages read as text and resources, duplicates dropped, replies, streaming cards,
-the "typing" reaction, pictures and files, group members, "@name" made a real @). What is left
-here is FluidForm's side: for each message it answers it asks FluidForm over stdin/stdout (JSON
-lines): ``{"op": "message", ...}`` out, ``{"re": ..., "reply": ...}`` back. When a task it asked
-for ends, FluidForm sends ``{"event": "task_ended", ...}`` and the result is replied under the
-message.
+the "typing" reaction, pictures and files, group members, "@name" made a real @), used as its
+own samples use it: a message is handled where the SDK calls ``on_message`` (its own event loop),
+and everything sent to Feishu for that message is sent from there; from elsewhere only through
+``channel.schedule``. What is left here is FluidForm's side: for each message it answers it asks
+FluidForm over stdin/stdout (JSON lines): ``{"op": "message", ...}`` out, ``{"re": ..., "reply":
+...}`` back, the answer as it is written as ``{"progress": ...}``. When a task it asked for ends,
+FluidForm sends ``{"event": "task_ended", ...}`` and the result is replied under the message.
+How to chat is FluidForm's chat capability (``requires: ["chat"]``).
 
 The only way out of the sandbox is the proxy in HTTPS_PROXY, which reaches only the hosts in
 capability.json. Its data folder (SP_DATA_DIR) keeps the pictures and files of a message while
@@ -174,11 +177,12 @@ def roster(members, aliases: dict) -> dict:
 
 
 class Host:
-    """FluidForm, over stdin and stdout."""
+    """FluidForm, over stdin and stdout. A message's answer, and what is heard of it as it is
+    written, come back on the event loop that asked (the SDK's, where the message is handled)."""
 
     def __init__(self, on_event):
         self.on_event = on_event
-        self.pending: dict[str, list] = {}
+        self.pending: dict = {}
         self.lock = threading.Lock()
 
     def send(self, payload: dict) -> None:
@@ -189,13 +193,14 @@ class Host:
     def status(self, text: str) -> None:
         self.send({"op": "status", "text": text})
 
-    def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
-            heard=None, addressed: bool = True, sender: str = "", people=()) -> tuple[Optional[str], list]:
+    async def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
+                  heard=None, addressed: bool = True, sender: str = "", people=()) -> tuple[Optional[str], list]:
         """FluidForm's answer, and the files to send with it (paths in the data folder); ``heard``
-        hears the answer as it is being written ({"progress": ...}); ``people``: the names of the
-        group's people, so the answer can @ them."""
-        request, done = uuid.uuid4().hex, threading.Event()
-        self.pending[request] = [done, None, heard, []]
+        hears the answer as it is being written; ``people``: the names of the group's people, so
+        the answer can @ them."""
+        loop = asyncio.get_running_loop()
+        request, answered = uuid.uuid4().hex, loop.create_future()
+        self.pending[request] = (loop, answered, heard)
         message = {"op": "message", "id": request, "conversation": conversation, "text": text, "origin": origin}
         if attachments:
             message["attachments"] = list(attachments)
@@ -206,24 +211,29 @@ class Host:
         if people:
             message["people"] = list(people)
         self.send(message)
-        done.wait(REPLY_WAIT)
-        _, answer, _, files = self.pending.pop(request, [None, None, None, []])
-        return answer, files
+        try:
+            return await asyncio.wait_for(answered, REPLY_WAIT)
+        except asyncio.TimeoutError:
+            return None, []
+        finally:
+            self.pending.pop(request, None)
 
     def listen(self) -> None:
+        """Reads FluidForm (its own thread); hands each answer to the loop that asked for it."""
         for line in sys.stdin:
             try:
                 payload = json.loads(line)
             except ValueError:
                 continue
             if "re" in payload and payload["re"] in self.pending:
-                waiting = self.pending[payload["re"]]
-                waiting[1] = payload.get("reply")
-                waiting[3] = [str(item) for item in payload.get("files") or [] if isinstance(item, str)]
-                waiting[0].set()
+                loop, answered, _ = self.pending[payload["re"]]
+                files = [str(item) for item in payload.get("files") or [] if isinstance(item, str)]
+                result = (payload.get("reply"), files)
+                loop.call_soon_threadsafe(lambda: answered.done() or answered.set_result(result))
             elif "progress" in payload and payload["progress"] in self.pending:
-                if heard := self.pending[payload["progress"]][2]:
-                    heard(str(payload.get("text") or ""))
+                loop, _, heard = self.pending[payload["progress"]]
+                if heard:
+                    loop.call_soon_threadsafe(heard, str(payload.get("text") or ""))
             elif payload.get("event") == "task_ended":
                 self.on_event(payload)
         os._exit(0)  # FluidForm has gone
@@ -243,13 +253,15 @@ class StatusLog(logging.Handler):
 
 class Reply:
     """An answer as it is written: one streaming card (the SDK's CardKit typewriter) that each
-    piece rewrites, finished with the whole answer. ``finish`` returns False when no card could be
-    made, so the answer is sent as a plain message instead."""
+    piece rewrites, finished with the whole answer. ``finish`` says whether the person got an
+    answer from it: False only when the card never reached the chat, so it is sent as a message
+    instead; a card that is there stays the one answer."""
 
     def __init__(self, channel, chat_id: str, message_id: str, mark):
         self.channel, self.chat_id, self.message_id, self.mark = channel, chat_id, message_id, mark
         self.queue: asyncio.Queue = asyncio.Queue()
         self.task: Optional[asyncio.Task] = None
+        self.sent = ""  # the card's message, once it is in the chat
 
     def heard(self, text: str) -> None:
         if self.task is None:
@@ -260,6 +272,7 @@ class Reply:
         async def producer(stream) -> None:
             while (text := await self.queue.get()) is not None:
                 await stream.set_content(card_mentions(self.mark(cut(text))))
+                self.sent = self.sent or stream.message_id
         await self.channel.stream(self.chat_id, {"markdown": producer}, {"reply_to": self.message_id})
 
     async def finish(self, text: str) -> bool:
@@ -269,8 +282,8 @@ class Reply:
             await self.task
             return True
         except Exception as exc:
-            print(f"飞书卡片回复失败：{exc}", file=sys.stderr, flush=True)
-            return False
+            print(f"飞书卡片回复失败（{type(exc).__name__}）：{str(exc)[:300]}", file=sys.stderr, flush=True)
+        return bool(self.sent)
 
 
 def main() -> None:
@@ -298,7 +311,6 @@ def main() -> None:
     channel = FeishuChannel(config=config)
     aliases = Aliases(data)
     started = time.time()
-    loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def people(chat_id: str) -> dict:
         """Who is in a group, name -> open_id (the SDK caches it)."""
@@ -371,10 +383,8 @@ def main() -> None:
         try:
             reply = Reply(channel, chat_id, piece.message_id, mark)
             origin = {"message_id": piece.message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
-            heard = lambda text: loop.call_soon_threadsafe(reply.heard, text)  # noqa: E731
-            result, files = await asyncio.to_thread(
-                host.ask, chat_id, piece.text, origin, tuple(names), heard, piece.addressed, sender,
-                sorted(name for name in known if name not in EVERYONE and not re.fullmatch(r"成员\d+", name)))
+            result, files = await host.ask(chat_id, piece.text, origin, tuple(names), reply.heard, piece.addressed, sender,
+                                           sorted(name for name in known if name not in EVERYONE and not re.fullmatch(r"成员\d+", name)))
             if result and not await reply.finish(result):
                 await send_text(chat_id, piece.message_id, result, mark)
             elif not result and piece.addressed and not await reply.finish("（没有回答）"):
@@ -409,10 +419,10 @@ def main() -> None:
                    Piece(msg.message_id, text, resources, addressed))
 
     def task_ended(payload: dict) -> None:
+        """From the thread reading FluidForm: replied on the SDK's loop (channel.schedule)."""
         origin = payload.get("origin") or {}
-        if origin.get("message_id") and origin.get("chat_id") and loop:
-            asyncio.run_coroutine_threadsafe(
-                send_text(origin["chat_id"], origin["message_id"], str(payload.get("text") or "")), loop)
+        if origin.get("message_id") and origin.get("chat_id"):
+            channel.schedule(send_text(origin["chat_id"], origin["message_id"], str(payload.get("text") or "")))
 
     host = Host(task_ended)
     channel.on("message", on_message)
@@ -421,8 +431,6 @@ def main() -> None:
     logging.getLogger("Lark").addHandler(StatusLog(host))
 
     async def run() -> None:
-        nonlocal loop
-        loop = asyncio.get_running_loop()
         threading.Thread(target=host.listen, name="host", daemon=True).start()
         host.status("正在连接飞书…")
         await channel.start_background(timeout=60)
@@ -473,6 +481,43 @@ def check() -> None:
         await asyncio.sleep(0.3)
         return handed
     assert sorted(asyncio.run(gathering())) == [(("chat", "u1"), ["那个", "我想问下", "这是什么猫"]), (("chat", "u2"), ["你好"])]
+    # The streaming card.
+    class Channel:
+        def __init__(self, fail):
+            self.fail, self.calls = fail, []
+
+        async def stream(self, chat_id, spec, opts):
+            class Stream:
+                message_id = "om_card"
+
+                async def set_content(inner, text):
+                    self.calls.append(("card", text))
+            await spec["markdown"](Stream())
+            if self.fail:
+                raise RuntimeError("update_card_element_content failed")
+
+    async def replying(fail: bool):
+        channel = Channel(fail)
+        reply = Reply(channel, "oc_1", "om_q", lambda text: text)
+        reply.heard("WAL")
+        return await reply.finish("WAL 是预写日志。"), channel.calls
+    assert asyncio.run(replying(False)) == (True, [("card", "WAL"), ("card", "WAL 是预写日志。")])
+    # A card that is in the chat is the answer, even if its last update failed: never sent twice.
+    assert asyncio.run(replying(True)) == (True, [("card", "WAL"), ("card", "WAL 是预写日志。")])
+
+    # FluidForm's answer and what is heard of it come back on the loop that asked, from its thread.
+    async def asking():
+        heard, host = [], Host(lambda payload: None)
+        host.send = lambda payload: threading.Thread(target=answer_from_fluidform, args=(host, payload["id"])).start()
+        result = await host.ask("oc_1", "你好", {}, heard=lambda text: heard.append((text, asyncio.get_running_loop())))
+        return result, heard, asyncio.get_running_loop()
+
+    def answer_from_fluidform(host, request):
+        loop, answered, heard = host.pending[request]
+        loop.call_soon_threadsafe(heard, "你")
+        loop.call_soon_threadsafe(lambda: answered.set_result(("你好！", ["outbox/a.png"])))
+    result, heard, loop = asyncio.run(asking())
+    assert result == ("你好！", ["outbox/a.png"]) and heard == [("你", loop)]
     # Files: their own names, pictures known by their bytes, names made safe.
     assert sent_name("0a1b2c3d-猫.png") == "猫.png" and sent_name("cat.png") == "cat.png"
     assert picture(b"\x89PNG\r\n\x1a\n" + b"\0" * 8) and not picture(b"%PDF-1.7")
