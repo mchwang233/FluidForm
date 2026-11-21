@@ -22,7 +22,8 @@ import { formatG, fixed, head, pyDumps, pyIsoformat, pyRound } from "./py.js";
 import * as quality from "./quality.js";
 import { ModelUnavailable } from "./quota.js";
 import { turnsFor } from "./recovery.js";
-import { canAct, eligibleForNode, NoEligibleModelError, nodeCost, reestimate, routeNode, spreadTo } from "./routing.js";
+import { canAct, eligibleForNode, NoEligibleModelError, nodeCost, routeNode, spreadTo, costsFor } from "./routing.js";
+import * as pricing from "./pricing.js";
 import { collect } from "./routing-feedback.js";
 import * as scopes from "./scopes.js";
 import { currentTask, first, isCancelled, Task } from "./tasks.js";
@@ -133,7 +134,7 @@ export class Executor extends Preflighting {
             if (this.platformPending) {
               this.holdForPlatform(run);
               if (!running.size) return;
-            } else heldBack = this.dispatch(run, running);
+            } else heldBack = await this.dispatch(run, running);
             if (!running.size) {
               if (heldBack) {
                 this.pauseForBudget(run);
@@ -217,7 +218,7 @@ export class Executor extends Preflighting {
   }
 
   /** Start ready steps up to the parallel limit; true if the budget held any back. */
-  dispatch(run: ExecutionRun, running: Map<Task<void>, string>): boolean {
+  async dispatch(run: ExecutionRun, running: Map<Task<void>, string>): Promise<boolean> {
     const inFlight = new Set(running.values());
     // Steps at work, including those started early (headStart).
     const started = new Set([...inFlight].map((item) => (item.startsWith(HEAD) ? item.slice(HEAD.length) : item)));
@@ -241,7 +242,7 @@ export class Executor extends Preflighting {
       return Boolean(limit) && running.size >= limit;
     };
     for (const node of ready) {
-      if (node.status !== "pending" || !this.admitToolChannel(run, node, reserved)) continue;
+      if (node.status !== "pending" || !(await this.admitToolChannel(run, node, reserved))) continue;
       const model = node.model_id ? this.modelLookup[node.model_id] : undefined;
       if (atCapacity(model)) continue;
       if (node.estimated_cost_usd && reserved + node.estimated_cost_usd > run.budget_usd) {
@@ -338,7 +339,7 @@ export class Executor extends Preflighting {
   }
 
   /** Fail closed before starting work; replacements use ordinary routing and permissions. */
-  admitToolChannel(run: ExecutionRun, node: TaskNode, given: number | null = null, previousModelId: string | null = null): boolean {
+  async admitToolChannel(run: ExecutionRun, node: TaskNode, given: number | null = null, previousModelId: string | null = null): Promise<boolean> {
     const limits = team.governors(run.plan, node);
     try {
       for (const upstream of run.plan.nodes) if (node.dependencies.includes(upstream.id)) contracts.accepted(run, upstream);
@@ -361,11 +362,12 @@ export class Executor extends Preflighting {
     const stepLeft = Math.min(...limits.map((n) => n.artifact_contract!.max_cost_usd - n.contract_cost_usd));
     const channels: Json[] = [];
     const candidates: ModelProfile[] = [];
+    const costs = await costsFor(node, Object.values(this.modelLookup).filter((model) => eligible.has(model.id)));
     for (const model of Object.values(this.modelLookup)) {
       const declared = this.providers.toolLimitCapabilities ? this.providers.toolLimitCapabilities(model.id) : {};
       // Membership CLIs cannot count tool calls; they are bounded by time instead (timedWatch).
       const compatible = canAct(model) && (model.id.startsWith("cli:") || Object.entries(TOOL_LIMIT_REQUIREMENTS).every(([k, v]) => declared[k] === v));
-      const cost = eligible.has(model.id) ? nodeCost(node, model) : null;
+      const cost = eligible.has(model.id) ? costs[model.id] ?? 0 : null;
       const affordable = cost !== null && reserved + cost <= run.budget_usd && cost <= stepLeft;
       channels.push({ model_id: model.id, declared_capabilities: declared, authorized: configured.has(model.id), eligible: eligible.has(model.id), compatible, affordable });
       const retained = model.id === node.model_id && (previousModelId === null || previousModelId === model.id);
@@ -375,7 +377,7 @@ export class Executor extends Preflighting {
     if (candidates.length && !reason) {
       if (!candidates.some((model) => model.id === node.model_id)) {
         const previous = node.model_id;
-        routeNode(node, candidates, configured, this.needsVision(run));
+        await routeNode(node, candidates, configured, this.needsVision(run));
         this.save(run);
         this.emit(run.id, "node.model_switched", { node_id: node.id, model_id: previous, next_model_id: node.model_id, reason: "tool_limit_compatibility" });
       }
@@ -396,7 +398,7 @@ export class Executor extends Preflighting {
   }
 
   async executeNode(runId: string, nodeId: string): Promise<void> {
-    const begun = await this.locked(runId, () => {
+    const begun = await this.locked(runId, async () => {
       const run = this.db.getRun(runId);
       if (!run) return null;
       const node = run.plan.nodes.find((item) => item.id === nodeId)!;
@@ -409,11 +411,11 @@ export class Executor extends Preflighting {
       const admitted = node.model_id;
       if (!this.outOfQuota(node.model_id)) {
         try {
-          this.refreshModel(run, node);
+          await this.refreshModel(run, node);
         } catch (error) {
           if (!(error instanceof NoEligibleModelError)) throw error;
           if (team.governors(run.plan, node).length) {
-            if (!this.admitToolChannel(run, node)) return null;
+            if (!(await this.admitToolChannel(run, node))) return null;
           } else {
             run.status = "paused";
             run.error = error.message;
@@ -422,10 +424,10 @@ export class Executor extends Preflighting {
             return null;
           }
         }
-        this.spread(run, node);
+        await this.spread(run, node);
       }
       // Refreshing, spreading and concurrent work may have changed the final channel or limits.
-      if (!this.admitToolChannel(run, node, null, admitted)) return null;
+      if (!(await this.admitToolChannel(run, node, null, admitted))) return null;
       if (!this.outOfQuota(node.model_id) && node.estimated_cost_usd && run.actual_cost_usd + node.estimated_cost_usd > run.budget_usd) {
         this.pauseForBudget(run);
         return null;
@@ -450,7 +452,7 @@ export class Executor extends Preflighting {
       [prompt, inputs] = quality.nodePrompt(node, run, settings.handoff_max_chars) as [string, Json[]];
       // Routed before its model ran out (at planning, or before a pause).
       if (this.outOfQuota(node.model_id)) throw this.providers.quota!.error(node.model_id!);
-      const [result, changed, cost, workspace] = await this.work(run, node, node.model_id || "mock:local", prompt, this.fallbackAllowed(run, node),
+      const [result, changed, cost, workspace] = await this.work(run, node, node.model_id || "mock:local", prompt, await this.fallbackAllowed(run, node),
         this.conversation(run, node), false, self?.signal);
       workAccounted = result.accounted_cost_usd;
       const intruded = this.intrusions.get(key);
@@ -512,7 +514,7 @@ export class Executor extends Preflighting {
 
   /** Commit the child graph and the parent's yielded attempt in one saved run. */
   async delegateResult(runId: string, nodeId: string, payload: Json, result: ProviderResult, inputs: Json[], changed: string[], cost: number, generation: number): Promise<void> {
-    const emitted = await this.locked(runId, () => {
+    const emitted = await this.locked(runId, async () => {
       const run = this.db.getRun(runId);
       if (!run) return null;
       let node = run.plan.nodes.find((n) => n.id === nodeId)!;
@@ -529,7 +531,7 @@ export class Executor extends Preflighting {
         if (existing.length && existing.every((n) => n.status === "succeeded")) {
           throw Object.assign(new Error("该委派已完成，请使用已有子任务结果继续原任务，不要再次委派。"), { name: "ValueError" });
         }
-        children = delegate(run, node, payload, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
+        children = await delegate(run, node, payload, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
         node = run.plan.nodes.find((n) => n.id === nodeId)!;
         node.status = "pending";
         node.review_passed = null;
@@ -542,7 +544,7 @@ export class Executor extends Preflighting {
       node.attempts.push(NodeAttemptSchema.parse({ model_id: result.used_model_id || node.model_id, outcome,
         reason: children.length ? node.review : "任务已停止或上游变化，未发布子任务。", cost_usd: cost, ...this.takeLog(runId, nodeId, result as unknown as Json) }));
       run.actual_cost_usd = pyRound(run.actual_cost_usd + Math.max(0, cost - result.accounted_cost_usd), 6);
-      reestimate(run);
+      await pricing.reestimate(run);
       this.save(run);
       this.releaseLog(runId, nodeId);
       return children.length ? { node, children } : null;
@@ -625,10 +627,10 @@ export class Executor extends Preflighting {
   }
 
   /** Revalidate a stored selection immediately before confirming or executing it. */
-  refreshModel(run: ExecutionRun, node: TaskNode): void {
+  async refreshModel(run: ExecutionRun, node: TaskNode): Promise<void> {
     const models = Object.values(this.modelLookup);
     if (run.plan.employees.length) {
-      team.route(node, run.plan, models, this.configured(run), this.needsVision(run));
+      await team.route(node, run.plan, models, this.configured(run), this.needsVision(run));
       return;
     }
     const model = this.modelLookup[node.model_id || ""];
@@ -638,11 +640,11 @@ export class Executor extends Preflighting {
     const valid = model && model.enabled && (this.providers.configuredModels ? available.some((item) => item.id === node.model_id) : true);
     if (!valid) {
       const previous = node.model_id;
-      routeNode(node, models, configured, this.needsVision(run));
+      await routeNode(node, models, configured, this.needsVision(run));
       this.emit(run.id, "node.model_switched", { node_id: node.id, model_id: previous, next_model_id: node.model_id, reason: "model_configuration_changed" });
     } else if (!node.attempts.length && node.routing_note && this.providers.configuredModels) {
       const previous = node.model_id;
-      routeNode(node, models, configured, this.needsVision(run), { feedback: collect(this.db) });
+      await routeNode(node, models, configured, this.needsVision(run), { feedback: collect(this.db) });
       if (node.model_id !== previous) this.emit(run.id, "node.model_switched", { node_id: node.id, model_id: previous, next_model_id: node.model_id, reason: "observed_delivery_cost" });
     }
   }
@@ -650,7 +652,7 @@ export class Executor extends Preflighting {
   /** Keep one API provider from carrying all of the task's running steps, so that its outage or rate
    *  limit does not stop them all: past ``max_steps_per_provider`` the step goes to another provider's
    *  model when one fits (routing.spreadTo). */
-  spread(run: ExecutionRun, node: TaskNode): void {
+  async spread(run: ExecutionRun, node: TaskNode): Promise<void> {
     if (run.plan.employees.length) return; // the lead owns employee model assignments
     const cap = settings.max_steps_per_provider;
     const provider = (node.model_id || "").split(":", 1)[0];
@@ -664,18 +666,18 @@ export class Executor extends Preflighting {
     }
     if ((running.get(provider) ?? 0) < cap) return;
     const busy = new Set([...running].filter(([, count]) => count >= cap).map(([name]) => name));
-    const other = spreadTo(node, Object.values(this.modelLookup), this.configured(run), busy, this.needsVision(run));
+    const other = await spreadTo(node, Object.values(this.modelLookup), this.configured(run), busy, this.needsVision(run));
     if (other === null) return;
     const previous = node.model_id;
     node.model_id = other.id;
-    node.estimated_cost_usd = pyRound(nodeCost(node, other), 6);
+    node.estimated_cost_usd = pyRound(await nodeCost(node, other), 6);
     this.emit(run.id, "node.model_switched", { node_id: node.id, model_id: previous, next_model_id: other.id, reason: "spread_across_providers" });
   }
 
   /** The step's model is unavailable: hand the step to a backup without counting a failed attempt, or
    *  pause the task when no other model can take it. */
   async switchModel(runId: string, nodeId: string, error: ModelUnavailable): Promise<void> {
-    await this.locked(runId, () => {
+    await this.locked(runId, async () => {
       const run = this.db.getRun(runId);
       if (!run) return;
       const node = run.plan.nodes.find((item) => item.id === nodeId)!;
@@ -691,7 +693,7 @@ export class Executor extends Preflighting {
         last.outcome = "stopped";
         last.reason = reason + "\n" + error.message;
         this.stopContract(run, node, last.reason, "stopped");
-      } else this.routeAfterUnavailable(run, node, error);
+      } else await this.routeAfterUnavailable(run, node, error);
       this.save(run);
       this.releaseLog(runId, nodeId);
     });
@@ -781,7 +783,7 @@ export class Executor extends Preflighting {
       }, signal);
     } else [result, changed] = await inFolder();
     // The step's own model falls back to its routed estimate; a takeover has none.
-    const cost = this.actualCost(result, node, modelId === node.model_id ? null : modelId);
+    const cost = await this.actualCost(result, node, modelId === node.model_id ? null : modelId);
     return [result, changed, cost, workspace];
   }
 
@@ -817,7 +819,7 @@ export class Executor extends Preflighting {
   /** Record an attempt, then accept the step, retry it, or send verified work back. */
   async finish(runId: string, nodeId: string, result: ProviderResult | null, verdict: Verdict, inputs: Json[], changed: string[], cost: number, given: string | null,
     { generation = null, accounted: already = 0, usage = null }: { generation?: number | null; accounted?: number; usage?: Json | null } = {}): Promise<void> {
-    const [next, outcome] = await this.locked(runId, (): ["lead" | "diagnose" | null, string] => {
+    const [next, outcome] = await this.locked(runId, async (): Promise<["lead" | "diagnose" | null, string]> => {
       const run = this.db.getRun(runId);
       if (!run) return [null, ""];
       const node = run.plan.nodes.find((item) => item.id === nodeId)!;
@@ -894,7 +896,7 @@ export class Executor extends Preflighting {
       } else if (outcome === "unable") {
         // Without a diagnosis to change the environment, another attempt meets the same limit.
         this.markUnable(run, node, verdict.unable);
-      } else this.retryOrFail(run, node, verdict, outcome);
+      } else await this.retryOrFail(run, node, verdict, outcome);
       if (run.actual_cost_usd > run.budget_usd && run.status === "running") {
         run.status = "paused";
         this.emit(runId, "approval.required", { reason: "budget_exceeded", actual_cost_usd: run.actual_cost_usd });

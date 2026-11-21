@@ -102,7 +102,7 @@ function mission(id, status) {
   };
 }
 
-async function setup(t, records = [mission("finished-task", "succeeded"), mission("running-task", "running")], models = [], { openComposer = true, providers = [] } = {}) {
+async function setup(t, records = [mission("finished-task", "succeeded"), mission("running-task", "running")], models = [], { openComposer = true, providers = [], provided = null } = {}) {
   const dom = new JSDOM('<div id="root"></div>', {
     url: "http://127.0.0.1:5173", runScripts: "outside-only", pretendToBeVisual: true,
   });
@@ -112,7 +112,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     constructor() { super(); channels.push(this); }
   };
   const state = {
-    records, models, providers, actions: [], resumes: [], publishes: [], uploads: [], attachmentDeletes: [], taskBodies: [], diagnosisReplies: [], leadMessages: [], followups: [], network: [],
+    records, models, providers, provided, actions: [], resumes: [], publishes: [], uploads: [], attachmentDeletes: [], taskBodies: [], diagnosisReplies: [], leadMessages: [], followups: [], network: [],
     deletes: [], cancels: [], confirms: [], taskPosts: 0, quota: [], quotaResets: [], nativePicker: true, pickerStarts: [], nativeConfirms: 0, holdNextRead: false, releaseRead: null,
   };
   const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -153,6 +153,7 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       (state.capabilityCalls ??= []).push([options.method ?? "GET", id, sub, body]);
       const runtime = state.capabilityRuntime ??= { available: true, missing: "", capabilities: {} };
       if (id === "runtime") return json(runtime);
+      if (id === "provided") return json(state.provided ?? { chat: "chat", pricing: "pricing" });
       if (id === "upload") {
         if (state.uploadPackage) items.unshift(state.uploadPackage);
         return json(state.uploadPackage, 201);
@@ -954,6 +955,41 @@ test("a capability package is uploaded, given its secrets, enabled after confirm
   await click(button("确认卸载", card()));
   await settle();
   assert.deepEqual(state.capabilities, []);
+});
+
+test("a service package says what it provides and needs, and asks before running", async t => {
+  const { state, document, button, click, act } = await setup(t, [], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.capabilities = [
+    { ...FEISHU, id: "chat", name: "聊天", kind: "service", source: "upload", status: "disabled", provides: ["chat"], requires: ["pricing"], secrets: [], domains: [] },
+    { ...FEISHU, id: "feishu-bot", name: "飞书机器人", kind: "automation", source: "upload", status: "disabled", requires: ["chat"] },
+  ];
+  state.capabilityRuntime = { available: true, missing: "", capabilities: { chat: { secrets: {}, status: "running", text: "就绪", log: [] }, "feishu-bot": { secrets: {} } } };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head")));
+  await settle();
+  const [service, bot] = document.querySelectorAll(".capability-shelf .capability");
+  assert.match(service.textContent, /聊天.*服务 · 能力包.*提供聊天能力.*依赖计价能力/s);
+  assert.match(service.textContent, /运行中.*就绪/s);
+  assert.match(bot.textContent, /依赖聊天能力/);
+  await click(button("启用", service));
+  assert.match(service.querySelector('[aria-label="确认启用"]').textContent, /一直运行.*给 FluidForm 提供聊天能力，拿不到你的 API 密钥/s);
+});
+
+test("uninstalling the pricing package warns that budgets stop", async t => {
+  const { state, document, button, click, act } = await setup(t, [], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.capabilities = [{ ...FEISHU, id: "pricing", name: "计价", kind: "service", source: "upload", status: "active", provides: ["pricing"], secrets: [], domains: [] }];
+  state.capabilityRuntime = { available: true, missing: "", capabilities: { pricing: { secrets: {}, status: "running", text: "在计价", log: [] } } };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head")));
+  await settle();
+  const card = document.querySelector(".capability-shelf .capability");
+  assert.equal(card.querySelector('[role="alert"]'), null);
+  await click(button("卸载", card));
+  assert.match(card.querySelector('[role="alert"]').textContent, /不再估价、不记账.*不受预算上限/);
 });
 
 async function automationSettings(t, modelId, listError = "") {
@@ -2891,4 +2927,17 @@ test("in 全部记录 any piece of work can be talked on about, and opened in it
   await settle();
   assert.match(document.querySelector(".platform-thread").textContent, /步骤明明没阻塞却算失败/);
   assert.ok(document.querySelector(".platform-composer textarea"));
+});
+
+test("without the chat capability there is no 对话 to start, and an old chat can only be read", async t => {
+  const { document, act, click } = await setup(t, [chatRecord(), mission("finished-task", "succeeded")], [], { openComposer: true, provided: { chat: null, pricing: "pricing" } });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  await settle();
+  assert.deepEqual([...document.querySelectorAll(".mode-switch button")].map(node => node.textContent), ["自动", "任务"]);
+  await click(document.querySelector(".run-group.done .run"));
+  await settle();
+  const page = document.querySelector(".chat-page");
+  assert.match(page.querySelector(".lead-panel").textContent, /可以先加缓存/);
+  assert.match(page.querySelector(".chat-off").textContent, /聊天能力已停用，这段对话只能查看/);
+  assert.equal(page.querySelector('[aria-label="发消息"]'), null);
 });

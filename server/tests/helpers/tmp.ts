@@ -7,3 +7,10 @@ import { join } from "node:path";
 const folder = mkdtempSync(join(process.env.TMPDIR || "/tmp", "sp-tests-"));
 process.env.TMPDIR = folder;
 process.on("exit", () => rmSync(folder, { recursive: true, force: true }));
+
+// Every test prices with the pricing package's own code (helpers/pricing.ts).
+import { inProcess } from "./pricing.js";
+inProcess();
+// And chats with the chat package's own code (helpers/chat.ts).
+import { inProcess as chatInProcess } from "./chat.js";
+chatInProcess();

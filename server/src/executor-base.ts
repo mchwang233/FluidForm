@@ -8,7 +8,8 @@
 // Preflighting -> Executor. What a part calls of a later one is declared here, abstract.
 import { mkdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { RequestBudget, StepLimitExceeded, tokenCost } from "./budget.js";
+import { RequestBudget, StepLimitExceeded } from "./budget.js";
+import * as pricing from "./pricing.js";
 import { CLI_SPECS } from "./cli-channels.js";
 import { settings } from "./config.js";
 import * as contracts from "./contracts.js";
@@ -179,10 +180,11 @@ export abstract class ExecutorBase {
   /** Charge by token usage; if the model or its price has since left the catalog, the work is still
    *  done, so charge the routed estimate rather than failing the step. */
   actualCost(result: Pick<ProviderResult, "input_tokens" | "output_tokens" | "cached_input_tokens"> & { used_model_id?: string | null },
-    node: TaskNode | null, modelId: string | null = null): number {
+    node: TaskNode | null, modelId: string | null = null): Promise<number> {
     const model = this.modelLookup[result.used_model_id || modelId || node?.model_id || ""];
-    if (!model || model.input_per_million === null || model.output_per_million === null) return modelId || node === null ? 0 : node.estimated_cost_usd;
-    return tokenCost(model, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
+    if (!pricing.enabled()) return Promise.resolve(0);
+    if (!pricing.priced(model)) return Promise.resolve(modelId || node === null ? 0 : node.estimated_cost_usd);
+    return pricing.charge(model, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
   }
 
   static contractLimitReason(node: TaskNode): string | null {
@@ -260,13 +262,13 @@ export abstract class ExecutorBase {
     try {
       result = await call(budget as unknown as SpendOk);
       // CLI calls and provider adapters without streaming usage are accounted here.
-      const extra = Math.max(0, this.actualCost(result, node, node && modelId === node.model_id ? null : modelId) - budget.spent);
+      const extra = Math.max(0, (await this.actualCost(result, node, node && modelId === node.model_id ? null : modelId)) - budget.spent);
       await charge(extra);
       result.accounted_cost_usd = budget.spent + extra;
       return result;
     } catch (error) {
       const usage = (error as Json)?.usage || result;
-      const extra = usage ? Math.max(0, this.actualCost(usage, node, modelId) - budget.spent) : 0;
+      const extra = usage ? Math.max(0, (await this.actualCost(usage, node, modelId)) - budget.spent) : 0;
       await charge(extra);
       if (error && typeof error === "object") (error as Json).accounted_cost_usd = budget.spent + extra;
       throw error;
@@ -414,7 +416,7 @@ export abstract class ExecutorBase {
   }
 
   /** The fallback without a lead's decision: count the failure, then retry or fail. */
-  retryOrFail(run: ExecutionRun, node: TaskNode, verdict: quality.Verdict, outcome: string): void {
+  async retryOrFail(run: ExecutionRun, node: TaskNode, verdict: quality.Verdict, outcome: string): Promise<void> {
     node.failed_attempts += 1;
     const problem = verdict.reason + (verdict.fix ? `\n应修改：${verdict.fix}` : "");
     if (node.failed_attempts >= settings.max_node_attempts) {
@@ -431,10 +433,10 @@ export abstract class ExecutorBase {
     // Retry with the problems spelled out, on the strongest model that can take the step; one that
     // failed it twice in a row makes way for another, a CLI included.
     node.feedback = quality.retryFeedback(node.feedback, problem);
-    const stronger = retryModel(node, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
+    const stronger = await retryModel(node, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
     if (stronger && stronger.id !== node.model_id) {
       node.model_id = stronger.id;
-      node.estimated_cost_usd = pyRound(nodeCost(node, stronger), 6);
+      node.estimated_cost_usd = pyRound(await nodeCost(node, stronger), 6);
     }
     node.status = "pending";
     this.emit(run.id, "node.retry", { node_id: node.id, reason: verdict.reason, model_id: node.model_id, attempt: node.failed_attempts + 1 });
@@ -479,7 +481,7 @@ export abstract class ExecutorBase {
   }
 
   /** Select a replacement under the run lock, for a provider error or a diagnosis. */
-  routeAfterUnavailable(run: ExecutionRun, node: TaskNode, error: ModelUnavailable, diagnosisId: string | null = null): void {
+  async routeAfterUnavailable(run: ExecutionRun, node: TaskNode, error: ModelUnavailable, diagnosisId: string | null = null): Promise<void> {
     // Older diagnoses may have told the step to wait for its old provider. That advice must not block
     // the replacement; keep the original verification or work feedback.
     if (node.feedback) {
@@ -496,11 +498,11 @@ export abstract class ExecutorBase {
     try {
       if (node.failed_attempts) {
         // Already retrying, so on the strongest model that has not failed it; keep it that way.
-        const backup = retryModel(node, models, this.configured(run), this.needsVision(run));
+        const backup = await retryModel(node, models, this.configured(run), this.needsVision(run));
         if (backup === null) throw new NoEligibleModelError("no backup");
         node.model_id = backup.id;
-        node.estimated_cost_usd = pyRound(nodeCost(node, backup), 6);
-      } else routeNode(node, models, this.configured(run), this.needsVision(run));
+        node.estimated_cost_usd = pyRound(await nodeCost(node, backup), 6);
+      } else await routeNode(node, models, this.configured(run), this.needsVision(run));
     } catch (problem) {
       if (!(problem instanceof NoEligibleModelError)) throw problem;
       run.error = `步骤「${node.title}」：${error.message}，目前没有其它可用模型能接替。任务已暂停，模型恢复或启用其它模型后点“按此预算继续”。`;
@@ -526,7 +528,7 @@ export abstract class ExecutorBase {
   }
 
   /** A CLI step may fall back to its metered API only if enabled and within budget. */
-  fallbackAllowed(run: ExecutionRun, node: TaskNode): boolean {
+  async fallbackAllowed(run: ExecutionRun, node: TaskNode): Promise<boolean> {
     const spec = CLI_SPECS[node.model_id || ""];
     if (!spec) return true;
     const model = this.modelLookup[spec.fallback_model_id];
@@ -534,7 +536,7 @@ export abstract class ExecutorBase {
     // CLI steps reserve nothing, so the fallback's cost must fit what other steps leave.
     const reserved = run.actual_cost_usd + run.plan.nodes.filter((item) => item.status === "running" && item.id !== node.id)
       .reduce((sum, item) => sum + item.estimated_cost_usd, 0);
-    return reserved + nodeCost(node, model) <= run.budget_usd;
+    return reserved + (await nodeCost(node, model)) <= run.budget_usd;
   }
 
   /** The working folder of ``node``: the user's project, or the task's scratch folder. */

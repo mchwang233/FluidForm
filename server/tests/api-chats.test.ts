@@ -10,7 +10,7 @@ import { type Attachment, DiagnosisSchema, ExecutionRunSchema, folderId, type Mo
 import { type ChatTools, ProviderResult } from "../src/providers.js";
 import * as streaming from "../src/streaming.js";
 import * as supervisor from "../src/supervisor.js";
-import { CHAT_ROLE } from "../src/supervisor.js";
+import { CHAT_ROLE } from "./helpers/chat-package.js";
 import { readKind } from "../src/triage.js";
 import { conftest } from "./helpers/conftest.js";
 import { taskApi } from "./helpers/task-api.js";

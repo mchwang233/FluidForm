@@ -10,7 +10,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BINARY_SUFFIXES, projectMap } from "./agent.js";
-import { tokenCost, type Priced } from "./budget.js";
+import type { Priced } from "./budget.js";
+import * as pricing from "./pricing.js";
 import { log } from "./log.js";
 import type { ExecutionRun, TaskNode } from "./models.js";
 import { head, pyDumps, pyRegex, pyStr, suffix, truthy } from "./py.js";
@@ -103,7 +104,7 @@ export async function planningBrief(root: string, dataDir: string, providers: Co
   let spent = 0;
   const ask: Ask = async (text) => {
     const result = await providers.complete(writer!.id, text, { effort: "low" });
-    spent += tokenCost(writer, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
+    spent += await pricing.charge(writer, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
     return result.text;
   };
   let brief: Brief | null = null;

@@ -507,11 +507,11 @@ export abstract class Engineering extends SelfRepair {
       changed: new AsyncEvent() }), { context: { run_id: job.run_id, purpose: "platform_engineer" } });
     try {
       const result = await call(budget as unknown as SpendOk);
-      await charge(Math.max(0, this.actualCost(result, null, modelId) - budget.spent));
+      await charge(Math.max(0, (await this.actualCost(result, null, modelId)) - budget.spent));
       return result;
     } catch (error) {
       const usage = (error as Json)?.usage;
-      if (usage) await charge(Math.max(0, this.actualCost(usage, null, modelId) - budget.spent));
+      if (usage) await charge(Math.max(0, (await this.actualCost(usage, null, modelId)) - budget.spent));
       throw error;
     } finally {
       budget.release();

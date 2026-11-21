@@ -1,4 +1,5 @@
 import { PlanChoices } from "./plan-choices";
+import { canChat, useProvided } from "./provided";
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ModelProfiles, type Model } from "./model-profiles";
@@ -332,6 +333,7 @@ export function greeting(mode:"auto"|"task"|"chat",hour=new Date().getHours()):s
 
 function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{loading?:boolean;onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string,attachments?:string[])=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
   const [budget,setBudget]=useState(run?.budget_usd??2),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  const chatOn=canChat(useProvided());
   // The task's conversation: its lead, and diagnoses no lead ran or asked for.
   const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id));
   const hasChat=!!run&&(hasLead(run)||diagnoses.length>0);
@@ -387,7 +389,7 @@ function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deleting
       {overNote?<span className="over-estimate">{overNote}</span>:<span>预计 {formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</span>}
     </p>
     {!!run.plan.choices?.length&&run.status==="awaiting_confirmation"&&<PlanChoices choices={run.plan.choices} editable onReplan={picks=>onChoose(run,picks)}/>}
-    {run.auto_routed&&run.status==="awaiting_confirmation"&&!run.parent_run_id&&<p className="auto-note">已自动识别为任务。只是想问问？<button type="button" className="link-button" disabled={busy} onClick={()=>act(onToChat)}>改成对话，直接回答</button></p>}
+    {run.auto_routed&&run.status==="awaiting_confirmation"&&!run.parent_run_id&&chatOn&&<p className="auto-note">已自动识别为任务。只是想问问？<button type="button" className="link-button" disabled={busy} onClick={()=>act(onToChat)}>改成对话，直接回答</button></p>}
     {needsConfirm&&<div className="action-bar">
       <p>{run.status==="paused"?(stillRunning?`任务已暂停：正在运行的 ${stillRunning} 个步骤会跑完，之后不再启动新步骤。`:run.error??"任务已暂停。确认项目状态和预算后可以继续执行。"):"确认计划和预算后，任务将自动执行，无需再次确认。"}</p>
       <label className="budget-field">预算上限 <span>$</span><BudgetInput value={budget} onChange={setBudget} aria-label="确认时的预算上限（美元）"/></label>
@@ -429,6 +431,9 @@ function App() {
   // The composer starts a task (planned, then run), a chat (only a conversation with one model), or
   // leaves it to the platform to tell which ("auto", the default: POST /api/start).
   const [optionsOpen,setOptionsOpen]=useState(false),[projectOpen,setProjectOpen]=useState(false),[mode,setMode]=useState<"auto"|"task"|"chat">("auto"),[chatModel,setChatModel]=useState(""),[chatModels,setChatModels]=useState<{id:string;display_name:string}[]>([]);
+  // Without the chat capability there is no 对话 to start; 自动 then always makes a task.
+  const chatOn=canChat(useProvided());
+  useEffect(()=>{if(!chatOn&&mode==="chat")setMode("auto")},[chatOn,mode]);
   useEffect(()=>{if(mode!=="chat")return;let live=true;fetch(`${API}/api/chats/models?use_cli=${useCli}`).then(r=>r.ok?r.json():[]).then(list=>{if(live)setChatModels(Array.isArray(list)?list:[])}).catch(()=>{});return()=>{live=false}},[mode,useCli]);
   const [formError,setFormError]=useState(""),[offline,setOffline]=useState(false);
   const attachments=useAttachments(API),[dragging,setDragging]=useState(false);
@@ -625,7 +630,7 @@ function App() {
         <button type="button" className="ghost options-chip project-chip" aria-expanded={projectOpen} onClick={()=>setProjectOpen(open=>!open)} title={projectDir.trim()||"选择项目目录（可选）"}><Icon name="folder" size={14}/>{projectDir.trim()?projectDir.trim().replace(/\/+$/,"").split("/").pop():"项目"}</button>
         <button type="button" className="ghost options-chip" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(open=>!open)} title="预算、模型和权限"><Icon name="sliders" size={14}/>{optionsSummary}</button>
         <span className="composer-spacer"/>
-        <div className="mode-switch" role="group" aria-label="新建什么">{([["auto","自动"],["task","任务"],["chat","对话"]] as const).map(([id,label])=><button key={id} type="button" aria-pressed={mode===id} onClick={()=>setMode(id)}>{label}</button>)}</div>
+        <div className="mode-switch" role="group" aria-label="新建什么">{([["auto","自动"],["task","任务"],...(chatOn?[["chat","对话"]] as const:[])] as const).map(([id,label])=><button key={id} type="button" aria-pressed={mode===id} onClick={()=>setMode(id)}>{label}</button>)}</div>
         <button className={`primary send-button${busy||attachments.uploading?" busy":""}`} disabled={busy||attachments.uploading||!(budget>0)} title="Ctrl + Enter">{busy||attachments.uploading?<span>{attachments.uploading?"附件上传中…":mode==="chat"?"发送中…":mode==="task"?"正在生成计划…":"正在处理…"}</span>:<><Icon name="arrowUp"/><span className="sr-only">{mode==="chat"?"开始对话":mode==="task"?"生成执行计划":"发送"}</span></>}</button>
       </div>
       <div className="composer-options" hidden={!optionsOpen}>{mode==="chat"&&<label className="chat-model">模型 <select value={chatModel} onChange={e=>setChatModel(e.target.value)} aria-label="对话用的模型"><option value="">自动（{chatModels[0]?.display_name??"最合适的"}）</option>{chatModels.map(model=><option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label>}<label className="budget-field" title={mode==="chat"?"对话花费达到上限后不再回复":"执行花费达到上限时任务会自动暂停"}>预算上限 <span>$</span><BudgetInput value={budget} onChange={setBudget} required/></label><label className="switch" title="关闭后本任务只使用按量计费的 API 模型"><input type="checkbox" checked={useCli} onChange={e=>setUseCli(e.target.checked)}/><span/>允许使用会员 CLI</label>{mode!=="chat"&&<><label className="switch" title={NETWORK_HINT}><input type="checkbox" checked={allowNetwork} onChange={e=>setAllowNetwork(e.target.checked)}/><span/>允许联网</label><ModelFleet models={models} onOpenAll={()=>setView("models")} onOpen={openModelProfile} onToggle={toggleModel} onConfigure={configureModel}/></>}</div>

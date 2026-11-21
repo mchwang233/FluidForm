@@ -166,7 +166,7 @@ export async function reviewResult(host: ReviewHost, run: ExecutionRun, node: Ta
   let finished = false;
   for (let round = 0; round < MAX_BACKUPS; round += 1) {
     const configured = new Set([...host.configured(run)].filter((id) => !attempted.has(id)));
-    reviewer = pickReviewer(Object.values(host.modelLookup), configured, node.model_id, Math.floor([...prompt].length / 3) + 1000);
+    reviewer = await pickReviewer(Object.values(host.modelLookup), configured, node.model_id, Math.floor([...prompt].length / 3) + 1000);
     if (reviewer === null) {
       finished = true;
       break;
@@ -217,7 +217,7 @@ export function progressWatch(host: ReviewHost, run: ExecutionRun, node: TaskNod
   return async (evidence) => {
     const minutes = (performance.now() - started) / 60_000;
     const prompt = progress.checkPrompt(node, minutes, evidence);
-    const checker = pickReviewer(Object.values(host.modelLookup), host.configured(run), modelId, Math.floor([...prompt].length / 3) + 1000);
+    const checker = await pickReviewer(Object.values(host.modelLookup), host.configured(run), modelId, Math.floor([...prompt].length / 3) + 1000);
     let reason: string | null = null;
     const checked = checker !== null;
     if (checker) {

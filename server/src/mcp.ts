@@ -374,7 +374,7 @@ export async function call(workspace: Workspace, name: string, args: Record<stri
   const [server, spec, tool] = found;
   if (remote(spec) && !workspace.network) return [`Error: ${server} needs the internet, which this task does not allow`, false];
   const price = typeof spec.price_usd === "number" && spec.price_usd > 0 ? spec.price_usd : 0;
-  if (price && workspace.budget?.canSpend && !workspace.budget.canSpend(price)) return [`Error: the budget left cannot pay for ${server} (about $${price})`, false];
+  if (price && workspace.budget?.canSpend && !(await workspace.budget.canSpend(price))) return [`Error: the budget left cannot pay for ${server} (about $${price})`, false];
   const seconds = typeof spec.timeout === "number" ? spec.timeout : CALL_SECONDS;
   try {
     const result = await withSession(workspace, server, spec, Math.max(1, Math.min(seconds, 600)),

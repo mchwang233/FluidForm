@@ -12,7 +12,8 @@ import { CapabilityScoreSchema, ExecutionRunSchema, ModelProfileSchema, Supervis
 import { autonomousPlan, heuristicPlan, NO_ACCEPTANCE_NOTE, scopeProblems, taskNode, validatePlan } from "../src/planner.js";
 import { ProviderResult } from "../src/providers.js";
 import { QuotaTracker } from "../src/quota.js";
-import { eligibleForNode, estimate, NoEligibleModelError, routeNode } from "../src/routing.js";
+import { eligibleForNode, NoEligibleModelError, routeNode } from "../src/routing.js";
+import * as pricing from "../src/pricing.js";
 import * as supervisor from "../src/supervisor.js";
 import { planTasks } from "../src/task-planning.js";
 import { form } from "../src/team-planning.js";
@@ -22,7 +23,7 @@ const { folder } = conftest();
 const noLead = { converse: undefined as never };
 const completing = (complete: (modelId: string, prompt: string) => Promise<ProviderResult>) => ({ ...noLead, complete }) as any;
 
-test("the fallback planner builds a valid dependency graph", () => {
+test("the fallback planner builds a valid dependency graph", async () => {
   const plan = heuristicPlan("Research the options and implement the code");
   const seen = new Set<string>();
   for (const node of plan.nodes) {
@@ -32,50 +33,50 @@ test("the fallback planner builds a valid dependency graph", () => {
   assert.equal(plan.nodes.at(-1)!.capability, "structured_output");
 });
 
-test("the router chooses the cheapest eligible API model", () => {
+test("the router chooses the cheapest eligible API model", async () => {
   const models = scoredModels();
   const node = heuristicPlan("Analyze this task").nodes[0];
   const configured = new Set(models.filter((m) => m.provider !== "mock").map((m) => m.id));
-  routeNode(node, models, configured);
+  await routeNode(node, models, configured);
   const api = models.filter((m) => m.channel !== "cli" && configured.has(m.id));
   const cheapest = api.reduce((best, m) => (m.input_per_million! * 1500 + m.output_per_million! * 800 < best.input_per_million! * 1500 + best.output_per_million! * 800 ? m : best));
   assert.equal(node.model_id, cheapest.id);
   assert.ok(node.routing_note!.startsWith("子任务优先用 API 模型"));
 });
 
-test("steps use a CLI only when no API model qualifies", () => {
+test("steps use a CLI only when no API model qualifies", async () => {
   const models = scoredModels();
   const luna = models.find((m) => m.id === "openai:gpt-5.6-luna")!;
   const node = heuristicPlan("Implement this feature").nodes[0];
-  routeNode(node, models, new Set(["cli:claude", luna.id]));
+  await routeNode(node, models, new Set(["cli:claude", luna.id]));
   assert.equal(node.model_id, luna.id);
   luna.scores = { ...luna.scores!, [node.capability]: node.quality_threshold - 5 };
-  routeNode(node, models, new Set(["cli:claude", luna.id]));
+  await routeNode(node, models, new Set(["cli:claude", luna.id]));
   assert.equal(node.model_id, "cli:claude");
   assert.ok(node.routing_note!.includes("API 模型最高只有") && node.routing_note!.includes("改用会员 CLI"));
   // With the policy off, the free membership CLI comes first again.
   settings.subtasks_prefer_api = false;
   luna.scores = { ...luna.scores!, [node.capability]: 95 };
-  routeNode(node, models, new Set(["cli:claude", luna.id]));
+  await routeNode(node, models, new Set(["cli:claude", luna.id]));
   assert.equal(node.model_id, "cli:claude");
 });
 
-test("the router can leave out every CLI, and never picks a disabled model", () => {
+test("the router can leave out every CLI, and never picks a disabled model", async () => {
   let models = scoredModels();
   let node = heuristicPlan("Implement this feature").nodes[0];
-  routeNode(node, models, new Set(["openai:gpt-5.6-luna", "mock:local"]));
+  await routeNode(node, models, new Set(["openai:gpt-5.6-luna", "mock:local"]));
   assert.equal(node.model_id, "openai:gpt-5.6-luna");
   models = scoredModels();
   models.find((m) => m.id === "cli:codex")!.enabled = false;
   node = heuristicPlan("Implement this feature").nodes[0];
-  routeNode(node, models, new Set(["cli:codex", "cli:claude"]));
+  await routeNode(node, models, new Set(["cli:codex", "cli:claude"]));
   assert.equal(node.model_id, "cli:claude");
 });
 
-test("the estimate includes reserves", () => {
+test("the estimate includes reserves", async () => {
   const nodes = heuristicPlan("Analyze this task").nodes;
   for (const node of nodes) node.estimated_cost_usd = 0.01;
-  const quote = estimate(nodes, 2);
+  const quote = await pricing.estimate(nodes, 2);
   assert.ok(quote.high_usd > quote.base_usd);
   assert.equal(quote.hard_limit_usd, 2);
 });
@@ -91,14 +92,14 @@ test("the single-call planner builds the model's graph", async () => {
   assert.ok(plan.planning_cost_usd > 0);
 });
 
-test("a run with a fallback plan round-trips through the database", () => {
+test("a run with a fallback plan round-trips through the database", async () => {
   const db = new Database(join(folder(), "test.db"));
   db.saveRun(ExecutionRunSchema.parse({ id: "run-1", prompt: "Analyze this task", status: "awaiting_confirmation", plan: heuristicPlan("Analyze this task"), budget_usd: 1 }));
   assert.equal(db.getRun("run-1")!.prompt, "Analyze this task");
   assert.equal(db.listRuns()[0].id, "run-1");
 });
 
-test("a planner's difficulty sets the threshold, and old plans derive it", () => {
+test("a planner's difficulty sets the threshold, and old plans derive it", async () => {
   const plan = validatePlan({ nodes: [{ key: "a", instructions: "x", difficulty: "hard" }, { key: "b", instructions: "y", dependencies: ["a"], difficulty: "Easy" },
     { key: "c", instructions: "z", quality_threshold: 0.8 }] });
   assert.deepEqual(plan.nodes.map((n) => [n.difficulty, n.quality_threshold]), [["hard", 90], ["easy", 70], ["normal", 80]]);
@@ -106,25 +107,25 @@ test("a planner's difficulty sets the threshold, and old plans derive it", () =>
   assert.deepEqual([saved.difficulty, saved.quality_threshold], ["hard", 92]);
 });
 
-test("project steps need a model that can act", () => {
+test("project steps need a model that can act", async () => {
   const node = heuristicPlan("Implement this feature", true).nodes[0];
   assert.ok(node.needs_workspace);
   const models = scoredModels();
   // API models act through tools, so they take project work before a CLI does; the demo model never acts.
-  routeNode(node, models, new Set(["cli:qwen", "openai:gpt-5.6-sol", "mock:local"]));
+  await routeNode(node, models, new Set(["cli:qwen", "openai:gpt-5.6-sol", "mock:local"]));
   assert.equal(node.model_id, "openai:gpt-5.6-sol");
-  routeNode(node, models, new Set(["cli:qwen", "mock:local"]));
+  await routeNode(node, models, new Set(["cli:qwen", "mock:local"]));
   assert.equal(node.model_id, "cli:qwen");
   models.find((m) => m.id === "openai:gpt-5.6-sol")!.supports_tools = false;
-  assert.throws(() => routeNode(node, models, new Set(["openai:gpt-5.6-sol", "mock:local"])), (e: Error) => e instanceof NoEligibleModelError
+  await assert.rejects(routeNode(node, models, new Set(["openai:gpt-5.6-sol", "mock:local"])), (e: Error) => e instanceof NoEligibleModelError
     && e.message.includes("membership CLI or an API model"));
   // With API tools turned off, only CLIs can work in the project.
   settings.api_agent = false;
   models.find((m) => m.id === "openai:gpt-5.6-sol")!.supports_tools = null;
-  assert.throws(() => routeNode(node, models, new Set(["openai:gpt-5.6-sol", "mock:local"])), NoEligibleModelError);
+  await assert.rejects(routeNode(node, models, new Set(["openai:gpt-5.6-sol", "mock:local"])), NoEligibleModelError);
 });
 
-test("the planner reads needs_workspace only as true", () => {
+test("the planner reads needs_workspace only as true", async () => {
   const plan = validatePlan({ nodes: [{ key: "a", instructions: "edit", needs_workspace: true }, { key: "b", instructions: "sum up", dependencies: ["a"], needs_workspace: "yes" }] });
   assert.deepEqual(plan.nodes.map((n) => n.needs_workspace), [true, false]);
 });
@@ -137,7 +138,7 @@ test("the planner marks project steps only for project runs", async () => {
   assert.ok(project.nodes.some((n) => n.needs_workspace));
 });
 
-test("what makes a package too broad", () => {
+test("what makes a package too broad", async () => {
   const step = (fields: Record<string, unknown> = {}) => TaskNodeSchema.parse({ id: "n", title: "T", instructions: "i", capability: "coding", needs_workspace: true, ...fields });
   const plan = (...nodes: ReturnType<typeof step>[]) => TaskPlanSchema.parse({ summary: "s", nodes });
   assert.deepEqual(scopeProblems(plan(step({ files: ["a.py"], reads: ["b.py"] }))), []);
@@ -149,7 +150,7 @@ test("what makes a package too broad", () => {
   assert.deepEqual(scopeProblems(plan(step({ verifies: ["x"] }), step({ needs_workspace: false, capability: "research" }))), []);
 });
 
-test("explicit coverage collection and report require artifact contracts", () => {
+test("explicit coverage collection and report require artifact contracts", async () => {
   assert.throws(() => validatePlan({ nodes: [{ key: "vdb", title: "VDB 采集", instructions: "Run simulation", files: ["sim.vdb"] },
     { key: "report", title: "URG 文本报告", instructions: "Generate report", dependencies: ["vdb"] }] }), /artifact_contract/);
 });
@@ -211,7 +212,7 @@ test("without a lead, the usual planner plans", async () => {
   assert.ok(plan.nodes.length && session.model_id === null);
 });
 
-test("a planner keeps acceptance criteria and verifies only its dependencies", () => {
+test("a planner keeps acceptance criteria and verifies only its dependencies", async () => {
   const plan = validatePlan({ nodes: [{ key: "a", instructions: "x", acceptance_criteria: "tests pass" }, { key: "b", instructions: "y" },
     { key: "c", instructions: "z", dependencies: ["a"], verifies: ["a", "b", "zzz"] }] });
   const [a, , c] = plan.nodes;
@@ -219,7 +220,7 @@ test("a planner keeps acceptance criteria and verifies only its dependencies", (
   assert.deepEqual(c.verifies, [a.id]);
 });
 
-test("the plan says which steps make pictures", () => {
+test("the plan says which steps make pictures", async () => {
   const raw = { title: "头像", instructions: "画一张", capability: "coding", needs_images: true };
   assert.equal(taskNode(raw, "t1", [], []).needs_images, true);
   assert.equal(taskNode({ ...raw, needs_images: "yes" }, "t1", [], []).needs_images, false);
@@ -238,7 +239,7 @@ test("the plan names the commands that check the tools, and the task's folder", 
   assert.equal((await planTasks(oneStep({ folder: "async-fifo-uvm" }), "")).folder, "async-fifo-uvm");
 });
 
-test("images go only to models that can see them", () => {
+test("images go only to models that can see them", async () => {
   const scores = Object.fromEntries(Object.keys(CapabilityScoreSchema.parse({})).map((key) => [key, 90]));
   const api = (id: string, vision: boolean | null) => ModelProfileSchema.parse({ id, provider: "x", display_name: id, context_window: 200_000, input_per_million: 1,
     output_per_million: 1, supports_vision: vision, scores });

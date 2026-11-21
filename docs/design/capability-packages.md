@@ -211,3 +211,26 @@ saved choice, restoring automatic, save/list errors, and an unavailable saved mo
 - **It needs `bwrap` and `socat`.** Without them a package can be installed, but its environment
   and an automation cannot run. The shelf says so.
 - **`pip` runs a package's build scripts**, in the sandbox, reaching only the package index.
+
+## 服务（`kind: "service"`）
+
+FluidForm 本体用到的能力（聊天、计价）可以由能力包提供（docs/design/chat-and-pricing-packages.md）。
+
+- `capability.json` 写 `kind: "service"`、`entry`（运行它的命令）和 `provides`：它提供哪种能力
+  （现在有 `chat`、`pricing`，`service-names.ts`）。
+- 任何包都可以写 `requires`：它需要哪些能力。启用时缺了就拒绝（"需要先启用聊天能力"）；
+  被别的已启用的包需要的能力，它的提供者不能停用、卸载，也不能删掉密钥。同一种能力同时只能有一个包提供。
+  某种能力还没有做成包之前，由 FluidForm 自己提供（`services.builtIn`）。
+- 运行方式和自动化一样：能力包沙箱里的后台进程，挂了自动重启。它和 FluidForm 之间是 JSON-RPC 2.0，
+  stdin/stdout 一行一条，两边都能发请求（和 MCP 一样）。FluidForm 问它（`ServiceHost.request`），它问 FluidForm
+  （`ServiceHost.handle` 注册的方法）；要用密钥、要动这台机器的事都由 FluidForm 代办，它拿不到任何 key。
+  通知 `status` 设置能力卡片上的状态文字；stderr 写进它的日志。进程停了，正在等它回答的请求立刻失败。
+- 接口：`GET /api/capabilities/provided` 列出每种能力现在由谁提供（包的 id、`builtin` 或没有）；
+  `/api/capabilities/runtime` 也带上服务的状态和这份列表。
+- 测试：`server/tests/services.test.ts`。
+
+### 随 FluidForm 提供的包
+
+`server/packages/<id>` 里的包在第一次启动时装上并启用（`bundled.ts`），条件是允许能力包、这台机器有沙箱；
+有新版本时更新（保持原来的启用状态）；用户卸载后不再装回（`<data_dir>/bundled.json` 记着提供过哪些）。
+服务包可以用 Node 写：沙箱里能找到 FluidForm 自己用的 `node`（即使它装在被隐藏的主目录里）。现在有：计价（`pricing`）、聊天（`chat`）。聊天包第一次安装时把本体以前的 `<data_dir>/memory.json` 搬进它的数据目录（`bundled.CARRIED`）。

@@ -1,0 +1,9 @@
+{
+  "id": "pricing",
+  "name": "计价",
+  "kind": "service",
+  "provides": ["pricing"],
+  "version": "1.0.0",
+  "summary": "模型价格、任务和步骤的费用预估、每次调用记账、会员 CLI 按套餐折算、预算上限。停用后任务不估价、不记账、不受预算限制，选模型只看评分。",
+  "entry": "node service.mjs"
+}

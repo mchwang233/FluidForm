@@ -533,6 +533,10 @@ export const CapabilityFields = {
   source: z.string().default(() => ("task" as const)),
   version: z.string().default(() => ("" as const)),
   entry: z.string().default(() => ("" as const)),
+  // A service package: the capabilities it gives FluidForm itself (services.ts), and what any package
+  // needs to be there first.
+  provides: z.array(z.string()).default(() => []),
+  requires: z.array(z.string()).default(() => []),
 };
 export const CapabilitySchema = model("Capability", CapabilityFields);
 export type Capability = z.output<typeof CapabilitySchema>;

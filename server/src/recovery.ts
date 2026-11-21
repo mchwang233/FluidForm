@@ -49,10 +49,10 @@ export function failedModels(node: TaskNode): Set<string> {
 
 /** The model for the step's next attempt: the strongest one for it, unless that one already failed
  *  it twice in a row; then the best other model, a membership CLI included. */
-export function retryModel(node: TaskNode, models: ModelProfile[], configured: Set<string>, needsVision = false): ModelProfile | null {
+export async function retryModel(node: TaskNode, models: ModelProfile[], configured: Set<string>, needsVision = false): Promise<ModelProfile | null> {
   const excluded = failedModels(node);
-  let pick = strongestFor(node, models, configured, needsVision);
-  if (pick === null || excluded.has(pick.id)) pick = strongerThan(node, models, configured, null, needsVision, excluded) ?? pick;
+  let pick = await strongestFor(node, models, configured, needsVision);
+  if (pick === null || excluded.has(pick.id)) pick = (await strongerThan(node, models, configured, null, needsVision, excluded)) ?? pick;
   return pick;
 }
 

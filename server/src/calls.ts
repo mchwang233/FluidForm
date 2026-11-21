@@ -2,7 +2,8 @@
 // stored here.
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
-import { tokenCost, type Priced } from "./budget.js";
+import type { Priced } from "./budget.js";
+import * as pricing from "./pricing.js";
 import type { Database } from "./db.js";
 import { nowIso } from "./lax.js";
 import { ContextVar, pyRound } from "./py.js";
@@ -32,13 +33,15 @@ export function warning(message: string): void {
   if (record !== null && !record.warnings.includes(message)) record.warnings.push(message);
 }
 
-export function usage(model: Priced | null | undefined, inputTokens: number, outputTokens: number, cached = 0, cacheWrite = 0, known = true): void {
+export async function usage(model: Priced | null | undefined, inputTokens: number, outputTokens: number, cached = 0, cacheWrite = 0, known = true): Promise<void> {
   const record = row();
   if (record === null) return;
+  // What the pricing package charges for it (asked first: the counts below change together).
+  const cost = await pricing.charge(model ? { ...model, id: record.model_id } : null, inputTokens || 0, outputTokens || 0, cached || 0);
   record.usage_known = record.usage_known && known;
   for (const [name, count] of [["input_tokens", inputTokens], ["output_tokens", outputTokens], ["cached_input_tokens", cached],
     ["cache_write_tokens", cacheWrite]] as const) record[name] += count || 0;
-  record.cost_usd += tokenCost(model, inputTokens || 0, outputTokens || 0, cached || 0);
+  record.cost_usd += cost;
   hooks.membershipUsage(record.model_id, inputTokens || 0, outputTokens || 0, cached || 0);
   save();
 }

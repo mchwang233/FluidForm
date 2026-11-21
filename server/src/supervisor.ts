@@ -4,6 +4,8 @@
 // Here: choosing the lead, starting and continuing its conversation, and handing the task over to a
 // new conversation when the old one is lost or its model runs out of quota; the messages the lead is
 // sent about events, and reading its decisions.
+import * as chat from "./chat.js";
+import * as pricing from "./pricing.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { ProviderError } from "./budget.js";
@@ -18,7 +20,6 @@ import { type Attachment, type EngineerJob, type ExecutionRun, folderId, type Mo
 import type { ChatTools, ProviderResult, SpendOk } from "./providers.js";
 import { fixed, formatG, head, pyRegex, pyStr, sortedBy, truthy } from "./py.js";
 import { ModelUnavailable } from "./quota.js";
-import * as remembering from "./remembering.js";
 import * as skills from "./skills.js";
 import * as streaming from "./streaming.js";
 import { assignmentPrompt } from "./team.js";
@@ -31,13 +32,6 @@ export const ROLE = "You are the lead of a multi-model task in FluidForm. You pl
   + "and what has happened so far. You may read files and run read-only commands to look things "
   + "up; do not edit anything, the steps' models do the work. Answer in the format each message "
   + "asks for.\n\n";
-export const CHAT_ROLE = "You are talking with the user in FluidForm. This is a conversation, not a task: nothing is "
-  + "planned or run. Answer their questions directly and helpfully, in Chinese unless they write in "
-  + "another language. You may read files and run read-only commands to look things up; do not edit "
-  + "anything. If what they want needs real work done (files changed, programs built), say so: they "
-  + "can turn this conversation into a task.\n\n";
-// Earlier messages a chat's new conversation is told about when its old one is lost.
-export const MAX_CHAT_HANDOVER_CHARS = 20_000;
 // An API lead's conversation is sent whole every time; past this, older exchanges are dropped.
 export const MAX_HISTORY_CHARS = 300_000;
 // Leads tried in turn for one message when a conversation is lost or a model is unavailable.
@@ -48,21 +42,15 @@ const length = (text: string) => [...text].length;
 const none = (value: unknown) => (value === null || value === undefined ? "None" : String(value));
 const workspaceOf = (run: ExecutionRun) => run.project_dir || join(settings.workspace_root, folderId(run));
 
-/** Models for a chat an automation brings (a Feishu bot), API models first: people there wait for each
- *  answer, and a membership CLI takes tens of seconds to start one. Others as found. */
-export function chatOrder(run: ExecutionRun, found: ModelProfile[]): ModelProfile[] {
-  if (!(run.origin || {}).capability) return found;
-  return sortedBy(found, (model) => model.channel === "cli");
-}
-
 /** Possible leads, best first: membership CLIs that keep conversations (no extra cost, and they can
  *  look at the files), then API models; the best planners first. */
 export function candidates(models: ModelProfile[], configured: Set<string>, exclude: Iterable<string> = []): ModelProfile[] {
   const excluded = new Set(exclude);
   const eligible = models.filter((model) => model.enabled && routingReady(model) && configured.has(model.id) && !excluded.has(model.id)
     && !settings.helper_only_models.includes(model.id) && model.provider !== "mock" && (model.channel !== "cli" || SESSION_CLIS.has(model.id)));
+  // The catalog's price only breaks a tie of scores (a chat's are ordered by the chat package).
   return sortedBy(eligible, (model) => [model.channel !== "cli", -model.scores!.planning, -model.scores!.reliability,
-    (model.input_per_million || 0) + (model.output_per_million || 0)]);
+    pricing.enabled() ? (model.input_per_million || 0) + (model.output_per_million || 0) : 0]);
 }
 
 /** A fresh conversation for ``model``, in a folder of its own (a CLI conversation is tied to it), or in
@@ -86,97 +74,6 @@ export function trim(session: SupervisorSession): void {
   if (dropped && !history[2].content.startsWith("[Earlier events")) {
     history[2].content = `[Earlier events of this task were left out to save space; ask for details if you need them.]\n\n${history[2].content}`;
   }
-}
-
-/** The finished messages of a chat, oldest first, as many of the latest as fit in ``limit``. */
-export function chatTranscript(run: ExecutionRun, limit = MAX_CHAT_HANDOVER_CHARS): string {
-  const lines: string[] = [];
-  let size = 0;
-  for (const message of run.lead_messages.filter((item) => item.status === "done" && item.text).reverse()) {
-    const line = `${message.role === "user" ? "用户" : "助手"}：${message.text}`;
-    if (size + length(line) > limit) break;
-    lines.push(line);
-    size += length(line);
-  }
-  return lines.reverse().join("\n\n");
-}
-
-/** Who a chat's model is, told to it: it cannot know itself, and guesses (a model trained on another's
- *  conversations takes itself for that one). */
-export function identity(model: ModelProfile | null): string {
-  if (model === null) return "";
-  const way = model.channel === "cli" ? "a membership CLI" : "its API";
-  return `You are ${model.display_name} (${model.id}, through ${way}). If asked which model you are, say so; do not guess another.\n\n`;
-}
-
-// What a chat an automation brings messages to is told about work (automation_message reads it).
-export const AUTOMATION_WORK = "Work: when they want real work done (files changed, a program built, an image or a document "
-  + "made, research written up), FluidForm plans it as a task that waits for its owner's "
-  + "confirmation, then reports here how it went. When you know enough to describe it, end your "
-  + "answer with one line:\n"
-  + 'TASK: {"request": "the work, complete and self-contained"}\n'
-  + "The request is all the planner sees besides this conversation: write in it everything it "
-  + "depends on that was said or sent here (what, for whom, style, constraints, which pictures). In "
-  + "your answer, say in a sentence what you are having planned. If it is unclear what they want, "
-  + "ask first and write no TASK line; never write one for what you can answer yourself.\n\n";
-
-/** For a chat an automation brings messages to (a Feishu bot): how to talk there, from its package's
- *  CHAT.md, and whether it is a private chat or a group (origin.chat_type). */
-export function chatGuide(run: ExecutionRun): string {
-  const origin = (run.origin || {}) as Json;
-  if (!origin.capability) return "";
-  const guide = packageGuide(pyStr(origin.capability));
-  const where = ({
-    p2p: "This is a private chat with one person. Answer as in a chat: a few sentences, more only when they ask for detail or the question needs it.",
-    group: "This is a group chat: several people, who mostly talk among themselves. Keep each answer short, two or three sentences, without "
-      + "headings or long lists, unless someone asks for detail. Do not go over what you said before unless asked.",
-  } as Json)[origin.chat_type] ?? "";
-  return [where, guide ? `How to talk here:\n${guide}` : ""].filter(Boolean).map((part) => `${part}\n\n`).join("")
-    + AUTOMATION_WORK + (settings.user_memory ? remembering.GUIDE : "");
-}
-
-const TASK_LINE = pyRegex(String.raw`^\s*TASK:\s*(\{.*\})\s*$`, "m");
-const TASK_ANY = pyRegex(String.raw`^\s*TASK:.*$`, "mg");
-// Lines an answer ends with for FluidForm, not the person (TASK, ENGINEER): kept from what they see.
-const ACTION_LINE = pyRegex(String.raw`^\s*(TASK|ENGINEER|SEND|REMEMBER|FORGET):`, "m");
-// A file an automation chat's answer sends the person, one per line: its name in the chat's folder.
-const SEND_LINE = pyRegex(String.raw`^\s*SEND:\s*(.+?)\s*$`, "mg");
-const stripChars = (text: string, chars: string) => {
-  let start = 0;
-  let end = text.length;
-  while (start < end && chars.includes(text[start])) start += 1;
-  while (end > start && chars.includes(text[end - 1])) end -= 1;
-  return text.slice(start, end);
-};
-
-/** An answer without its SEND lines, and the files they name. */
-export function splitSends(text: string | null | undefined): [string, string[]] {
-  const names = [...(text || "").matchAll(SEND_LINE)].map((match) => stripChars(match[1], "`'\" "));
-  return [names.length ? (text || "").replace(SEND_LINE, "").trim() : (text as string), names.filter(Boolean)];
-}
-
-/** An automation chat's answer without its TASK line, and the work that line asks for. */
-export function splitTask(text: string | null | undefined): [string, string | null] {
-  const found = TASK_LINE.exec(text || "");
-  if (!found) {
-    // A TASK line that cannot be read asks for nothing, and is not shown either.
-    return [(text || "").includes("TASK:") ? (text || "").replace(TASK_ANY, "").trim() : (text as string), null];
-  }
-  let request: unknown = null;
-  try {
-    const value = JSON.parse(found[1]);
-    request = value && typeof value === "object" && !Array.isArray(value) ? value.request : null;
-  } catch {
-    request = null;
-  }
-  const work = typeof request === "string" ? request.trim() : "";
-  return [(text!.slice(0, found.index) + text!.slice(found.index + found[0].length)).trim(), work || null];
-}
-
-/** What of an answer being written the person sees: up to a line meant for FluidForm. */
-export function forPerson(text: string): string {
-  const found = ACTION_LINE.exec(text || "");
-  return found ? text.slice(0, found.index).trimEnd() : text;
 }
 
 // A chat's quick job as it goes, by chat, while it answers (ChatActivity); GET .../lead/activity.
@@ -224,22 +121,15 @@ export class ChatActivity extends Array<Json> {
 }
 
 /** What a chat may use for quick jobs (settings.chat_tools): its own scratch folder, the internet if
- *  allowed, and its limits per message. null: only talk (the setting is off, or it is about a project,
- *  which a chat only reads). */
-export function chatTools(run: ExecutionRun): ChatTools | null {
+ *  allowed, its limits per message, and the lines it may write as tools (the chat package says
+ *  which). null: only talk (the setting is off, or it is about a project, which a chat only reads). */
+export async function chatTools(run: ExecutionRun): Promise<ChatTools | null> {
   if (run.kind !== "chat" || !settings.chat_tools || run.project_dir) return null;
   const folder = join(settings.workspace_root, folderId(run));
   mkdirSync(folder, { recursive: true });
-  return { folder, network: settings.chat_tools_network, turns: settings.chat_tool_turns, seconds: settings.chat_tool_seconds, actions: chatActionNames(run) };
-}
-
-/** The lines this chat may write, as tools (chat-actions.ts; settings.chat_action_tools): an automation's
- *  chat also starts tasks and sends files. */
-export function chatActionNames(run: ExecutionRun): string[] {
-  if (!settings.chat_action_tools) return [];
-  const automation = Boolean((run.origin || {}).capability);
-  const memory = settings.user_memory ? ["Remember", "Forget"] : [];
-  return automation ? ["StartTask", "SendFile", "CallEngineer", ...memory] : ["CallEngineer", ...memory];
+  const tools: ChatTools = { folder, network: settings.chat_tools_network, turns: settings.chat_tool_turns, seconds: settings.chat_tool_seconds, actions: [] };
+  tools.actions = (await chat.ask("chat.actions", { ctx: chat.context(run, null, tools) })).names ?? [];
+  return tools;
 }
 
 /** The skills for the tools a message names, for a chat with tools, as a step gets them. */
@@ -248,65 +138,25 @@ export function toolSkills(message: string): string {
   return found ? `\n\n${found}` : "";
 }
 
-/** A chat with tools is told what they are for: quick jobs now, bigger work as a task. */
-export function chatToolsNote(run: ExecutionRun, model: ModelProfile | null): string {
-  const tools = model !== null && model.channel !== "cli" ? chatTools(run) : null;
-  if (!tools) return "";
-  const online = tools.network ? " Its commands can reach the internet (not this machine's services)." : " Its commands have no internet.";
-  const automation = Boolean((run.origin || {}).capability);
-  const bigger = automation ? "ask for it with the TASK line below" : "say so: they can turn this conversation into a task";
-  const send = automation ? " To send them a picture or a file you made, save it in your folder and end your answer with "
-    + "one line per file, SEND: <its name in your folder> (at most 5; a picture as png or jpg)." : "";
-  const built = capabilities.section();
-  const names = chatActionNames(run);
-  const asTools = names.length ? ` Instead of writing the TASK, SEND, ENGINEER, REMEMBER or FORGET lines described here, call the tools `
-    + `${names.join(", ")}: they do the same, and nothing you write as a line is needed.` : "";
-  return "Quick jobs you do yourself, right away, without asking: this overrides \"nothing is run\" "
-    + `above. You have tools (Bash, Read, Write, Edit, Glob, Grep, LS) in this chat's own folder, `
-    + `${tools.folder}.${online} Use them for what takes a minute: look something up online (the `
-    + "weather: curl -s 'wttr.in/Beijing?format=3&lang=zh'; an exchange rate; a page they link), "
-    + "calculate, convert, read or make a small file. One message gets at most "
-    + `${tools.turns} tool calls and ${formatG(tools.seconds)} seconds: keep it small, and answer with `
-    + "what you found. Anything bigger (a program, a document of several parts, the user's own "
-    + `project, long research) is a task: ${bigger}. Never say you looked something up when you `
-    + `did not.${send}${asTools}\n\n` + (built ? `${built}\n\n` : "");
-}
-
-/** What a chat's model is told first: its role, who it is, what it may do itself, and how to talk where it is. */
-export function chatRole(run: ExecutionRun, model: ModelProfile | null = null): string {
-  // The owner's own chats remember too (an automation's are told in chatGuide).
-  const own = settings.user_memory && !(run.origin || {}).capability ? remembering.GUIDE : "";
-  return CHAT_ROLE + identity(model) + chatToolsNote(run, model) + chatGuide(run) + own;
-}
-
-/** A message in a chat: its first one carries the role, who ``model`` (its own) is, how to talk there,
- *  and the folder it may read. */
-export function chatOpening(run: ExecutionRun, text: string, model: ModelProfile | null = null): string {
+/** The first message of a chat's conversation, from the chat package: its role, who ``model`` is,
+ *  how to talk where it is, what it remembers, and the folder it may read. Later ones go as they are. */
+export async function chatOpening(run: ExecutionRun, text: string, model: ModelProfile | null = null): Promise<string> {
   if (run.supervisor && run.supervisor.calls) return text;
-  // A new conversation on the web page is told what the owner's chats remember.
-  const known = settings.user_memory && !(run.origin || {}).capability ? remembering.told(remembering.facts(remembering.WEB)) : "";
-  // A deliberate model change starts a fresh native or API session, as a lost session does.
-  if (run.supervisor && run.supervisor.previous.length) return chatRole(run, model) + handover(run, model ? model.id : null) + known + text;
-  const folder = run.project_dir ? `The user's project folder, which you may read: ${run.project_dir}\n\n` : "";
-  return chatRole(run, model) + folder + known + text;
+  const tools = model !== null && model.channel !== "cli" ? await chatTools(run) : null;
+  return chat.text("chat.opening", { ctx: chat.context(run, model, tools), text });
+}
+
+/** What a chat's new conversation with ``model`` is told before the message (a lost conversation, or
+ *  another model): its role, and the conversation so far. */
+async function chatBriefing(run: ExecutionRun, model: ModelProfile | null): Promise<string> {
+  const tools = model !== null && model.channel !== "cli" ? await chatTools(run) : null;
+  const ctx = chat.context(run, model, tools);
+  return await chat.text("chat.role", { ctx }) + await chat.text("chat.handover", { ctx, current: model ? model.id : null });
 }
 
 /** What a new lead needs to take over a running task: the request, the plan and where every step
  *  stands, and the latest problems. */
-export function handover(run: ExecutionRun, current: string | null = null): string {
-  if (run.kind === "chat") {
-    const earlier = chatTranscript(run);
-    const session = run.supervisor;
-    // The models of earlier sessions (the same model included, in a conversation of its own); the
-    // session in ``run`` is either the new one (``current``) or the one before it.
-    const others = [...new Set([...(session ? session.previous : []), ...(session && session.model_id !== current ? [session.model_id] : [])])]
-      .filter(Boolean);
-    const who = others.length ? ` (${others.join(", ")})` : "";
-    return `This conversation continues one the user had with another model${who}; the 助手 replies below `
-      + "are that model's, not yours, and what it said about itself is not about you. Do not bring the "
-      + "change up with them unless they ask who you are. The messages so far:\n"
-      + `${earlier || "（none）"}\n\n` + (run.project_dir ? `Project folder you may read: ${run.project_dir}\n\n` : "");
-  }
+export function handover(run: ExecutionRun): string {
   const lines = ["You are taking over as the lead of a task that is already under way.", `Request:\n${run.prompt}`,
     ...(run.background ? [`Background:\n${run.background}`] : []), `Plan: ${run.plan.summary}`, `Working directory: ${workspaceOf(run)}`, "Steps:"];
   if (run.plan.employees.length) lines.push(assignmentPrompt(run.plan));
@@ -328,9 +178,8 @@ export function chatFolder(run: ExecutionRun): string | null {
   return run.kind === "chat" ? run.project_dir : null;
 }
 
-export function role(run: ExecutionRun, model: ModelProfile | null = null): string {
-  return run.kind === "chat" ? chatRole(run, model) : ROLE;
-}
+/** What a new lead (a chat's new conversation) is told before the message. */
+const briefing = (run: ExecutionRun, model: ModelProfile | null) => (run.kind === "chat" ? chatBriefing(run, model) : Promise.resolve(ROLE + handover(run)));
 
 /** Bills a call to the task: runs ``call`` with the budget it may spend. */
 export type Charged = (modelId: string, call: (budget: SpendOk) => Promise<ProviderResult>) => Promise<ProviderResult>;
@@ -358,14 +207,16 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
   let lastError: unknown = null;
   for (let round = 0; round < MAX_LEADS; round += 1) {
     if (session === null) {
-      const pick = chatOrder(run, candidates(models, configured, tried))[0];
+      const found = candidates(models, configured, tried);
+      // A chat's model is chosen by the chat package.
+      const pick = run.kind === "chat" ? (await chat.order(found, Boolean((run.origin || {}).capability)))[0] : found[0];
       if (!pick) break;
       session = newSession(pick, run.supervisor, chatFolder(run));
-      message = role(run, pick) + handover(run, pick.id) + prompt;
+      message = await briefing(run, pick) + prompt;
     }
     try {
       const model = byId.get(session.model_id!) ?? null;
-      const tools = model !== null && model.channel !== "cli" ? chatTools(run) : null;
+      const tools = model !== null && model.channel !== "cli" ? await chatTools(run) : null;
       if (tools) {
         const activity = new ChatActivity();
         CHAT_ACTIVITY.set(run.id, activity);
@@ -382,7 +233,7 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
         lastError = error;
         const model = byId.get(session.model_id!) ?? null;
         session = model ? newSession(model, session, chatFolder(run)) : null;
-        message = role(run, model) + handover(run, model ? model.id : null) + prompt;
+        message = await briefing(run, model) + prompt;
       } else if (error instanceof ModelUnavailable || error instanceof ProviderError || (error as Error)?.name === "TimeoutError") {
         lastError = error;
         tried.add(session.model_id!);

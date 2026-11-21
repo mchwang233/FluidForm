@@ -1,7 +1,11 @@
 // budget.ts: tests/test_providers.py (prompt cache price) and tests/test_safety.py (reservations), ported.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BudgetExceeded, RequestBudget, StepLimitExceeded, StepReservationBusy, tokenCost } from "../src/budget.js";
+// @ts-expect-error: the pricing package is plain JavaScript
+import { tokenCost } from "../packages/pricing/pricing.mjs";
+import { BudgetExceeded, PricingUnavailable, RequestBudget, StepLimitExceeded, StepReservationBusy } from "../src/budget.js";
+import * as pricing from "../src/pricing.js";
+import { withoutPricing } from "./helpers/pricing.js";
 import { AsyncEvent } from "../src/py.js";
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) <= 1e-12 + 1e-6 * Math.abs(b), `${a} != ${b}`);
@@ -79,16 +83,48 @@ test("turns, spending and recording", async () => {
   await budget.beginTurn();
   await budget.beginTurn();
   await assert.rejects(budget.beginTurn(), StepLimitExceeded);
-  assert.ok(budget.canSpend(0.5) && !budget.canSpend(2));
+  assert.ok((await budget.canSpend(0.5)) && !(await budget.canSpend(2)));
   await budget.record("test:model", 1000, 1000);
   await budget.recordUsd(0.01);
   await budget.recordUsd(0);
   near(budget.spent, 0.002 + 0.01);
   assert.equal(charged.length, 2);
-  assert.ok(budget.allows());
+  assert.ok(await budget.allows());
   const over = new RequestBudget({ models, remaining: () => -1, reservations: new Map(), charge, changed: new AsyncEvent() });
-  assert.equal(over.allows(), false);
+  assert.equal(await over.allows(), false);
   const stepOver = new RequestBudget({ models, remaining: () => 1, reservations: new Map(), charge, changed: new AsyncEvent(),
     stepRemaining: () => -1 });
-  assert.throws(() => stepOver.allows(), StepLimitExceeded);
+  await assert.rejects(stepOver.allows(), StepLimitExceeded);
+});
+
+test("without a pricing package nothing is charged or limited", async () => {
+  const restore = withoutPricing();
+  try {
+    const spent: number[] = [];
+    const budget = new RequestBudget({ models, remaining: () => -5, reservations: new Map(), charge: async (cost) => void spent.push(cost),
+      changed: new AsyncEvent(), stepRemaining: () => -1 });
+    assert.equal(await budget.reserve("test:model", { input: "x".repeat(10_000) }, 4096), 4096);
+    assert.ok((await budget.allows()) && (await budget.canSpend(100)));
+    await budget.record("test:model", 1_000_000, 1_000_000);
+    await budget.recordUsd(3);
+    assert.deepEqual([spent, budget.spent], [[], 0]);
+  } finally {
+    restore();
+  }
+});
+
+test("a pricing package that does not answer stops the spending", async () => {
+  const saved = { ...pricing.deps };
+  pricing.deps.ask = async () => {
+    throw new Error("服务没有在运行（error）");
+  };
+  try {
+    const budget = new RequestBudget({ models, remaining: () => 10, reservations: new Map(), charge, changed: new AsyncEvent() });
+    await assert.rejects(budget.reserve("test:model", { input: "x" }), (error) => error instanceof PricingUnavailable
+      && error instanceof BudgetExceeded && /计价能力没有回答.*停止花钱/.test(error.message));
+    await assert.rejects(budget.record("test:model", 10, 10), PricingUnavailable);
+    assert.equal(budget.reservations.size, 0); // released all the same
+  } finally {
+    Object.assign(pricing.deps, saved);
+  }
 });

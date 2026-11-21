@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { tokenCost } from "../src/budget.js";
+// @ts-expect-error: the pricing package is plain JavaScript
+import { tokenCost } from "../packages/pricing/pricing.mjs";
 import * as calls from "../src/calls.js";
 import { builtinModels } from "../src/catalog.js";
 import * as quota from "../src/cli-quota.js";

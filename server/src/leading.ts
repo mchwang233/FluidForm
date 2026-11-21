@@ -1,5 +1,6 @@
 // Carrying out the task lead's decisions after a failed attempt, and handing the user's answers to its
 // questions back to it (supervisor.ts words the questions and reads the answers).
+import * as chat from "./chat.js";
 import { attach } from "./attachments.js";
 import { BudgetExceeded } from "./budget.js";
 import * as capabilities from "./capabilities.js";
@@ -11,7 +12,6 @@ import { log } from "./log.js";
 import { type Attachment, DecisionSchema, DiagnosisSchema, type ExecutionRun, LeadMessageSchema, type TaskNode } from "./models.js";
 import { head, pyRound } from "./py.js";
 import * as quality from "./quality.js";
-import * as remembering from "./remembering.js";
 import * as replan from "./replan.js";
 import { Reviewing } from "./reviewing.js";
 import { nodeCost } from "./routing.js";
@@ -101,19 +101,19 @@ export abstract class Leading extends Reviewing {
   }
 
   private async decision(runId: string, nodeId: string | null, prompt: string, modelIds: Set<string>, targets: Set<string> | null, final: boolean): Promise<Choice> {
-    const read = (reply: string): [supervisor.Decision | null, string] => {
+    const read = async (reply: string): Promise<[supervisor.Decision | null, string]> => {
       const found = supervisor.parseDecision(reply, modelIds, targets, final);
       if (found && found.action === "replan") {
-        const problem = this.planProblem(runId, found.plan!, nodeId);
+        const problem = await this.planProblem(runId, found.plan!, nodeId);
         if (problem) return [null, `That plan change cannot be made: ${problem}`];
       }
       return [found, "That was not a valid decision."];
     };
     try {
-      let [found, problem] = read(await this.askLead(runId, prompt));
+      let [found, problem] = await read(await this.askLead(runId, prompt));
       if (found === null) {
         // Same conversation: it only has to say what it decided in the asked form.
-        [found] = read(await this.askLead(runId, `${problem}\n` + supervisor.decisionFormat(Boolean(targets?.size), final)));
+        [found] = await read(await this.askLead(runId, `${problem}\n` + supervisor.decisionFormat(Boolean(targets?.size), final)));
       }
       return found;
     } catch (error) {
@@ -131,14 +131,14 @@ export abstract class Leading extends Reviewing {
     }
   }
 
-  changePlan(run: ExecutionRun, change: Json, deciding: string | null): { added: string[]; removed: string[]; updated: string[] } {
+  changePlan(run: ExecutionRun, change: Json, deciding: string | null): Promise<{ added: string[]; removed: string[]; updated: string[] }> {
     return replan.changePlan(run, change, Object.values(this.modelLookup), this.configured(run), this.needsVision(run), deciding);
   }
 
   /** Why a plan change cannot be made, tried on a copy of the task; null if it can. */
-  planProblem(runId: string, change: Json, deciding: string | null): string | null {
+  async planProblem(runId: string, change: Json, deciding: string | null): Promise<string | null> {
     try {
-      this.changePlan(structuredClone(this.db.getRun(runId)!), change, deciding);
+      await this.changePlan(structuredClone(this.db.getRun(runId)!), change, deciding);
     } catch (error) {
       // A malformed change (not the shape asked for) is as unusable as an impossible one.
       return (error as Error)?.message || (error as Error)?.name || "Error";
@@ -184,13 +184,13 @@ export abstract class Leading extends Reviewing {
     if (decision === null) return false;
     const { action } = decision;
     const reason = decision.reason ?? "";
-    let changes: ReturnType<Leading["changePlan"]> | null = null;
-    await this.locked(runId, () => {
+    let changes: Awaited<ReturnType<Leading["changePlan"]>> | null = null;
+    await this.locked(runId, async () => {
       run = this.db.getRun(runId)!;
       run.decisions.push(DecisionSchema.parse({ event: "all_done", action, reason, instructions: decision.instructions ?? null, targets: decision.targets ?? [],
         summary: decision.summary ?? null, lead_model_id: run.supervisor!.model_id }));
       if (action === "rework") this.reopen(run, new Set(decision.targets), decision.instructions || reason);
-      else if (action === "replan") changes = this.changePlan(run, decision.plan!, null);
+      else if (action === "replan") changes = await this.changePlan(run, decision.plan!, null);
       this.save(run);
     });
     this.emit(runId, "run.decision", { action, reason, targets: decision.targets ?? null, event: "all_done" });
@@ -216,12 +216,12 @@ export abstract class Leading extends Reviewing {
     const reason = decision.reason ?? "";
     const instructions = decision.instructions ?? null;
     let repairWith: [quality.Verdict, string] | null = null;
-    let changes: ReturnType<Leading["changePlan"]> | null = null;
+    let changes: Awaited<ReturnType<Leading["changePlan"]>> | null = null;
     // call_engineer: a component is asked for as before; a repair goes to the engineer's repair session,
     // which finds whether the machine or FluidForm is at fault (one-engineer.md).
     const does = action === "call_engineer" ? (decision.kind === "component" ? "request_component" : "call_engineer") : action;
     let madeId = "";
-    const stopped = await this.locked(runId, () => {
+    const stopped = await this.locked(runId, async () => {
       const run = this.db.getRun(runId)!;
       const node = run.plan.nodes.find((item) => item.id === nodeId)!;
       if (run.status === "cancelled" || !["running", "pending"].includes(node.status)) return true;
@@ -250,7 +250,7 @@ export abstract class Leading extends Reviewing {
         if (action === "switch_model") {
           const model = this.modelLookup[decision.model_id!];
           node.model_id = model.id;
-          node.estimated_cost_usd = pyRound(nodeCost(node, model), 6);
+          node.estimated_cost_usd = pyRound(await nodeCost(node, model), 6);
         }
         node.feedback = feedback(node.feedback);
         node.status = "pending";
@@ -263,7 +263,7 @@ export abstract class Leading extends Reviewing {
       } else if (action === "rework") {
         this.sendBack(run, node, verdict, new Set(decision.targets), instructions, false);
       } else if (action === "replan") {
-        changes = this.changePlan(run, decision.plan!, nodeId);
+        changes = await this.changePlan(run, decision.plan!, nodeId);
         const current = run.plan.nodes.find((item) => item.id === nodeId);
         if (current) {
           // The step stays in the plan: it runs again, after any steps added before it.
@@ -400,15 +400,15 @@ export abstract class Leading extends Reviewing {
       const run = this.db.getRun(runId)!;
       // A chat is only a conversation; a task's lead answers as the lead who follows it.
       const model = run.supervisor ? this.modelLookup[run.supervisor.model_id ?? ""] ?? null : null;
-      const prompt = run.kind === "chat" ? supervisor.chatOpening(run, text, model) : supervisor.chatMessage(text);
+      const prompt = run.kind === "chat" ? await supervisor.chatOpening(run, text, model) : supervisor.chatMessage(text);
       // The files sent with this message (and a chat's first ones) are among the task's attachments the
       // lead has not seen yet; askLead gives them to it.
       answer = await this.askLead(runId, prompt);
       status = "done";
       // What the owner's chat keeps about them (an automation's chat is remembered by the API).
-      if (run.kind === "chat" && !(run.origin || {}).capability) answer = remembering.take(remembering.WEB, answer);
-      // The lead may bring the platform engineer in at once.
-      const [shown, call] = supervisor.splitEngineer(answer);
+      if (run.kind === "chat" && !(run.origin || {}).capability) [answer] = await chat.remember(chat.WEB, answer);
+      // The lead may bring the platform engineer in at once; a chat's ENGINEER line is read by the chat package.
+      const [shown, call] = run.kind === "chat" ? await chatEngineer(answer) : supervisor.splitEngineer(answer);
       answer = shown;
       if (call) {
         const [joined, problem] = this.engineerJoin(runId, call, "lead");
@@ -499,4 +499,10 @@ export abstract class Leading extends Reviewing {
     this.emit(runId, "run.recovered", { reason: "lead" });
     this.start(runId);
   }
+}
+
+/** A chat's answer without its ENGINEER line, and the call it makes (the chat package reads it). */
+async function chatEngineer(answer: string): Promise<[string, supervisor.EngineerCall | null]> {
+  const found = await chat.ask("chat.split", { text: answer });
+  return [String(found.text ?? ""), found.engineer ?? null];
 }

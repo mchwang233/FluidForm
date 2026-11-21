@@ -10,7 +10,8 @@ import { Executor } from "../src/executor.js";
 import { ExecutionRunSchema, type ExecutionRun, ModelProfileSchema, type TaskNode, TaskNodeSchema } from "../src/models.js";
 import { heuristicPlan } from "../src/planner.js";
 import { type CompleteOptions, ProviderRegistry, ProviderResult } from "../src/providers.js";
-import { estimate, routeNode } from "../src/routing.js";
+import * as pricing from "../src/pricing.js";
+import { routeNode } from "../src/routing.js";
 import { sleep } from "../src/tasks.js";
 import { contractNode, coverageNodes, mockAcceptance, restoreAcceptance, setupExecutor } from "./helpers/artifacts.js";
 import { conftest } from "./helpers/conftest.js";
@@ -206,9 +207,9 @@ test("a demo execution completes", async () => {
   for (const node of plan.nodes) {
     // As the API does, lower thresholds the only model (the demo, at 80) cannot reach.
     node.quality_threshold = Math.min(node.quality_threshold, 80);
-    routeNode(node, models, new Set(["mock:local"]));
+    await routeNode(node, models, new Set(["mock:local"]));
   }
-  plan.estimate = estimate(plan.nodes, 1);
+  plan.estimate = await pricing.estimate(plan.nodes, 1);
   db.saveRun(ExecutionRunSchema.parse({ id: "demo", prompt: "demo", status: "queued", plan, budget_usd: 1 }));
   await new Executor(db, new ProviderRegistry(), catalog()).execute("demo");
   const result = db.getRun("demo")!;
@@ -219,7 +220,7 @@ test("a demo execution completes", async () => {
 test("resuming runs the steps an interruption cut off again", async () => {
   const db = newDb();
   const plan = heuristicPlan("Analyze this task");
-  for (const node of plan.nodes) routeNode(node, builtinModels(), new Set(["mock:local"]));
+  for (const node of plan.nodes) await routeNode(node, builtinModels(), new Set(["mock:local"]));
   for (const node of plan.nodes.slice(0, -1)) {
     node.status = "succeeded";
     node.result = "done";

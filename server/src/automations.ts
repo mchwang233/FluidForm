@@ -1,6 +1,7 @@
 // What someone asks an automation package (capability_runner.ts) becomes: a
 // question is answered by the conversation's own chat; work is planned as a task that waits for the
 // owner's confirmation, and the conversation hears how it ended.
+import * as chats from "./chat.js";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, sep } from "node:path";
@@ -13,7 +14,6 @@ import { settings } from "./config.js";
 import { log } from "./log.js";
 import { type Capability, type ExecutionRun, folderId, LeadMessageSchema, type ModelProfile } from "./models.js";
 import { fixed } from "./py.js";
-import * as remembering from "./remembering.js";
 import { briefWriter } from "./routing.js";
 import * as streaming from "./streaming.js";
 import * as supervisor from "./supervisor.js";
@@ -59,13 +59,12 @@ export class CapabilityAutomations {
   /** The saved choice, with the ordinary fallback if it has become unavailable (or cannot see the
    *  images sent). An unchanged automatic preference keeps its conversation; restoring automatic
    *  chooses afresh. */
-  chatModel(automation: Automation, run: ExecutionRun | null = null, needsVision = false): ModelProfile {
-    // API models first: people in a chat app wait for each answer (supervisor.chatOrder).
-    const available = this.api.chatModels(true, needsVision).map((model, index) => [model, index] as const)
-      .sort(([a, i], [b, j]) => Number(a.channel === "cli") - Number(b.channel === "cli") || i - j).map(([model]) => model);
-    let wanted = automation.state.model_id;
-    if (!wanted && run && !automation.state.chat_preferences[run.id] && run.supervisor) wanted = run.supervisor.model_id;
-    const pick = available.find((model) => model.id === wanted) ?? available[0];
+  async chatModel(automation: Automation, run: ExecutionRun | null = null, needsVision = false): Promise<ModelProfile> {
+    // The chat package orders them, API models first: people in a chat app wait for each answer.
+    const available = await chats.order(this.api.chatModels(true, needsVision), true);
+    const kept = !automation.state.model_id && run && !automation.state.chat_preferences[run.id] && run.supervisor ? run.supervisor.model_id : null;
+    const id = (await chats.ask("chat.automation_model", { ordered: available.map((model) => model.id), wanted: automation.state.model_id ?? null, kept })).id;
+    const pick = available.find((model) => model.id === id);
     if (!pick) throw new HttpError(422, "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。");
     return pick;
   }
@@ -76,7 +75,12 @@ export class CapabilityAutomations {
   async message(capability: Capability, asked: Asked, automation: Automation): Promise<Handled> {
     const { api } = this;
     const { db, executor } = api;
-    const cheapest = briefWriter(Object.values(api.models), api.configured());
+    // Without the chat capability nothing answers; the owner sees why in the automation's log.
+    if (!chats.enabled()) {
+      automation.note(chats.NOT_ENABLED);
+      return [null, 0];
+    }
+    const cheapest = await briefWriter(Object.values(api.models), api.configured());
     // What was said where it was not called on (a group chat): kept, and told with the next message
     // it answers, so it knows what the group was talking about.
     const state = automation.state;
@@ -84,21 +88,18 @@ export class CapabilityAutomations {
     const heardFiles: Record<string, string[]> = (state.heard_files ??= {});
     const earlier = asked.conversation ? [...(heard[asked.conversation] ?? [])] : [];
     const filesBefore = asked.conversation ? files.resolveExisting(heardFiles[asked.conversation] ?? []) : [];
-    const line = `${asked.sender || "成员"}：${asked.text}` + attachedNote(asked.attachments);
-    let judged = 0;
-    // Its last answer there, and to whom: a reply to it is meant for it (a group's "西侧", "你继续啊").
+    // Its last answer there, and to whom: the chat package decides whether this is meant for it.
     const answered: Json | undefined = asked.conversation ? (state.answered ??= {})[asked.conversation] : undefined;
-    const recent = answered && Date.now() / 1000 - (answered.at ?? 0) < FOLLOW_UP_SECONDS ? answered : null;
-    if (!asked.addressed && recent?.asked_back && recent.sender === asked.sender) {
-      // It asked them something a moment ago; this is the answer.
-      asked.addressed = true;
-      automation.note(`群里没 @ 它的消息：在回答它刚才的问题，回答（${cut(line, 60)}）`);
-    }
-    if (!asked.addressed) {
-      let context = earlier.join("\n");
-      if (recent) context = `${capability.name}（你）刚才回答 ${recent.sender || "成员"}：${recent.said ?? ""}\n${context}`;
-      let meant: boolean;
-      [meant, judged] = await api.deps.addressed(line, context, capability.name, api.providers, cheapest);
+    const message = { text: asked.text, sender: asked.sender, addressed: asked.addressed, people: asked.people,
+      attachments: asked.attachments.map((item) => ({ kind: item.kind, name: item.name })) };
+    const hearing = await chats.ask("chat.hear", { name: capability.name, asked: message, earlier, answered: answered ?? null, now: Date.now() / 1000 });
+    const line = String(hearing.line);
+    if (hearing.note) automation.note(hearing.note);
+    let judged = 0;
+    if (!hearing.addressed) {
+      let reply: string;
+      [reply, judged] = await api.deps.addressed(hearing.judge, api.providers, cheapest);
+      const meant = Boolean((await chats.ask("chat.judged", { reply })).meant);
       if (!meant) {
         if (asked.conversation) {
           heard[asked.conversation] = keepHeard([...earlier, line]);
@@ -110,27 +111,16 @@ export class CapabilityAutomations {
       }
       automation.note(`群里没 @ 它的消息：判断是在问它，回答（${cut(line, 60)}）`);
     }
-    if (asked.text === CALLED_ONLY && !(earlier.length || filesBefore.length || asked.attachments.length || state.notes?.[asked.conversation]?.length)) {
-      // Only @-mentioned, with nothing new to answer: say so briefly, not go over the past again.
-      return ["在呢，要我做什么？", judged];
-    }
-    let said = asked.text;
-    // What the conversation keeps of it: what was said, plainly; the model is told it with more.
-    const shown = earlier.length ? [...earlier, line].join("\n") : asked.text;
-    if (earlier.length) {
-      said = "群里此前的消息（不是问你的，供参考）：\n" + earlier.join("\n") + `\n\n现在问你的：\n${asked.sender ? line : asked.text}`;
-      delete heard[asked.conversation];
-    }
-    if (asked.people.length) {
-      // Who is in the group, by the names an "@" reaches (the package makes "@name" a real @).
-      said = `群里的人：${asked.people.join("、")}\n（要 @ 谁就写 @ 加这里的名字，原样照写；发出去就是真正的 @，`
-        + "对方会收到提醒。直接 @，不用解释怎么 @ 的；你以前说过只能发纯文字的话不对了。）\n\n" + said;
-    }
     // What happened since in FluidForm (a task it had planned ended), told before the message.
     const notesByConversation: Record<string, string[]> = (state.notes ??= {});
     const notes = asked.conversation ? notesByConversation[asked.conversation] ?? [] : [];
+    const framed = await chats.ask("chat.frame", { asked: message, line, earlier, notes, files_before: filesBefore.length });
+    // Only @-mentioned, with nothing new to answer: said briefly, not the past gone over again.
+    if (framed.reply) return [String(framed.reply), judged];
+    const said = String(framed.said);
+    const shown = String(framed.shown);
+    if (earlier.length) delete heard[asked.conversation];
     if (asked.conversation) delete notesByConversation[asked.conversation];
-    if (notes.length) said = "FluidForm 告诉你，这之后发生了：\n" + notes.map((note) => `- ${note}`).join("\n") + "\n\n" + said;
     if (filesBefore.length) {
       // The pictures and files sent there before, the group's, come with this message.
       const before = new Set(filesBefore.map((item) => item.id));
@@ -141,10 +131,12 @@ export class CapabilityAutomations {
     const origin = { ...asked.origin, capability: capability.id };
     const attached = asked.attachments.map((item) => item.id);
     const needsVision = asked.attachments.some((item) => item.kind === "image");
+    // The person sees the answer as it is written, never its lines for FluidForm (the chat package
+    // says where they begin).
+    const lines = await chats.actionLines();
     if (asked.on_text) {
-      // The person sees the answer as it is written, never its lines for FluidForm.
       const show = asked.on_text;
-      asked.on_text = (text) => show(supervisor.forPerson(text));
+      asked.on_text = (text) => show(chats.forPerson(text, lines));
     }
     let run: ExecutionRun | null;
     let requested: string | null;
@@ -155,18 +147,16 @@ export class CapabilityAutomations {
       const known = asked.conversation ? state.chats[asked.conversation] : null;
       run = known ? db.getRun(known) : null;
       if (!run || run.kind !== "chat") {
-        [requested, pick] = [state.model_id, this.chatModel(automation, null, needsVision)];
+        [requested, pick] = [state.model_id, await this.chatModel(automation, null, needsVision)];
         // The answer's lead runs in a task started here, which takes this context along.
         // A new chat of this conversation is told what was kept about its people.
-        const remembered = settings.user_memory && asked.conversation ? remembering.facts(remembering.automationKey(capability.id, asked.conversation)) : [];
+        const told = settings.user_memory && asked.conversation
+          ? await chats.text("chat.told", { place: chats.automationKey(capability.id, asked.conversation) }) : "";
         const chosen = pick;
-        run = streaming.listener.run(asked.on_text, () => api.startChat(remembering.told(remembered) + said, Math.max(automation.remaining(), 0.01), true, null,
-          chosen.id, attached, { autoRouted: true, spent, shown }));
-        const latest = api.getTask(run.id);
         const prefix = `${capability.name} · `;
-        latest.plan.title = prefix + cut(firstLine(asked.text), Math.max(CHAT_TITLE_CHARS - [...prefix].length, 10));
-        latest.origin = origin;
-        db.saveRun(latest);
+        const title = prefix + cut(firstLine(asked.text), Math.max(CHAT_TITLE_CHARS - [...prefix].length, 10));
+        run = await streaming.listener.run(asked.on_text, () => api.startChat(told + said, Math.max(automation.remaining(), 0.01), true, null,
+          chosen.id, attached, { autoRouted: true, spent, shown, origin, title }));
         if (asked.conversation) state.chats[asked.conversation] = run.id;
         break;
       }
@@ -176,13 +166,13 @@ export class CapabilityAutomations {
         await active.settled();
         continue;
       }
-      const started = await executor.locked(chat.id, () => {
+      const started = await executor.locked(chat.id, async () => {
         // Someone may have started a reply while we were waiting for the run lock.
         const answering = executor.leadTasks.get(chat.id);
         if (answering && !answering.done) return false;
         const latest = api.getTask(chat.id);
         if (latest.kind !== "chat") return false;
-        [requested, pick] = [state.model_id, this.chatModel(automation, latest, needsVision)];
+        [requested, pick] = [state.model_id, await this.chatModel(automation, latest, needsVision)];
         const previous = latest.supervisor?.model_id ?? null;
         if (previous !== pick.id) {
           latest.supervisor = supervisor.newSession(pick, latest.supervisor, supervisor.chatFolder(latest));
@@ -225,18 +215,19 @@ export class CapabilityAutomations {
     const cost = round6(latest.actual_cost_usd - before + extra);
     let sent: string[] = [];
     if (answer?.status === "done") {
-      text = this.remember(capability, automation, asked, latest, answer.id, text || "");
-      let names: string[];
-      [text, names] = supervisor.splitSends(text || "");
+      text = await this.remember(capability, automation, asked, latest, answer.id, text || "");
+      const split = await chats.ask("chat.split_sends", { text: text || "" });
+      text = split.text ?? null;
+      const names = (split.names ?? []) as string[];
       if (names.length) {
         sent = this.sendFiles(capability, automation, latest, names);
         const listed = sent.map((path) => basename(path).split("-").slice(1).join("-") || basename(path)).join("、");
-        if (sent.length) text = `${text}\n\n（发了：${listed}）`.trim();
-        this.recordAnswer(latest.id, answer.id, text);
+        if (sent.length) text = `${text ?? ""}\n\n（发了：${listed}）`.trim();
+        this.recordAnswer(latest.id, answer.id, text ?? "");
       }
       text = await this.task(capability, asked, automation, latest, answer.id, text, origin);
       if (asked.conversation && text) {
-        const person = supervisor.forPerson(text);
+        const person = chats.forPerson(text, lines);
         (state.answered ??= {})[asked.conversation] = { sender: asked.sender, at: Date.now() / 1000, said: [...person].slice(-300).join(""),
           asked_back: /[？?]$/.test(person.trimEnd()) };
         automation.save();
@@ -246,15 +237,14 @@ export class CapabilityAutomations {
   }
 
   /** An answer without its REMEMBER and FORGET lines, which update what is kept about this
-   *  conversation's people (remembering.ts; settings.user_memory). Without the setting the lines are
+   *  conversation's people (kept by the chat package; settings.user_memory). Without the setting the lines are
    *  only taken out. */
-  remember(capability: Capability, automation: Automation, asked: Asked, chat: ExecutionRun, answerId: string, text: string): string {
-    const [shown, remembered] = remembering.split(text);
+  async remember(capability: Capability, automation: Automation, asked: Asked, chat: ExecutionRun, answerId: string, text: string): Promise<string> {
+    // The chat package keeps them by conversation; without one, the lines are only taken out.
+    const place = asked.conversation ? chats.automationKey(capability.id, asked.conversation) : "";
+    const [shown, remembered] = await chats.remember(place, text, settings.user_memory && Boolean(asked.conversation));
     if (shown === text) return text;
-    if (asked.conversation) {
-      remembering.take(remembering.automationKey(capability.id, asked.conversation), text);
-      if (settings.user_memory) for (const fact of remembered) automation.note(`记下：${cut(fact, 60)}`);
-    }
+    if (asked.conversation && settings.user_memory) for (const fact of remembered) automation.note(`记下：${cut(fact, 60)}`);
     this.recordAnswer(chat.id, answerId, shown);
     return shown;
   }
@@ -297,11 +287,13 @@ export class CapabilityAutomations {
    *  keeps the answer as the person saw it. */
   async task(capability: Capability, asked: Asked, automation: Automation, chat: ExecutionRun, answerId: string, text: string | null,
     origin: Json): Promise<string | null> {
-    let [shown, request] = supervisor.splitTask(text || "");
+    const split = await chats.ask("chat.split_task", { text: text || "" });
+    let shown: string | null = split.text ?? null;
+    const request: string | null = split.request ?? null;
     if (request === null) return text;
     if ([...request].length < 3) shown = shown || "这件事我没能写清楚，请再说具体一点。";
     else {
-      const context = "这个任务来自一段对话，对话内容如下（供参考，以需求为准）：\n" + supervisor.chatTranscript(chat);
+      const context = "这个任务来自一段对话，对话内容如下（供参考，以需求为准）：\n" + await chats.transcript(chat);
       try {
         const task = await this.api.newTask(CreateTask.parse({ prompt: request, attachments: chat.attachments.map((item) => item.id) }), null, context);
         const latest = this.api.getTask(task.id);

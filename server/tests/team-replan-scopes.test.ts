@@ -52,48 +52,48 @@ test("the team is decided before any tasks are planned", async () => {
   assert.equal(plan.nodes[0].employee_id, "builder");
 });
 
-test("delegation is atomic, gives the work to another employee and waits for its delivery", () => {
+test("delegation is atomic, gives the work to another employee and waits for its delivery", async () => {
   const run = runWithTeam();
-  const children = teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured());
+  const children = (await teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured()));
   const [child] = children;
   assert.ok(child.employee_id === "tester" && child.model_id === "test:verify" && child.delegation_parent_id === "parent");
   assert.deepEqual(run.plan.nodes[0].dependencies, [child.id]);
-  assert.deepEqual(teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured()), children);
+  assert.deepEqual((await teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured())), children);
   assert.equal(run.plan.nodes.length, 2);
 });
 
-test("an invalid delegation never changes part of the plan", () => {
+test("an invalid delegation never changes part of the plan", async () => {
   for (const override of [{ employee_id: "missing" }, { employee_id: "builder" }, { dependencies: ["parent"] }, { files: ["../outside.txt"] }, { capability: "planning" }]) {
     const run = runWithTeam();
     const before = JSON.stringify(run);
-    assert.throws(() => teamPlanning.delegate(run, run.plan.nodes[0], request(override), models(), configured()), PlanProblem, JSON.stringify(override));
+    await assert.rejects(teamPlanning.delegate(run, run.plan.nodes[0], request(override), models(), configured()), PlanProblem, JSON.stringify(override));
     assert.equal(JSON.stringify(run), before);
   }
 });
 
-test("a missing recipient selects another capable employee", () => {
+test("a missing recipient selects another capable employee", async () => {
   const run = runWithTeam();
-  assert.equal(teamPlanning.delegate(run, run.plan.nodes[0], request({ employee_id: null }), models(), configured())[0].employee_id, "tester");
+  assert.equal((await teamPlanning.delegate(run, run.plan.nodes[0], request({ employee_id: null }), models(), configured()))[0].employee_id, "tester");
 });
 
-test("the same request id cannot be reused for other work", () => {
+test("the same request id cannot be reused for other work", async () => {
   const run = runWithTeam();
-  teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured());
-  assert.throws(() => teamPlanning.delegate(run, run.plan.nodes[0], request({ instructions: "unrelated work" }), models(), configured()), /different delegation/);
+  await teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured());
+  await assert.rejects(teamPlanning.delegate(run, run.plan.nodes[0], request({ instructions: "unrelated work" }), models(), configured()), /different delegation/);
   assert.equal(run.plan.nodes.length, 2);
 });
 
-test("the delegation depth is bounded", () => {
+test("the delegation depth is bounded", async () => {
   settings.team_max_delegation_depth = 1;
   const run = runWithTeam();
-  const [child] = teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured());
-  assert.throws(() => teamPlanning.delegate(run, child, request({ employee_id: "builder", capability: "coding", files: ["helper.py"] }), models(), configured()), /depth limit/);
+  const [child] = (await teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured()));
+  await assert.rejects(teamPlanning.delegate(run, child, request({ employee_id: "builder", capability: "coding", files: ["helper.py"] }), models(), configured()), /depth limit/);
 });
 
-test("replanning keeps an employee's assignment and its explicit model", () => {
+test("replanning keeps an employee's assignment and its explicit model", async () => {
   const run = runWithTeam();
-  changePlan(run, { add: [{ key: "new", title: "research", instructions: "investigate", employee_id: "tester", capability: "research", acceptance_criteria: "evidence" }] },
-    models(), configured());
+  (await changePlan(run, { add: [{ key: "new", title: "research", instructions: "investigate", employee_id: "tester", capability: "research", acceptance_criteria: "evidence" }] },
+    models(), configured()));
   assert.ok(run.plan.nodes.at(-1)!.employee_id === "tester" && run.plan.nodes.at(-1)!.model_id === "test:verify");
 });
 
@@ -106,10 +106,10 @@ const step = (id: string, status = "pending", deps: string[] = []) => TaskNodeSc
   model_id: "x:api", status, dependencies: deps });
 const plan = (...nodes: ReturnType<typeof step>[]) => ExecutionRunSchema.parse({ id: "r", prompt: "p", status: "running", budget_usd: 1, plan: { summary: "s", nodes } });
 
-test("a missing prerequisite is added before a waiting step", () => {
+test("a missing prerequisite is added before a waiting step", async () => {
   const current = plan(step("a", "succeeded"), step("b", "pending", ["a"]));
-  const changes = changePlan(current, { add: [{ key: "db", title: "建表", instructions: "建好表", dependencies: ["a"], difficulty: "easy" }],
-    update: [{ id: "b", dependencies: ["a", "db"], instructions: "用新表" }] }, MODELS, CONFIGURED);
+  const changes = (await changePlan(current, { add: [{ key: "db", title: "建表", instructions: "建好表", dependencies: ["a"], difficulty: "easy" }],
+    update: [{ id: "b", dependencies: ["a", "db"], instructions: "用新表" }] }, MODELS, CONFIGURED));
   const added = current.plan.nodes.at(-1)!;
   assert.deepEqual(changes, { added: ["建表"], removed: [], updated: ["B"] });
   assert.ok(added.model_id && added.difficulty === "easy");
@@ -118,30 +118,30 @@ test("a missing prerequisite is added before a waiting step", () => {
   assert.equal(current.plan.nodes[1].instructions, "用新表");
 });
 
-test("finished work stays, and the plan stays acyclic", () => {
+test("finished work stays, and the plan stays acyclic", async () => {
   const current = plan(step("a", "succeeded"), step("b", "pending", ["a"]), step("c", "pending", ["b"]));
-  assert.throws(() => changePlan(current, { remove: ["a"] }, MODELS, CONFIGURED), (e: Error) => e instanceof PlanError && e.message.includes("finished or running"));
-  assert.throws(() => changePlan(current, { update: [{ id: "b", dependencies: ["c"] }] }, MODELS, CONFIGURED), /cycle/);
-  assert.throws(() => changePlan(current, { add: [{ key: "x", instructions: "i", dependencies: ["zzz"] }] }, MODELS, CONFIGURED), /unknown or removed/);
+  await assert.rejects(changePlan(current, { remove: ["a"] }, MODELS, CONFIGURED), (e: Error) => e instanceof PlanError && e.message.includes("finished or running"));
+  await assert.rejects(changePlan(current, { update: [{ id: "b", dependencies: ["c"] }] }, MODELS, CONFIGURED), /cycle/);
+  await assert.rejects(changePlan(current, { add: [{ key: "x", instructions: "i", dependencies: ["zzz"] }] }, MODELS, CONFIGURED), /unknown or removed/);
   // Removing a step that has not run drops it from what depended on it.
-  changePlan(current, { remove: ["b"] }, MODELS, CONFIGURED);
+  await changePlan(current, { remove: ["b"] }, MODELS, CONFIGURED);
   assert.deepEqual(current.plan.nodes.map((n) => n.id), ["a", "c"]);
   assert.deepEqual(current.plan.nodes[1].dependencies, []);
 });
 
-test("a changed check must run a script that is written or already there", () => {
+test("a changed check must run a script that is written or already there", async () => {
   settings.workspace_root = folder();
   const current = plan(step("a", "succeeded"), step("b", "pending", ["a"]));
   const change = { update: [{ id: "b", check: "python3 checks/run.py" }] };
-  assert.throws(() => changePlan(current, change, MODELS, CONFIGURED), /checks\/run.py, which no step writes/);
+  await assert.rejects(changePlan(current, change, MODELS, CONFIGURED), /checks\/run.py, which no step writes/);
   // An earlier step already left it in the task's folder.
   mkdirSync(join(folder(), folderId(current), "checks"), { recursive: true });
   writeFileSync(join(folder(), folderId(current), "checks", "run.py"), "print('ok')");
-  changePlan(current, change, MODELS, CONFIGURED);
+  await changePlan(current, change, MODELS, CONFIGURED);
   assert.equal(current.plan.nodes[1].check, "python3 checks/run.py");
 });
 
-test("what clashes", () => {
+test("what clashes", async () => {
   const css = new scopes.Scope(["style.css"]);
   const js = new scopes.Scope(["app.js"], ["style.css"]);
   assert.ok(!css.clashes(new scopes.Scope(["app.py"])));

@@ -59,9 +59,13 @@ export function overall(scores: CapabilityScore): number {
     + scores.structured_output + scores.reliability) / 7;
 }
 
+// Whether anything is priced (pricing.ts sets it): only then must a model have a price to be chosen.
+export const hooks = { priced: () => true };
+
 export function routingReady(model: ModelProfile): boolean {
-  return model.scores !== null && model.context_window !== null && model.input_per_million !== null
-    && model.output_per_million !== null && !["deprecated", "retired"].includes(model.catalog_status)
+  return model.scores !== null && model.context_window !== null
+    && (!hooks.priced() || (model.input_per_million !== null && model.output_per_million !== null))
+    && !["deprecated", "retired"].includes(model.catalog_status)
     && model.available_via_api !== false;
 }
 

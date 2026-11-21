@@ -11,7 +11,9 @@ import { repairPrompt } from "../src/diagnosis.js";
 import { CapabilityScoreSchema, DiagnosisSchema, EventSchema, ExecutionRunSchema, type ExecutionRun, type ModelProfile, TaskNodeSchema,
   type TaskNode } from "../src/models.js";
 import * as retrospect from "../src/retrospect.js";
-import { estimate } from "../src/routing.js";
+// @ts-expect-error: the pricing package is plain JavaScript
+import { calibration } from "../packages/pricing/pricing.mjs";
+import * as pricing from "../src/pricing.js";
 
 const fresh = () => new Database(join(mkdtempSync(join(tmpdir(), "retro-")), "t.db"));
 
@@ -164,24 +166,27 @@ const history = (runId: string, modelId: string, estimated: number, actual: numb
   ({ run_id: runId, actual_usd: total, steps: actual.map((spent) => ({ model_id: modelId, estimated_usd: estimated, actual_usd: spent })) });
 const near = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) <= 1e-6 * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`);
 
-test("the calibration learns each model's overrun and the work outside steps", () => {
+test("the calibration learns each model's overrun and the work outside steps", async () => {
   const reviews = [history("a", "cli:codex", 0.1, [1.0, 2.0, 3.0], 12.0), history("b", "x:api", 0.1, [0.2, 0.2], 0.4),
     history("c", "x:api", 0.1, [0.0], 0.0)]; // never ran: says nothing
-  const cal = retrospect.calibration(reviews);
+  const cal = calibration(reviews);
   assert.deepEqual(Object.keys(cal.models), ["cli:codex"]); // x:api has only two steps that ran
   near(cal.models["cli:codex"], 20);
   near(cal.overall!, 6.4 / 0.5);
   near(cal.overhead, 12.4 / 6.4);
   const run = finished("new", [TaskNodeSchema.parse({ id: "n1", title: "t", instructions: "i", capability: "coding", model_id: "cli:codex", estimated_cost_usd: 0.5 }),
     TaskNodeSchema.parse({ id: "n2", title: "t", instructions: "i", capability: "coding", model_id: "x:api", estimated_cost_usd: 0.1 })], 0, { status: "awaiting_confirmation" });
-  run.plan.estimate = estimate(run.plan.nodes, 2, 0.2);
+  run.plan.estimate = await pricing.estimate(run.plan.nodes, 2, 0.2);
   const expected = (0.5 * 20 + 0.1 * 12.8 + 0.2 * 12.8) * (12.4 / 6.4);
-  assert.ok(Math.abs(retrospect.calibratedCost(run, cal)! - expected) <= 1e-4 * expected);
+  const [calibrated] = await pricing.calibrated(reviews, [run]);
+  assert.ok(Math.abs(calibrated! - expected) <= 1e-4 * expected);
 });
 
-test("without enough history there is no calibration, and a task never calibrates itself", () => {
+test("without enough history there is no calibration, and a task never calibrates itself", async () => {
   const reviews = [history("a", "cli:codex", 0.1, [1.0, 2.0, 3.0], 6.0)];
-  assert.equal(retrospect.calibration([]).overall, null);
-  assert.equal(retrospect.calibration(reviews, "a").overall, null);
-  assert.equal(retrospect.calibratedCost(finished("a", []), retrospect.calibration([])), null);
+  assert.equal(calibration([]).overall, null);
+  assert.equal(calibration(reviews, "a").overall, null);
+  const own = finished("a", []);
+  own.plan.estimate = await pricing.estimate([], 2, 0.2);
+  assert.deepEqual(await pricing.calibrated(reviews, [own]), [null]);
 });

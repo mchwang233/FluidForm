@@ -338,9 +338,10 @@ export function describeCall(name: string, args: unknown): string {
     const where = ["glob", "path"].filter((key) => given[key]).map((key) => str(given[key])).join(" ");
     return `${given.pattern ? str(given.pattern) : ""}` + head(where ? ` (${where})` : "", 200);
   }
-  // What a chat action or an MCP tool (a search, a page, a picture) is about.
+  // What a chat action (the chat package's) or an MCP tool (a search, a page, a picture) is about:
+  // any tool that is not one of the steps' own.
   for (const key of ["query", "url", "request", "name", "fact", "words", "prompt", "search_query"]) {
-    if ((name.startsWith(mcp.PREFIX) || name in chatActions.TOOLS) && typeof given[key] === "string") {
+    if (!TOOLS.some((tool) => tool.name === name) && typeof given[key] === "string") {
       return head(given[key] as string, 200);
     }
   }
@@ -535,7 +536,7 @@ export async function portBridge<T>(ports: number[], work: (folder: string | nul
 }
 
 /** What a workspace charges a picture or a search to (the call's RequestBudget). */
-export type Spending = { canSpend?(cost: number): boolean; recordUsd?(cost: number): Promise<void> };
+export type Spending = { canSpend?(cost: number): boolean | Promise<boolean>; recordUsd?(cost: number): Promise<void> };
 
 const cleanup = new FinalizationRegistry<string>((folder) => rmSync(folder, { recursive: true, force: true }));
 
@@ -679,7 +680,7 @@ export class Workspace {
       if (!args || typeof args !== "object" || Array.isArray(args) || "__invalid__" in args) throw new ToolError("arguments must be a JSON object");
       const acting = !this.readOnly && !this.host;
       if (name === "Bash") return await this.bash(args.command, args.timeout);
-      if (name in chatActions.TOOLS && acting) return chatActions.run(name, args);
+      if (chatActions.has(name) && acting) return await chatActions.run(name, args);
       if (name.startsWith(mcp.PREFIX) && acting) return await mcp.call(this, name, args);
       const handlers: Record<string, (args: Record<string, unknown>) => string> = { Read: (a) => this.read(a), Write: (a) => this.write(a),
         Edit: (a) => this.edit(a), MultiEdit: (a) => this.multiEdit(a), Glob: (a) => this.glob(a), Grep: (a) => this.grep(a), LS: (a) => this.ls(a) };

@@ -7,7 +7,7 @@ import { Database } from "../src/db.js";
 import { pythonIso } from "../src/lax.js";
 import { ModelProfileSchema, TaskNodeSchema } from "../src/models.js";
 import { selectPlannerModel } from "../src/planner.js";
-import { NoEligibleModelError, nodeCost, routeNode } from "../src/routing.js";
+import { costsFor, NoEligibleModelError, routeNode } from "../src/routing.js";
 import { PROVIDER_ENV } from "../src/secret-names.js";
 import { conftest } from "./helpers/conftest.js";
 
@@ -214,7 +214,7 @@ test("a retired model is not brought back by missing or stale public data", asyn
   }
 });
 
-test("unknown metadata is neither free nor a candidate for routing", () => {
+test("unknown metadata is neither free nor a candidate for routing", async () => {
   const entry = catalog.openai.models["new-model"];
   delete entry.cost;
   entry.limit.context = -1;
@@ -222,9 +222,10 @@ test("unknown metadata is neither free nor a candidate for routing", () => {
   const model = ModelProfileSchema.parse({ id: "openai:new-model", provider: "openai", enabled: true, ...metadata });
   assert.ok(model.context_window === null && model.input_per_million === null);
   const node = TaskNodeSchema.parse({ id: "n", title: "task", instructions: "work", capability: "coding", quality_threshold: 0 });
-  assert.equal(selectPlannerModel([model], new Set([model.id])), null);
-  assert.throws(() => routeNode(node, [model], new Set([model.id])), NoEligibleModelError);
-  assert.throws(() => nodeCost(node, model), NoEligibleModelError);
+  assert.equal(await selectPlannerModel([model], new Set([model.id])), null);
+  await assert.rejects(routeNode(node, [model], new Set([model.id])), NoEligibleModelError);
+  // Pricing has nothing to say about it: no cost, rather than free.
+  assert.deepEqual(await costsFor(node, [model]), { [model.id]: null });
 });
 
 test("refreshes at the same time run once, and closing cancels", async () => {

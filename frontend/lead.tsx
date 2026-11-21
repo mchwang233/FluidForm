@@ -1,4 +1,5 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { canChat, useProvided } from "./provided";
 import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type Attachment } from "./attachments";
@@ -116,6 +117,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   const decided = (run.decisions ?? []).length;
   // A chat: only a conversation with one model, which answers under its own name.
   const chat = run.kind === "chat" ? model(run.supervisor?.model_id) : null;
+  const provided = useProvided();
   const status = chat ? (answering ? { label: "思考中", tone: "busy" } : { label: "对话中", tone: "ok" }) : waiting || repairs.some(item => item.id === run.waiting_diagnosis_id) ? { label: "等你回复", tone: "warn" }
     : engineerWaiting ? { label: "平台工程师等你", tone: "warn" }
     : thinking ? { label: "判断中", tone: "busy" } : repairing ? { label: "修复中", tone: "busy" }
@@ -149,7 +151,9 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
           </details>
         : show(group))}
       {thinking && <ThinkingMessage thinking={thinking} step={thinking.node_id ? title(thinking.node_id) : undefined} />}
-      {!waiting && <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} chat={!!chat} />}
+      {!waiting && (chat && !canChat(provided)
+        ? <p className="chat-off" role="note">聊天能力已停用，这段对话只能查看。在 平台 → 能力 里启用「聊天」后可以接着聊。</p>
+        : <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} chat={!!chat} />)}
       <div ref={end} className="dx-end" aria-hidden="true" />
     </div>
   </section>;

@@ -215,7 +215,9 @@ export class DomainProxy {
 }
 
 export function environmentFor(folder: string, data: string, secrets: Record<string, string>, proxied: boolean): Record<string, string> {
-  let env: Record<string, string> = { PATH: `${folder}/.venv/bin:/usr/local/bin:/usr/bin:/bin` };
+  // The Node FluidForm runs on comes first after the package's own environment: service packages
+  // written for Node (packages/pricing) run on it.
+  let env: Record<string, string> = { PATH: `${folder}/.venv/bin:${dirname(realpathSync(process.execPath))}:/usr/local/bin:/usr/bin:/bin` };
   for (const name of settings.sandbox_env) if (process.env[name] !== undefined) env[name] = process.env[name]!;
   env = environment.commandEnv(env);
   Object.assign(env, { HOME: "/tmp", TMPDIR: "/tmp", LANG: "C.UTF-8", PYTHONUNBUFFERED: "1", SP_CAPABILITY_DIR: folder, SP_DATA_DIR: data });
@@ -243,10 +245,13 @@ export function wrap(folder: string, data: string, command: string, env: Record<
   const interpreter = python();
   const prefix = interpreter ? dirname(dirname(interpreter)) : "/";
   const keepPython = prefix !== "/" ? ["--ro-bind", prefix, prefix] : [];
+  // And FluidForm's own Node, even when it lives in the hidden home (nvm, say).
+  const node = dirname(dirname(realpathSync(process.execPath)));
+  const keepNode = node !== "/" && node !== "/usr" && node !== prefix ? ["--ro-bind", node, node] : [];
   const bridge = proxyDir ? ["--bind", proxyDir, SANDBOX_PORTS_DIR] : [];
   return [
     "bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", ...bridge,
-    ...hideHomes(), ...outer, ...keepPython,
+    ...hideHomes(), ...outer, ...keepPython, ...keepNode,
     writable ? "--bind" : "--ro-bind", folder, folder, ...inner, ...masked,
     "--bind", data, data,
     "--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session",

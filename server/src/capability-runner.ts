@@ -226,7 +226,7 @@ export type Handled = [string | null, number] | [string | null, number, string[]
 export type Handle = (capability: Capability, asked: Asked, item: Automation) => Promise<Handled>;
 
 /** Calls ``onLine`` for each line of ``stream``; a line longer than LINE_LIMIT is dropped with a note. */
-function readLines(stream: Readable, onLine: (line: string) => void, tooLong: () => void): Promise<void> {
+export function readLines(stream: Readable, onLine: (line: string) => void, tooLong: () => void): Promise<void> {
   return new Promise((done) => {
     let pending: Buffer[] = [];
     let size = 0;

@@ -19,7 +19,7 @@ import {
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import { QuotaTracker } from "../src/quota.js";
 import * as quality from "../src/quality.js";
-import * as remembering from "../src/remembering.js";
+import { remembering } from "./helpers/chat-package.js";
 import * as retrospect from "../src/retrospect.js";
 import { stepKey } from "../src/review.js";
 import { AA_SOURCE } from "../src/scoring.js";

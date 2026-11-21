@@ -68,8 +68,8 @@ export async function form(say: Say, request: string, models: ModelProfile[], co
 }
 
 /** Validate a proposed child graph on a copy; publish all children or nothing. */
-export function delegate(run: ExecutionRun, parent: TaskNode, payload: Record<string, any>, models: ModelProfile[], configured: Set<string>,
-  needsVision = false): TaskNode[] {
+export async function delegate(run: ExecutionRun, parent: TaskNode, payload: Record<string, any>, models: ModelProfile[], configured: Set<string>,
+  needsVision = false): Promise<TaskNode[]> {
   if (!run.plan.employees.length || !member(run.plan, parent.employee_id)) throw new PlanProblem("delegation requires an assigned project employee");
   const requestId = payload.request_id;
   if (typeof requestId !== "string" || !(requestId.trim().length >= 1 && requestId.trim().length <= 80)) throw new PlanProblem("delegation needs a stable request_id");
@@ -122,7 +122,7 @@ export function delegate(run: ExecutionRun, parent: TaskNode, payload: Record<st
         if (employee.id === parent.employee_id) continue;
         const probe: TaskNode = { ...child, employee_id: employee.id };
         try {
-          route(probe, candidate, models, configured, needsVision);
+          await route(probe, candidate, models, configured, needsVision);
           const load = candidate.nodes.filter((n) => n.employee_id === employee.id && (n.status === "running" || n.status === "pending")).length;
           options.push([load, probe.estimated_cost_usd, employee.id]);
         } catch (error) {
@@ -133,7 +133,7 @@ export function delegate(run: ExecutionRun, parent: TaskNode, payload: Record<st
       child.employee_id = minBy(options, (option) => option)[2];
     }
     try {
-      route(child, candidate, models, configured, needsVision);
+      await route(child, candidate, models, configured, needsVision);
     } catch (error) {
       if (error instanceof NoEligibleModelError) throw new PlanProblem(error.message);
       throw error;

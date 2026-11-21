@@ -100,7 +100,7 @@ export function assignmentPrompt(plan: TaskPlan): string {
 }
 
 /** Keep the lead's model choice, with ordinary availability/quality checks. */
-export function route(node: TaskNode, plan: TaskPlan, models: ModelProfile[], configured: Set<string>, needsVision = false): void {
+export async function route(node: TaskNode, plan: TaskPlan, models: ModelProfile[], configured: Set<string>, needsVision = false): Promise<void> {
   const employee = member(plan, node.employee_id);
   if (!employee || !employee.capabilities.includes(node.capability)) {
     throw new NoEligibleModelError(`${node.title}: employee_id must identify an employee with ${node.capability}`);
@@ -118,7 +118,7 @@ export function route(node: TaskNode, plan: TaskPlan, models: ModelProfile[], co
   const note = score < node.quality_threshold ? `（门槛从 ${formatG(node.quality_threshold)} 调到该模型的 ${formatG(score)}）` : "";
   node.quality_threshold = Math.min(node.quality_threshold, score);
   node.model_id = model.id;
-  node.estimated_cost_usd = pyRound(nodeCost(node, model), 6);
+  node.estimated_cost_usd = pyRound(await nodeCost(node, model), 6);
   node.routing_note = `负责人分配给 ${employee.name}（${employee.role}），使用 ${model.display_name}${note}。`;
 }
 

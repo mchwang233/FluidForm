@@ -17,7 +17,7 @@ import {
 import { autonomousPlan } from "../src/planner.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as quality from "../src/quality.js";
-import { estimate } from "../src/routing.js";
+import * as pricing from "../src/pricing.js";
 import { Task } from "../src/tasks.js";
 import { conftest } from "./helpers/conftest.js";
 import { taskApi } from "./helpers/task-api.js";
@@ -153,7 +153,7 @@ test("a task read through the API carries its estimate calibrated by history", a
     steps: Array(3).fill({ model_id: "cli:claude", estimated_usd: 0.1, actual_usd: 1.0 }) });
   const run = runningRun("awaiting_confirmation");
   for (const node of run.plan.nodes) Object.assign(node, { status: "pending", estimated_cost_usd: 0.2 });
-  run.plan.estimate = estimate(run.plan.nodes, 1);
+  run.plan.estimate = await pricing.estimate(run.plan.nodes, 1);
   api.db.saveRun(run);
 
   const [listed] = (await client.get("/api/tasks")).json();

@@ -69,7 +69,7 @@ test("a cancelled task turns down a late delegation but keeps its usage", async 
   near(run.actual_cost_usd, 0.0002);
 });
 
-test("a restart resumes the parent's own history with the child's verified result", () => {
+test("a restart resumes the parent's own history with the child's verified result", async () => {
   const db = new Database(join(folder(), "resume.db"));
   const run = runWithTeam();
   db.saveRun(run);
@@ -77,7 +77,7 @@ test("a restart resumes the parent's own history with the child's verified resul
   conversation.modelId = "test:build";
   conversation.state = { provider: "openai", history: [{ role: "assistant", content: "saved-progress" }] };
   conversation.save();
-  const [child] = team.delegate(run, run.plan.nodes[0], request(), models(), ids());
+  const [child] = await team.delegate(run, run.plan.nodes[0], request(), models(), ids());
   run.plan.nodes[0].attempts.push(NodeAttemptSchema.parse({ model_id: "test:build", outcome: "delegated" }));
   child.status = "succeeded";
   child.result = "checked boundary evidence";
@@ -120,7 +120,7 @@ test("delegated requests share their ancestor's cost and turn limits after a res
   parent.model_id = "test:build";
   parent.artifact_contract!.max_turns = 2;
   run.plan.nodes = [parent];
-  const [child] = team.delegate(run, parent, request(), models(), ids());
+  const [child] = await team.delegate(run, parent, request(), models(), ids());
   db.saveRun(run);
   const call = (async (budget: { beginTurn(): Promise<void>; record(id: string, input: number, output: number): Promise<void> }) => {
     await budget.beginTurn();

@@ -82,7 +82,7 @@ function briefProject(root: string): string {
   return root;
 }
 
-test("an unscoped step gets the files it names and what came before changed", () => {
+test("an unscoped step gets the files it names and what came before changed", async () => {
   const db = leadDatabase(folder());
   const root = briefProject(join(folder(), "brief"));
   mkdirSync(join(root, "lib"));
@@ -168,7 +168,7 @@ const attempt = (fields: Record<string, unknown> = {}) => NodeAttemptSchema.pars
   { turn: 1, tool: "Read", detail: "app.py (from line 1)", ok: true }, { turn: 2, tool: "Edit", detail: "app.py", ok: true },
   { turn: 3, tool: "Bash", detail: "pytest -q", ok: false }], ...fields });
 
-test("a fresh attempt is told what the last one did", () => {
+test("a fresh attempt is told what the last one did", async () => {
   const run = leadDatabase(folder()).getRun("r")!;
   const node = run.plan.nodes[0];
   node.attempts.push(attempt());
@@ -177,7 +177,7 @@ test("a fresh attempt is told what the last one did", () => {
   assert.ok(prompt.includes("failed: pytest -q") && !prompt.includes("Files it read")); // app.py was also edited
 });
 
-test("a step goes on only where that still makes sense", () => {
+test("a step goes on only where that still makes sense", async () => {
   const db = leadDatabase(folder());
   const executor = new Executor(db, nobody, LEAD_MODELS);
   const run = db.getRun("r")!;
@@ -288,12 +288,12 @@ test("direct tasks are dispatched in dependency order, without a refiner", async
     started.push(nodeId);
   };
   let running = new Map<Task<void>, string>();
-  executor.dispatch(run, running);
+  await executor.dispatch(run, running);
   await Promise.all([...running.keys()].map((task) => task.promise));
   assert.deepEqual(started, [plan.nodes[0].id]);
   plan.nodes[0].status = "succeeded";
   running = new Map();
-  executor.dispatch(run, running);
+  await executor.dispatch(run, running);
   await Promise.all([...running.keys()].map((task) => task.promise));
   assert.deepEqual(started, plan.nodes.map((n) => n.id));
 });
@@ -624,34 +624,34 @@ function started(name: string, nodes: TaskNode[]) {
   return [db, new Executor(db, { configuredModels: (ids: Iterable<string>) => new Set(ids) } as never, SPREAD_MODELS)] as const;
 }
 
-test("a step past its provider's share goes to another provider", () => {
+test("a step past its provider's share goes to another provider", async () => {
   settings.max_steps_per_provider = 2;
   const [db, executor] = started("t", [spreadStep("a", "running"), spreadStep("b", "running"), spreadStep("c")]);
   const run = db.getRun("r")!;
   const node = run.plan.nodes[2];
-  executor.spread(run, node);
+  await executor.spread(run, node);
   // The cheapest other provider that clears the threshold; the weak one does not, the dear one costs too much.
   assert.equal(node.model_id, "minimax:m3");
   const data = db.events("r").filter((e) => e.kind === "node.model_switched").at(-1)!.data as Record<string, unknown>;
   assert.ok(data.reason === "spread_across_providers" && data.model_id === "deepseek:flash");
 });
 
-test("a step stays when its provider has room or no other fits", () => {
+test("a step stays when its provider has room or no other fits", async () => {
   settings.max_steps_per_provider = 2;
   let [db, executor] = started("t", [spreadStep("a", "running"), spreadStep("b")]);
   let run = db.getRun("r")!;
-  executor.spread(run, run.plan.nodes[1]);
+  await executor.spread(run, run.plan.nodes[1]);
   assert.equal(run.plan.nodes[1].model_id, CHEAP.id); // one running on it: room for another
   // Past the share, but the only other able model costs more than spread_cost_factor times as much.
   const busy = new Set(["deepseek"]);
-  assert.equal(spreadTo(spreadStep("c"), [CHEAP, DEAR, WEAK], new Set(Object.keys(SPREAD_MODELS)), busy), null);
+  assert.equal((await spreadTo(spreadStep("c"), [CHEAP, DEAR, WEAK], new Set(Object.keys(SPREAD_MODELS)), busy)), null);
   settings.spread_cost_factor = 20.0;
-  assert.equal(spreadTo(spreadStep("c"), [CHEAP, DEAR, WEAK], new Set(Object.keys(SPREAD_MODELS)), busy)!.id, "glm:glm");
+  assert.equal((await spreadTo(spreadStep("c"), [CHEAP, DEAR, WEAK], new Set(Object.keys(SPREAD_MODELS)), busy))!.id, "glm:glm");
   // Off when the setting is 0.
   settings.max_steps_per_provider = 0;
   [db, executor] = started("off", [spreadStep("a", "running"), spreadStep("b", "running"), spreadStep("c")]);
   run = db.getRun("r")!;
-  executor.spread(run, run.plan.nodes[2]);
+  await executor.spread(run, run.plan.nodes[2]);
   assert.equal(run.plan.nodes[2].model_id, CHEAP.id);
 });
 

@@ -14,11 +14,10 @@ import * as sandbox from "../src/capability-sandbox.js";
 import { settings } from "../src/config.js";
 import { type Capability, LeadMessageSchema, type SupervisorSession } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
-import * as remembering from "../src/remembering.js";
+import { remembering } from "./helpers/chat-package.js";
 import * as secrets from "../src/secrets.js";
 import * as streaming from "../src/streaming.js";
-import * as supervisor from "../src/supervisor.js";
-import { CHAT_ROLE, MAX_CHAT_HANDOVER_CHARS } from "../src/supervisor.js";
+import { CHAT_ROLE, chatGuide, MAX_CHAT_HANDOVER_CHARS } from "./helpers/chat-package.js";
 import { type Api, BEST, OTHER, type Sent, triaging } from "./helpers/chatting.js";
 import { conftest } from "./helpers/conftest.js";
 import { type Client, taskApi } from "./helpers/task-api.js";
@@ -723,7 +722,7 @@ test("an automation's chat remembers what people tell it, for its next chats", a
   assert.deepEqual(remembering.facts("fake-bot:c1"), ["成员1: 喜欢简短的回答"]);
   const chat = api.db.getRun(automation.state.chats.c1)!;
   assert.equal(chat.lead_messages.at(-1)!.text, "好，以后简短回答。");
-  assert.ok(sent[0][2].includes("REMEMBER:") || supervisor.chatGuide(chat).includes("REMEMBER:"));
+  assert.ok(sent[0][2].includes("REMEMBER:") || (await chatGuide(chat)).includes("REMEMBER:"));
   // A new chat of that conversation (another day, another model) is told it first.
   delete automation.state.chats.c1;
   await api.automations.message(capabilities.load("fake-bot")!, ask({ conversation: "c1", text: "你好" }), automation);

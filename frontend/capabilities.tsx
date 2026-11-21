@@ -13,6 +13,8 @@ export type Capability = CapabilityCard & {
   id: string; status: "active" | "disabled" | "failed"; source_run_id?: string | null;
   check_ok?: boolean | null; check_output: string; created_at: string;
   source?: "task" | "upload"; version?: string; entry?: string;
+  // A service package: the capabilities it gives FluidForm itself; any package: what it needs first.
+  provides?: string[]; requires?: string[];
 };
 export type CapabilityProposal = CapabilityCard & { status: "proposed" | "solidified" | "dismissed"; capability_id?: string | null };
 /** An uploaded package's secrets stored, and an automation's state (server: capability-runner.ts). */
@@ -23,7 +25,10 @@ type Runtime = {
 };
 type Runtimes = { available: boolean; missing: string; capabilities: Record<string, Runtime> };
 
-const KIND: Record<string, string> = { tool: "工具", automation: "自动化" };
+const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务" };
+// The capabilities FluidForm itself uses, as the page names them (server: service-names.ts).
+const PROVIDED: Record<string, string> = { chat: "聊天", pricing: "计价" };
+const named = (names: string[] = []) => names.map(name => PROVIDED[name] ?? name).join("、");
 const STATUS: Record<Capability["status"], string> = { active: "可用", disabled: "已停用", failed: "检查未通过" };
 const RUNNING: Record<string, { label: string; tone: string }> = {
   running: { label: "运行中", tone: "ok" }, starting: { label: "启动中", tone: "busy" }, restarting: { label: "重启中", tone: "busy" },
@@ -86,7 +91,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
         : act(call(one(item.id), sendJson("PATCH", { enabled: item.status !== "active" })));
       return <li key={item.id} className={`capability ${item.status}`}>
         <div className="capability-head">
-          <Icon name={item.kind === "automation" ? "activity" : "wrench"} size={15} />
+          <Icon name={item.kind === "automation" ? "activity" : item.kind === "service" ? "cpu" : "wrench"} size={15} />
           <b>{item.name}</b>
           <span className="capability-kind">{KIND[item.kind] ?? item.kind}{uploaded && ` · 能力包${item.version ? ` v${item.version}` : ""}`}</span>
           <span className={`capability-status ${item.status}`}>{STATUS[item.status]}</span>
@@ -98,13 +103,15 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
           </span>
         </div>
         {item.summary && <p>{item.summary}</p>}
+        {removing === item.id && item.provides?.includes("pricing") && <p className="error" role="alert">卸载后任务不再估价、不记账，也不受预算上限限制。</p>}
         {confirming === item.id && <div className="capability-confirm" role="group" aria-label="确认启用">
-          <p><b>启用「{item.name}」？</b>它是上传的代码，会在沙箱里{item.kind === "automation" ? "一直运行" : "被之后的任务使用"}：</p>
+          <p><b>启用「{item.name}」？</b>它是上传的代码，会在沙箱里{item.kind === "automation" || item.kind === "service" ? "一直运行" : "被之后的任务使用"}：</p>
           <ul>
             <li>能访问：{item.domains.length ? item.domains.join("、") : "不联网"}（只有这些）</li>
             {!!item.secrets.length && <li>会拿到你填的：{item.secrets.join("、")}</li>}
             <li>只能写它自己的数据文件夹，看不到你的主目录和 FluidForm 的数据</li>
             {item.kind === "automation" && <li>别人通过它提的事要你确认才开工，每天的花费有上限</li>}
+            {!!item.provides?.length && <li>给 FluidForm 提供{named(item.provides)}能力，拿不到你的 API 密钥</li>}
           </ul>
           {!!lacking.length && <p className="capability-confirm-missing">先在下面填好 {lacking.join("、")}。</p>}
           <span className="capability-actions">
@@ -117,6 +124,8 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
           {!!item.files.length && <><dt>代码</dt><dd>{item.files.map(file => <code key={file} className="capability-file">{file}</code>)}</dd></>}
           {!!item.secrets.length && <><dt>需要</dt><dd>{item.secrets.join("、")}</dd></>}
           {!!item.domains.length && <><dt>访问</dt><dd>{item.domains.join("、")}</dd></>}
+          {!!item.provides?.length && <><dt>提供</dt><dd>{named(item.provides)}能力</dd></>}
+          {!!item.requires?.length && <><dt>依赖</dt><dd>{named(item.requires)}能力</dd></>}
           {item.source_run_id && <><dt>来自</dt><dd>{source(item.source_run_id)
             ? <button type="button" className="link-button" onClick={() => onOpenRun(item.source_run_id!)}>「{source(item.source_run_id)!.plan.title || source(item.source_run_id)!.plan.summary}」</button>
             : "已删除的任务"}</dd></>}
@@ -142,10 +151,10 @@ function PackageControls({ apiBase, item, state, onChanged, act }: {
     if (await act(call(`${url}/secrets`, sendJson("PUT", { values })))) { setValues({}); onChanged(); }
   }
   return <div className="capability-package">
-    {item.kind === "automation" && <div className="capability-run">
+    {(item.kind === "automation" || item.kind === "service") && <div className="capability-run">
       <span className={`dx-chip ${running.tone}`}>{running.tone === "busy" && <i className="pulse" aria-hidden="true" />}{running.label}</span>
       {state.text && <span className="capability-run-text">{state.text}</span>}
-      <span className="capability-run-counts">今天花了 ${(state.spent_today_usd ?? 0).toFixed(2)} · 已回 {state.handled ?? 0} 条 · {state.conversations ?? 0} 段对话</span>
+      {item.kind === "automation" && <span className="capability-run-counts">今天花了 ${(state.spent_today_usd ?? 0).toFixed(2)} · 已回 {state.handled ?? 0} 条 · {state.conversations ?? 0} 段对话</span>}
     </div>}
     {state.error && <p className="error" role="alert">{state.error}</p>}
     {item.kind === "automation" && <div className="capability-settings">

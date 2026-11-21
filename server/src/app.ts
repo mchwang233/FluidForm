@@ -11,6 +11,8 @@ import {
 import * as files from "./attachments.js";
 import { taskName } from "./automations.js";
 import * as capabilities from "./capabilities.js";
+import * as chat from "./chat.js";
+import * as services from "./services.js";
 import * as packages from "./capability-packages.js";
 import { missing as sandboxMissing } from "./capability-sandbox.js";
 import { PROFILES, settings } from "./config.js";
@@ -29,7 +31,6 @@ import { stepKey } from "./review.js";
 import { preferences } from "./learning.js";
 import { taskFolder } from "./folders.js";
 import { briefWriter } from "./routing.js";
-import * as remembering from "./remembering.js";
 import * as retrospect from "./retrospect.js";
 import { eligibleForNode, NoEligibleModelError, routeNode } from "./routing.js";
 import { AA_SOURCE } from "./scoring.js";
@@ -63,7 +64,7 @@ const ProviderKey = z.object({ api_key: z.string().min(8) });
 const UpdateModel = z.object({ enabled: z.boolean() });
 const UpdateModelById = UpdateModel.extend({ model_id: z.string() });
 const ProfileChoice = z.object({ profile: z.enum(["", "fast", "balanced", "careful"]) });
-const Forget = z.object({ key: z.string().min(1).max(300), fact: z.string().min(1).max(remembering.MAX_FACT_CHARS + 10) });
+const Forget = z.object({ key: z.string().min(1).max(300), fact: z.string().min(1).max(310) });
 const EngineerRequest = z.object({
   request: z.string().min(1).max(20_000),
   kind: z.string().regex(/^(repair|component)$/).default("component"),
@@ -296,23 +297,27 @@ export function buildApp(api: Api): FastifyInstance {
 
   /** Where facts were said, for the owner: their own chats, or an automation's conversation. */
   const memoryPlace = (key: string) => {
-    if (key === remembering.WEB) return "网页对话";
+    if (key === chat.WEB) return "网页对话";
     const at = key.indexOf(":");
     const [capabilityId, conversation] = at < 0 ? [key, ""] : [key.slice(0, at), key.slice(at + 1)];
     const capability = capabilities.load(capabilityId);
     return `${capability ? capability.name : capabilityId} · 会话 ${[...conversation].slice(-6).join("")}`;
   };
-  // What chats remember (remembering.ts), by where it was said.
-  const listMemory = () => ({
-    enabled: settings.user_memory,
-    places: Object.entries(remembering.load()).map(([key, facts], index) => ({ key, facts, index }))
-      .sort((a, b) => Number(a.key !== remembering.WEB) - Number(b.key !== remembering.WEB) || a.index - b.index)
-      .map(({ key, facts }) => ({ key, label: memoryPlace(key), facts })),
-  });
+  // What chats remember, by where it was said: the chat package keeps it.
+  const listMemory = async () => {
+    const kept: Record<string, string[]> = chat.enabled() ? ((await chat.ask("chat.memory")).places ?? {}) : {};
+    return {
+      enabled: settings.user_memory, available: chat.enabled(),
+      places: Object.entries(kept).map(([key, facts], index) => ({ key, facts, index }))
+        .sort((a, b) => Number(a.key !== chat.WEB) - Number(b.key !== chat.WEB) || a.index - b.index)
+        .map(({ key, facts }) => ({ key, label: memoryPlace(key), facts })),
+    };
+  };
   app.get("/api/memory", async () => listMemory());
   app.post("/api/memory/forget", async (request) => {
     const body = parse(Forget, request.body);
-    if (!remembering.remove(body.key, body.fact)) throw new HttpError(404, "没有这条记忆");
+    chatRequired();
+    if (!(await chat.ask("chat.forget", { place: body.key, fact: body.fact })).removed) throw new HttpError(404, "没有这条记忆");
     return listMemory();
   });
 
@@ -552,6 +557,7 @@ export function buildApp(api: Api): FastifyInstance {
       try {
         const manifest = packages.read(data);
         await runner().stop(manifest.id);
+        await api.services.stop(manifest.id);
         return reply.code(201).send(await packages.install(data));
       } catch (error) {
         if (error instanceof packages.PackageError) throw new HttpError(422, error.message);
@@ -631,7 +637,7 @@ export function buildApp(api: Api): FastifyInstance {
 
   // Every task; ``brief`` leaves out what only an opened task shows.
   app.get("/api/tasks", async (request, reply) => {
-    const runs = api.calibrated(db.listRuns());
+    const runs = await api.calibrated(db.listRuns());
     return unchangedOr(request, reply, JSON.stringify(queryBool(request.query as Query, "brief", false) ? runs.map(brief) : runs));
   });
 
@@ -715,7 +721,7 @@ export function buildApp(api: Api): FastifyInstance {
   // changed files past the first ones, each tool call's output and the end of a long command, and the
   // lead's own conversation with its model.
   app.get<{ Params: { run_id: string } }>("/api/tasks/:run_id", async (request, reply) => {
-    const [run] = api.calibrated([api.getTask(request.params.run_id)]);
+    const [run] = await api.calibrated([api.getTask(request.params.run_id)]);
     for (const node of run.plan.nodes) {
       // The page lists the first files and the count; a simulation can leave megabytes of names.
       if (node.changed_files.length > SHOWN_CHANGED_FILES) {
@@ -793,9 +799,13 @@ export function buildApp(api: Api): FastifyInstance {
     const diagnosis = executor().diagnosing.get(run.id);
     if (diagnosis && !diagnosis.done) throw new HttpError(409, "平台工程师还在查或修，完成后会自动继续；也可以取消任务。");
   };
-  const routing = (work: () => void) => {
+  // A request that needs chats, when there is no chat package.
+  const chatRequired = () => {
+    if (!chat.enabled()) throw new HttpError(409, chat.NOT_ENABLED);
+  };
+  const routing = async (work: () => Promise<void>) => {
     try {
-      work();
+      await work();
     } catch (error) {
       if (error instanceof NoEligibleModelError) throw new HttpError(422, error.message);
       throw error;
@@ -811,14 +821,14 @@ export function buildApp(api: Api): FastifyInstance {
     const configured = configuredForRun(run);
     const catalog = Object.values(api.models);
     const needsVision = run.attachments.some((item) => item.kind === "image");
-    routing(() => {
+    await routing(async () => {
       for (const node of run.plan.nodes) {
         if (node.status === "succeeded" || node.status === "running") continue;
         if (run.plan.employees.length) {
-          team.route(node, run.plan, catalog, configured, needsVision);
+          await team.route(node, run.plan, catalog, configured, needsVision);
           continue;
         }
-        if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) routeNode(node, catalog, configured, needsVision);
+        if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) await routeNode(node, catalog, configured, needsVision);
       }
     });
     checkBudget(run, budgetUsd);
@@ -894,7 +904,8 @@ export function buildApp(api: Api): FastifyInstance {
   app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/lead", async (request, reply) => {
     const body = parse(LeadQuestion, request.body);
     const runId = request.params.run_id;
-    api.getTask(runId);
+    // A chat goes on only with the chat capability; a task's lead answers either way.
+    if (api.getTask(runId).kind === "chat") chatRequired();
     const attached = api.attached(body.attachments);
     const message = body.message.trim() || (attached.length ? "（见附件）" : "");
     if (!message) throw new HttpError(422, "请写下要说的话，或附上文件。");
@@ -911,7 +922,7 @@ export function buildApp(api: Api): FastifyInstance {
 
   // ---- Chats ----
 
-  app.get("/api/chats/models", async (request) => api.chatModels(queryBool(request.query as Query, "use_cli", true))
+  app.get("/api/chats/models", async (request) => (chat.enabled() ? await api.chatChoices(queryBool(request.query as Query, "use_cli", true)) : [])
     .map((model) => ({ id: model.id, display_name: model.display_name, channel: model.channel })));
 
   // Only a conversation: no plan, no steps. The model may read the project folder, if one is given
@@ -919,7 +930,8 @@ export function buildApp(api: Api): FastifyInstance {
   // the background, as in a task's conversation with its lead.
   app.post("/api/chats", async (request, reply) => {
     const body = parse(CreateChat, request.body);
-    return reply.code(201).send(api.startChat(body.message, body.budget_usd, body.use_cli, body.project_dir, body.model_id, body.attachments));
+    chatRequired();
+    return reply.code(201).send(await api.startChat(body.message, body.budget_usd, body.use_cli, body.project_dir, body.model_id, body.attachments));
   });
 
   // Start what the user typed as a chat or a task, decided by triage.classify (told the names of any
@@ -927,10 +939,11 @@ export function buildApp(api: Api): FastifyInstance {
   app.post("/api/start", async (request, reply) => {
     const body = parse(StartRequest, request.body);
     const attached = api.attached(body.attachments, 400);
-    const [kind, spent] = await api.deps.classify(body.prompt + files.describe(attached, false), providers(),
-      briefWriter(Object.values(api.models), api.configured()));
+    // Without the chat capability everything typed is a task.
+    const [kind, spent] = chat.enabled() ? await api.deps.classify(body.prompt + files.describe(attached, false), providers(),
+      await briefWriter(Object.values(api.models), api.configured())) : ["task", 0];
     if (kind === "chat") {
-      return reply.code(201).send(api.startChat(body.prompt, body.budget_usd, body.use_cli, body.project_dir, body.model_id, body.attachments,
+      return reply.code(201).send(await api.startChat(body.prompt, body.budget_usd, body.use_cli, body.project_dir, body.model_id, body.attachments,
         { autoRouted: true, spent }));
     }
     const run = await api.newTask(body);
@@ -948,7 +961,8 @@ export function buildApp(api: Api): FastifyInstance {
     const run = api.getTask(runId);
     if (run.kind !== "task" || run.status !== "awaiting_confirmation" || run.parent_run_id) throw new HttpError(409, "只有待确认的新任务可以改成对话。");
     if (api.replanning.has(runId)) throw new HttpError(409, "正在重新规划，请稍候。");
-    const pick = api.chatModels(run.use_cli, run.attachments.some((item) => item.kind === "image"))[0];
+    chatRequired();
+    const pick = (await api.chatChoices(run.use_cli, run.attachments.some((item) => item.kind === "image")))[0];
     if (!pick) throw new HttpError(422, "没有可用来对话的模型：请先配置会员 CLI 或 API 模型。");
     Object.assign(run, { kind: "chat", status: "draft", plan: chatPlan(run.prompt, run.project_dir), supervisor: supervisor.newSession(pick, null, run.project_dir) });
     db.saveRun(run);
@@ -969,7 +983,8 @@ export function buildApp(api: Api): FastifyInstance {
     const prompt = body.prompt.trim() || run.prompt;
     if ([...prompt].length < 3) throw new HttpError(422, "请写清要完成的工作。");
     const useCli = body.use_cli ?? run.use_cli;
-    const context = "这个任务来自用户和模型的一段对话，对话内容如下（供参考，以“新需求”为准）：\n" + supervisor.chatTranscript(run);
+    chatRequired();
+    const context = "这个任务来自用户和模型的一段对话，对话内容如下（供参考，以“新需求”为准）：\n" + await chat.transcript(run);
     // The chat's attachments go with it: the planner and the steps see them as a task's own.
     const given = CreateTask.parse({ prompt, budget_usd: body.budget_usd, use_cli: useCli, project_dir: run.project_dir, allow_network: body.allow_network,
       attachments: [...new Set([...run.attachments.map((item) => item.id), ...body.attachments])] });
@@ -1055,7 +1070,7 @@ export function buildApp(api: Api): FastifyInstance {
     const needsVision = run.attachments.some((item) => item.kind === "image");
     const catalog = Object.values(api.models);
     const reopened: string[] = [];
-    routing(() => {
+    await routing(async () => {
       for (const node of run.plan.nodes) {
         if (node.status === "succeeded") continue;
         if (["failed", "cancelled", "running", "unable", "blocked"].includes(node.status)) {
@@ -1063,7 +1078,7 @@ export function buildApp(api: Api): FastifyInstance {
           reopenNode(run, node);
         }
         // Its model was disabled or lost its key since; pick again under current rules.
-        if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) routeNode(node, catalog, configured, needsVision);
+        if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) await routeNode(node, catalog, configured, needsVision);
       }
     });
     const budgetUsd = body.budget_usd ?? run.budget_usd;
@@ -1119,19 +1134,33 @@ export function buildApp(api: Api): FastifyInstance {
       const lacking = Object.entries(await packages.secretsSet(item)).filter(([, stored]) => !stored).map(([name]) => name);
       if (lacking.length) throw new HttpError(409, `先填好：${lacking.join("、")}`);
     }
+    // What it needs must be there, and what it provides must not come from another package; what
+    // others need from it keeps it on.
+    const problem = body.enabled ? services.enableProblem(item) : item.status === "active" ? services.disableProblem(item) : null;
+    if (problem) throw new HttpError(409, problem);
     item.status = body.enabled ? "active" : "disabled";
     capabilities.save(item);
     if (runs && body.enabled && item.entry) runner().start(item);
     else if (runs) await runner().stop(item.id);
+    if (item.kind === "service" && item.source === "upload") {
+      if (body.enabled && item.entry) api.services.start(item);
+      else await api.services.stop(item.id);
+    }
     return item;
   });
+
+  // Who provides each capability FluidForm itself uses: a package's id, "builtin", or nobody.
+  app.get("/api/capabilities/provided", async () => services.providers());
 
   // Remove it; a package is uninstalled with its data, state and secrets.
   app.delete<{ Params: { capability_id: string } }>("/api/capabilities/:capability_id", async (request, reply) => {
     const item = capability(request.params.capability_id);
+    const problem = item.status === "active" ? services.disableProblem(item) : null;
+    if (problem) throw new HttpError(409, problem);
     if (item.source === "upload") {
       await runner().stop(item.id);
       runner().forget(item.id);
+      await api.services.stop(item.id);
       await packages.uninstall(item);
     } else if (!capabilities.remove(item.id)) throw new HttpError(404, "没有这个能力。");
     return reply.code(204).send();
@@ -1144,9 +1173,10 @@ export function buildApp(api: Api): FastifyInstance {
       if (item.source !== "upload") continue;
       const entry: Json = { secrets: await packages.secretsSet(item) };
       if (item.kind === "automation") Object.assign(entry, runner().get(item.id).public());
+      if (item.kind === "service") Object.assign(entry, api.services.get(item.id).public());
       found[item.id] = entry;
     }
-    return { available: settings.capability_packages, missing: sandboxMissing(), capabilities: found };
+    return { available: settings.capability_packages, missing: sandboxMissing(), capabilities: found, provided: services.providers() };
   });
 
   // Keep its secrets in the keyring (never in a file); a running automation restarts with them.
@@ -1159,13 +1189,21 @@ export function buildApp(api: Api): FastifyInstance {
       if (value.trim()) await secretStore.setSecret(packages.secretName(item.id, name), value.trim());
     }
     await runner().restart(item);
+    if (item.kind === "service" && item.status === "active" && api.services.running(item.id)) {
+      await api.services.stop(item.id);
+      api.services.start(item);
+    }
     return { secrets: await packages.secretsSet(item) };
   });
 
   app.delete<{ Params: { capability_id: string } }>("/api/capabilities/:capability_id/secrets", async (request, reply) => {
     const item = capability(request.params.capability_id);
+    // Without its secrets it stops: not while others need what it provides.
+    const problem = item.status === "active" ? services.disableProblem(item) : null;
+    if (problem) throw new HttpError(409, problem);
     await runner().stop(item.id);
-    if (item.status === "active" && item.kind === "automation") {
+    await api.services.stop(item.id);
+    if (item.status === "active" && (item.kind === "automation" || item.kind === "service")) {
       item.status = "disabled";
       capabilities.save(item);
     }

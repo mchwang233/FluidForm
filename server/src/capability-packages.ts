@@ -7,9 +7,10 @@
 // (capability-sandbox.ts); uninstalling removes it with its data, state and secrets. Super Partner's
 // source knows nothing of any one package.
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as capabilities from "./capabilities.js";
+import { PROVIDABLE } from "./service-names.js";
 import { root } from "./capabilities.js";
 import * as sandbox from "./capability-sandbox.js";
 import { settings } from "./config.js";
@@ -97,10 +98,19 @@ function manifest(raw: Buffer, files: string[]): Capability {
   const id = text(given.id);
   if (!ID.test(id)) throw new PackageError("id 只能用小写字母、数字和 -，2 到 41 个字符。");
   const kind = text(given.kind) || "tool";
-  if (!capabilities.KINDS.has(kind)) throw new PackageError("kind 只能是 tool 或 automation。");
+  if (!capabilities.KINDS.has(kind)) throw new PackageError("kind 只能是 tool、automation 或 service。");
   const entry = text(given.entry).trim();
   if (kind === "automation" && !entry) throw new PackageError("自动化要写 entry：运行它的命令。");
+  if (kind === "service" && !entry) throw new PackageError("服务要写 entry：运行它的命令。");
   const list = (value: unknown) => (Array.isArray(value) ? value : value ? [...String(value)] : []).map((item) => String(item).trim());
+  // What a service gives FluidForm itself, and what any package needs first (services.ts).
+  const provides = [...new Set(list(given.provides))];
+  const requires = [...new Set(list(given.requires))];
+  const unknown = [...provides, ...requires].filter((name) => !PROVIDABLE.has(name));
+  if (unknown.length) throw new PackageError(`没有这种能力：${unknown.join("、")}（可以写的是 ${[...PROVIDABLE].join("、")}）。`);
+  if (kind === "service" && !provides.length) throw new PackageError("服务要写 provides：它提供哪种能力。");
+  if (kind !== "service" && provides.length) throw new PackageError("只有服务（kind: service）能写 provides。");
+  if (provides.some((name) => requires.includes(name))) throw new PackageError("一个包不能需要它自己提供的能力。");
   const secrets = list(given.secrets);
   const bad = secrets.filter((item) => !VARIABLE.test(item) || RESERVED.has(item) || item.startsWith("SP_") || item.startsWith("LD_") || item.toUpperCase().includes("PROXY"));
   if (bad.length) throw new PackageError(`这些密钥名不能用：${bad.join("、")}`);
@@ -110,6 +120,7 @@ function manifest(raw: Buffer, files: string[]): Capability {
     id, name: head(text(given.name) || id, 60), kind, summary: head(text(given.summary), 500), usage: head(text(given.usage), 2000),
     guide: head(text(given.guide), capabilities.MAX_GUIDE), check: head(text(given.check), 500), secrets: secrets.slice(0, 20),
     domains: domains.slice(0, 20), files: files.slice(0, 50), entry: head(entry, 500), version: head(text(given.version), 40), source: "upload", status: "disabled",
+    provides, requires,
   });
 }
 
@@ -133,7 +144,28 @@ export function read(data: Buffer): Capability {
  *  build its environment and check it. It is installed switched off; the caller stops an older version
  *  that runs. */
 export async function install(data: Buffer): Promise<Capability> {
-  let capability = read(data);
+  const capability = read(data);
+  const archive = open(data);
+  const [, found] = members(archive);
+  return place(capability, found.map(([item, parts]) => [parts, archive.read(item)]));
+}
+
+/** Install a package shipped with FluidForm (server/packages/<id>), as if uploaded. */
+export async function installFolder(source: string): Promise<Capability> {
+  const files: [string[], Buffer][] = [];
+  const walk = (parts: string[]) => {
+    for (const entry of readdirSync(join(source, ...parts), { withFileTypes: true })) {
+      if (entry.isDirectory()) walk([...parts, entry.name]);
+      else if (entry.isFile()) files.push([[...parts, entry.name], readFileSync(join(source, ...parts, entry.name))]);
+    }
+  };
+  walk([]);
+  const capability = manifest(readFileSync(join(source, MANIFEST)), [...new Set(files.map(([parts]) => parts[0]))].sort());
+  return place(capability, files);
+}
+
+async function place(given: Capability, found: [string[], Buffer][]): Promise<Capability> {
+  let capability = given;
   const folder = join(root(), capability.id);
   const old = capabilities.load(capability.id);
   if (old && old.source !== "upload") throw new PackageError(`已经有一个叫 ${capability.id} 的能力是任务固化的，先删掉它。`);
@@ -142,15 +174,14 @@ export async function install(data: Buffer): Promise<Capability> {
   const staging = join(root(), `.${capability.id}.${randomBytes(4).toString("hex")}`);
   mkdirSync(staging, { recursive: true });
   try {
-    const archive = open(data);
-    const [, found] = members(archive);
-    for (const [item, parts] of found) {
+    for (const [parts, content] of found) {
       const target = join(staging, ...parts);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, archive.read(item));
+      writeFileSync(target, content);
     }
     if (existsSync(folder)) rmSync(folder, { recursive: true, force: true });
     renameSync(staging, folder);
+    capabilities.changed();
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

@@ -1,4 +1,5 @@
 // Request reservations shared by all calls of a run, including reviews and repairs.
+import * as pricing from "./pricing.js";
 import { AsyncEvent, pyDumps } from "./py.js";
 
 export class ProviderError extends Error {
@@ -9,6 +10,9 @@ export class ProviderError extends Error {
 }
 
 export class BudgetExceeded extends ProviderError {}
+
+/** The pricing package did not answer: nothing more is spent (pricing.ts). */
+export class PricingUnavailable extends BudgetExceeded {}
 
 /** A declared step limit, independent of the run's budget approval flow. */
 export class StepLimitExceeded extends ProviderError {}
@@ -21,18 +25,6 @@ export type Priced = {
   output_per_million: number | null;
   cached_input_per_million?: number | null;
 };
-
-/** What a call cost: uncached input at the input price, input read from the provider's prompt
- *  cache at its cache price (the input price when the catalog has none), and output. */
-export function tokenCost(model: Priced | null | undefined, inputTokens: number, outputTokens: number, cachedTokens = 0): number {
-  if (!model || model.input_per_million === null || model.output_per_million === null) return 0;
-  const cached = Math.min(Math.max(cachedTokens || 0, 0), inputTokens);
-  const cachedPrice = model.cached_input_per_million ?? model.input_per_million;
-  return ((inputTokens - cached) * model.input_per_million + cached * cachedPrice
-    + outputTokens * model.output_per_million) / 1_000_000;
-}
-
-const EPSILON = 0.0000005;
 
 export type RequestBudgetOptions = {
   models: Map<string, Priced> | Record<string, Priced>;
@@ -90,81 +82,73 @@ export class RequestBudget {
     }
   }
 
-  /** Whether the run may go on (Python's __call__). Usage is already charged by record();
-   *  equality permits returning a final reply. */
-  allows(): boolean {
-    if (this.stepRemaining !== null && this.stepRemaining() < -EPSILON) {
-      throw new StepLimitExceeded("达到声明费用上限，停止工作包，禁止自动续跑。");
-    }
-    return this.remaining() >= -EPSILON;
+  /** Whether the run may go on (Python's __call__): the pricing package decides from what is left.
+   *  Usage is already charged by record(); without pricing nothing limits it. */
+  async allows(): Promise<boolean> {
+    if (!pricing.enabled()) return true;
+    const answer = await pricing.allows({ remaining: this.remaining(), step_remaining: this.stepRemaining?.() ?? null });
+    if (answer.stop === "step") throw new StepLimitExceeded(answer.message!);
+    return Boolean(answer.ok);
   }
 
+  /** The output tokens this call may ask for, holding their cost until record() or release(). */
   async reserve(modelId: string, payload: unknown, maximum = 4096): Promise<number> {
+    if (!pricing.enabled()) return maximum;
     const model = this.model(modelId);
-    if (!model || model.input_per_million === null || model.output_per_million === null) {
-      throw new BudgetExceeded(`缺少 ${modelId} 的价格，无法核验请求预算。`);
-    }
-    // UTF-8 bytes plus protocol overhead conservatively bound textual input tokens.
-    // Inline images are deliberately included, rather than silently budgeted as free.
-    const inputBound = Buffer.byteLength(pyDumps(payload, false), "utf8") + 256;
-    const inputCost = inputBound * model.input_per_million / 1_000_000;
-    const outputPrice = model.output_per_million / 1_000_000;
+    // UTF-8 bytes plus protocol overhead bound the input tokens (pricing decides what they cost).
+    const inputBytes = Buffer.byteLength(pyDumps(payload, false), "utf8");
     for (;;) {
-      const other = this.others();
-      const remaining = this.remaining();
-      let available = remaining - other;
+      let held = 0;
       if (this.stepRemaining !== null) {
-        const stepLeft = this.stepRemaining();
-        if (stepLeft < inputCost + outputPrice) {
-          throw new StepLimitExceeded("声明的步骤费用不足以发起下一轮请求，停止工作包并保留诊断。");
-        }
-        let held = 0;
         for (const [key, value] of this.reservations) {
           if (key !== this && this.scope !== null && (key as { scope?: unknown }).scope === this.scope) held += value;
         }
-        if (held && !this.waitForStep && Math.min(available, stepLeft - held) < inputCost + outputPrice) {
-          throw new StepReservationBusy("本步骤的请求仍占用预算，跳过本次付费进度检查。");
-        }
-        available = Math.min(available, stepLeft - held);
       }
-      const output = outputPrice ? Math.min(maximum, Math.floor((available - inputCost) / outputPrice)) : maximum;
-      if (inputCost <= available && output >= 1) {
-        this.reservations.set(this, inputCost + output * outputPrice);
-        return output;
+      const answer = await pricing.admit(model ? { ...model, id: modelId } : null, { input_bytes: inputBytes, maximum,
+        remaining: this.remaining(), others: this.others(), step_remaining: this.stepRemaining?.() ?? null, step_held: held,
+        wait_for_step: this.waitForStep });
+      if ("output" in answer) {
+        this.reservations.set(this, answer.reserve);
+        return answer.output;
       }
-      if (other && remaining >= inputCost + outputPrice) {
-        // Another call may release unused output reservations. Wait automatically;
-        // this is contention, not a request for the user to raise the budget.
+      if ("wait" in answer) {
+        // Another call may release unused output reservations: contention, not a request for the
+        // user to raise the budget.
         this.changed.clear();
         await this.changed.wait();
         continue;
       }
-      throw new BudgetExceeded("剩余预算不足以发起下一轮模型请求，任务已暂停。");
+      if (answer.stop === "step") throw new StepLimitExceeded(answer.message);
+      if (answer.stop === "busy") throw new StepReservationBusy(answer.message);
+      throw new BudgetExceeded(answer.message);
     }
   }
 
   /** Whether ``cost`` more (a picture, say) fits what is left, besides what others hold. */
-  canSpend(cost: number): boolean {
-    if (this.stepRemaining !== null && this.stepRemaining() < cost) return false;
-    return this.remaining() - this.others() >= cost;
+  async canSpend(cost: number): Promise<boolean> {
+    if (!pricing.enabled()) return true;
+    return pricing.fits({ cost, remaining: this.remaining(), others: this.others(), step_remaining: this.stepRemaining?.() ?? null });
   }
 
-  /** Something a tool paid for at a price of its own (a picture), not in tokens. */
+  /** Something a tool paid for at a price of its own (a picture), not in tokens; only when priced. */
   async recordUsd(cost: number): Promise<void> {
-    if (cost > 0) {
+    if (cost > 0 && pricing.enabled()) {
       await this.charge(cost);
       this.spent += cost;
     }
   }
 
   async record(modelId: string, inputTokens: number, outputTokens: number, cachedTokens = 0): Promise<void> {
-    const model = this.model(modelId);
-    if (model && model.input_per_million !== null && model.output_per_million !== null) {
-      const cost = tokenCost(model, inputTokens, outputTokens, cachedTokens);
-      await this.charge(cost);
-      this.spent += cost;
+    try {
+      const model = this.model(modelId);
+      if (pricing.enabled() && pricing.priced(model)) {
+        const cost = await pricing.charge({ ...model!, id: modelId }, inputTokens, outputTokens, cachedTokens);
+        await this.charge(cost);
+        this.spent += cost;
+      }
+    } finally {
+      this.release();
     }
-    this.release();
   }
 
   release(): void {

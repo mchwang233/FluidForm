@@ -29,7 +29,7 @@ const withCost = (error: unknown, cost: number) => {
 
 export abstract class Diagnosing extends Leading {
   abstract fixPlatform(run: ExecutionRun, diagnosis: Diagnosis, node: TaskNode | null, problem: string): Promise<[string, number]>;
-  abstract refreshModel(run: ExecutionRun, node: TaskNode): void;
+  abstract refreshModel(run: ExecutionRun, node: TaskNode): Promise<void>;
 
   /** After a failed attempt, a strong model (a membership CLI when possible) looks for what blocks the
    *  step outside the task (missing software, sandbox or machine limits, configuration) and repairs it.
@@ -210,7 +210,7 @@ export abstract class Diagnosing extends Leading {
    *  (``consult``); otherwise recovery.afterDiagnosis decides what to do. */
   async repairDone(runId: string, nodeId: string, diagnosisId: string, text: string | null, error: string | null, cost: number, verdict: quality.Verdict,
     outcome: string, sharedFiles: string[] | null = null, consult = true): Promise<void> {
-    const handover = await this.locked(runId, () => {
+    const handover = await this.locked(runId, async () => {
       const run = this.db.getRun(runId);
       if (!run) return false;
       const node = run.plan.nodes.find((item) => item.id === nodeId)!;
@@ -272,7 +272,7 @@ export abstract class Diagnosing extends Leading {
         node.attempts.at(-1)!.outcome = kind;
         node.review = unavailable.message;
         node.review_passed = null;
-        this.routeAfterUnavailable(run, node, unavailable, diagnosis.id);
+        await this.routeAfterUnavailable(run, node, unavailable, diagnosis.id);
       } else if (action === "retry_fixed") {
         if (sharedFiles?.length) {
           this.db.saveSharedRepair({ id: diagnosis.id, run_id: run.id, model_id: diagnosis.model_id, files: sharedFiles, report: diagnosis.report || "",
@@ -295,7 +295,7 @@ export abstract class Diagnosing extends Leading {
       } else if (action === "pause_rework") {
         this.pauseForDiagnosis(run, node, diagnosis, `返工 ${run.rework_rounds} 轮后验证仍未通过`);
       } else if (action !== "lead") {
-        this.retryOrFail(run, node, verdict, outcome);
+        await this.retryOrFail(run, node, verdict, outcome);
         if (node.status === "pending" && diagnosis.advice) node.feedback = `${node.feedback}${quality.ADVICE_NOTE}${diagnosis.advice}`;
         else if (node.status === "failed") {
           const why = `重试 ${node.failed_attempts} 次仍未通过` + (diagnosis.status !== "done" ? `（平台工程师没有查完：${diagnosis.error || "没有可用的模型"}）` : "");
@@ -381,7 +381,7 @@ export abstract class Diagnosing extends Leading {
       node.environment_fixes = 0;
       this.save(run);
       await this.repair(runId, node.id, verdict, outcome, { diagnosisId });
-      const go = await this.locked(runId, () => {
+      const go = await this.locked(runId, async () => {
         const latest = this.db.getRun(runId);
         const current = latest?.plan.nodes.find((item) => item.id === node.id);
         if (!latest || !current || latest.status === "cancelled" || current.status !== "pending") return false;
@@ -389,7 +389,7 @@ export abstract class Diagnosing extends Leading {
         const record = latest.diagnoses.find((d) => d.id === diagnosisId)!;
         if (record.status !== "done" || ["needs_input", "platform_pending"].includes(record.verdict ?? "")) return false;
         try {
-          this.refreshModel(latest, current);
+          await this.refreshModel(latest, current);
         } catch (error) {
           if (error instanceof NoEligibleModelError) return false;
           throw error;

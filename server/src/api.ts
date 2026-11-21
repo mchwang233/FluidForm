@@ -31,11 +31,15 @@ import { ProjectDirError, projectContext, resolveProjectDir } from "./projects.j
 import { ProviderRegistry } from "./providers.js";
 import * as publish from "./publish.js";
 import * as retrospect from "./retrospect.js";
-import { briefWriter, estimate, fitAndRoute, NoEligibleModelError } from "./routing.js";
+import { briefWriter, fitAndRoute, NoEligibleModelError } from "./routing.js";
+import * as pricing from "./pricing.js";
 import { rescore } from "./scoring.js";
 import { keepLoadingKeys, setProviderKey } from "./secrets.js";
 import { cutOffSafely } from "./self-repair.js";
 import * as supervisor from "./supervisor.js";
+import * as bundled from "./bundled.js";
+import * as chat from "./chat.js";
+import { ServiceHost } from "./services.js";
 import { sleep, Task } from "./tasks.js";
 import * as team from "./team.js";
 import * as triage from "./triage.js";
@@ -174,6 +178,8 @@ export class Api {
   readonly benchmarks: BenchmarkCatalog;
   readonly catalogSync: CatalogSync;
   readonly automations: CapabilityAutomations;
+  /** The service packages: capabilities FluidForm itself uses (services.ts). */
+  readonly services = new ServiceHost();
   /** What tests replace. */
   readonly deps = { autonomousPlan, setProviderKey, classify: triage.classify, quick: triage.quick, addressed: triage.addressed };
   // Tasks being planned again with the user's choices (one replanning at a time per task).
@@ -191,6 +197,11 @@ export class Api {
     this.catalogSync = new CatalogSync(this.db, this.models, { autoSync: settings.catalog_auto_sync,
       intervalHours: settings.catalog_sync_interval_hours, benchmarks: this.benchmarks });
     this.automations = new CapabilityAutomations(this);
+    // Every price, estimate, budget check and charge is asked of the pricing package.
+    // (Unless it is already answered: tests answer with the package's code in-process.)
+    pricing.deps.ask ??= (method, params) => this.services.request("pricing", method, params);
+    // And everything about how to chat, of the chat package.
+    chat.deps.ask ??= (method, params) => this.services.request("chat", method, params);
   }
 
   /** api.ts's lifespan, its start: tasks a restart cut off, the platform's work, the automations. */
@@ -223,6 +234,15 @@ export class Api {
       for (const item of interrupted) Object.assign(item, { status: "failed", error: "服务重启打断了平台工程师的排查。" });
       if (interrupted.length) db.saveRun(run);
     }
+    // Services first: the tasks resumed below ask pricing, which waits for its service to start.
+    if (settings.capability_packages) this.services.startAll();
+    // Packages shipped with FluidForm, the first time (or a newer version): installed and run.
+    this.background.push(new Task(async () => {
+      for (const item of await bundled.offer()) {
+        await this.services.stop(item.id);
+        if (item.kind === "service" && item.status === "active") this.services.start(item);
+      }
+    }));
     executor.restorePlatform();
     executor.restoreEngineer();
     executor.restoreLearning();
@@ -241,6 +261,7 @@ export class Api {
     for (const task of this.background) task.cancel();
     await Promise.all(this.background.map((task) => task.settled()));
     await this.automations.runner.stopAll();
+    await this.services.stopAll();
     await this.executor.shutdown();
     await this.catalogSync.close();
   }
@@ -277,11 +298,18 @@ export class Api {
 
   /** Runs as read by the console, each estimate also given as past tasks suggest it will go. Only for
    *  display: these copies are never saved, and budget checks keep the planned estimate. */
-  calibrated(runs: ExecutionRun[]): ExecutionRun[] {
-    const reviews = this.db.retrospectives();
-    for (const run of runs) {
-      if (run.plan.estimate) run.plan.estimate.calibrated_usd = retrospect.calibratedCost(run, retrospect.calibration(reviews, run.id));
+  async calibrated(runs: ExecutionRun[]): Promise<ExecutionRun[]> {
+    const estimated = runs.filter((run) => run.plan.estimate);
+    if (!estimated.length || !pricing.enabled()) return runs;
+    let found: (number | null)[];
+    try {
+      found = await pricing.calibrated(this.db.retrospectives(), estimated);
+    } catch {
+      return runs; // only for display: the task list shows without it
     }
+    estimated.forEach((run, index) => {
+      run.plan.estimate!.calibrated_usd = found[index];
+    });
     return runs;
   }
 
@@ -333,7 +361,7 @@ export class Api {
     let brief: string | null = null;
     let briefCost = 0;
     if (root && isFullFolder(root)) {
-      const writer = settings.project_brief ? briefWriter(Object.values(this.models), configured) : null;
+      const writer = settings.project_brief ? await briefWriter(Object.values(this.models), configured) : null;
       [brief, briefCost] = await briefing.planningBrief(root, settings.data_dir, this.providers, writer);
     }
     const session = SupervisorSessionSchema.parse({});
@@ -353,9 +381,9 @@ export class Api {
       for (const node of plan.nodes) {
         // Every step changes files the earlier task left, so it needs a model that can act.
         if (parent) node.needs_workspace = true;
-        if (plan.employees.length) team.route(node, plan, catalog, configured, needsVision);
+        if (plan.employees.length) await team.route(node, plan, catalog, configured, needsVision);
         else {
-          const routed = fitAndRoute(node, catalog, configured, needsVision);
+          const routed = await fitAndRoute(node, catalog, configured, needsVision);
           if (routed) plan.planning_note = plan.planning_note ? `${plan.planning_note}; ${routed}` : routed;
         }
       }
@@ -363,7 +391,7 @@ export class Api {
       if (error instanceof NoEligibleModelError) throw new HttpError(422, error.message);
       throw error;
     }
-    plan.estimate = estimate(plan.nodes, body.budget_usd, plan.planning_cost_usd);
+    plan.estimate = await pricing.estimate(plan.nodes, body.budget_usd, plan.planning_cost_usd);
     return { plan, session, attached, projectDir, background, lessons };
   }
 
@@ -372,7 +400,7 @@ export class Api {
    *  alone, in a project too. null: plan it as usual. */
   async quickPlan(body: CreateTask, request: string, background: string | null, configured: Set<string>, projectDir: string | null = null): Promise<TaskPlan | null> {
     if (!settings.quick_tasks && !settings.solo_tasks) return null;
-    const [step, judged] = await this.deps.quick(body.prompt, this.providers, briefWriter(Object.values(this.models), configured),
+    const [step, judged] = await this.deps.quick(body.prompt, this.providers, await briefWriter(Object.values(this.models), configured),
       settings.solo_tasks, Boolean(projectDir));
     if (!step || (step.shape === "quick" && !settings.quick_tasks)) return null;
     const solo = step.shape === "solo";
@@ -392,12 +420,18 @@ export class Api {
       .filter((model) => !needsVision || model.channel === "cli" || model.supports_vision !== false);
   }
 
+  /** The models a chat may talk with, best first, as the chat package orders them. */
+  chatChoices(useCli = true, needsVision = false): Promise<ModelProfile[]> {
+    return chat.order(this.chatModels(useCli, needsVision));
+  }
+
   /** Save a new chat and send its first message, with its attachments. */
-  startChat(message: string, budgetUsd: number, useCli: boolean, projectDir: string | null | undefined, modelId: string | null | undefined,
-    attachmentIds: string[] = [], { autoRouted = false, spent = 0, shown = null }: { autoRouted?: boolean; spent?: number; shown?: string | null } = {}): ExecutionRun {
+  async startChat(message: string, budgetUsd: number, useCli: boolean, projectDir: string | null | undefined, modelId: string | null | undefined,
+    attachmentIds: string[] = [], { autoRouted = false, spent = 0, shown = null, origin = null, title = null }:
+    { autoRouted?: boolean; spent?: number; shown?: string | null; origin?: Json | null; title?: string | null } = {}): Promise<ExecutionRun> {
     const attached = this.attached(attachmentIds, 400);
     const needsVision = attached.some((item) => item.kind === "image");
-    const available = this.chatModels(useCli, needsVision);
+    const available = await this.chatChoices(useCli, needsVision);
     const pick = modelId ? available.find((model) => model.id === modelId) : available[0];
     if (!pick) {
       throw new HttpError(422, modelId ? (needsVision ? "这个模型看不了图片，请换一个模型。" : "这个模型不能用来对话。")
@@ -410,6 +444,9 @@ export class Api {
       project_dir: folder, attachments: attached, auto_routed: autoRouted, actual_cost_usd: round6(spent),
       supervisor: supervisor.newSession(pick, null, folder),
     });
+    // Where it comes from (an automation's conversation) is known before its first answer is written.
+    if (origin) run.origin = origin;
+    if (title) run.plan.title = title;
     this.db.saveRun(run);
     this.db.addEvent(EventSchema.parse({ run_id: run.id, kind: "chat.created", data: { model_id: pick.id, project_dir: folder, auto_routed: autoRouted } }));
     this.executor.startLeadChat(run.id, text, [], shown);

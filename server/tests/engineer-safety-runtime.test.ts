@@ -31,19 +31,19 @@ const newDb = (name = "test.db") => new Database(join(folder(), name));
 // --- test_engineer ---------------------------------------------------------------------------
 const PLAN = "- 目标: 加一个导出按钮\n- 改动: frontend/x.tsx\n- 测试: 导出测试\n- 风险: 无\nSTATUS: PLAN";
 
-test("replies are read with their status and question", () => {
+test("replies are read with their status and question", async () => {
   assert.equal(readReply(PLAN)[1], "plan");
   assert.ok(readReply(PLAN)[0].endsWith("风险: 无"));
   assert.deepEqual(readReply("改好了\nSTATUS: FIXED").slice(0, 2), ["改好了", "fixed"]);
 });
 
-test("requests need an engineer that is available, and words", () => {
+test("requests need an engineer that is available, and words", async () => {
   const engineer = { configuredModels: (ids: Iterable<string>) => new Set(ids), complete: async () => assert.fail("not called") };
   const executor = new Executor(newDb(), engineer as never, MODELS);
   assert.throws(() => executor.engineerRequest("加一个按钮", "component", "user"), (error: Error) => error instanceof EngineerError && error.message.includes("不可用"));
 });
 
-test("a commit takes only the changed files", () => {
+test("a commit takes only the changed files", async () => {
   const root = folder();
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
   git("init", "-q");
@@ -64,17 +64,17 @@ test("a commit takes only the changed files", () => {
   assert.deepEqual(git("diff", "--cached", "--name-only").split(/\s+/).filter(Boolean), ["staged.py"]);
 });
 
-test("a plan says what existing solution it uses before building one", () => {
+test("a plan says what existing solution it uses before building one", async () => {
   const prompt = planPrompt(EngineerJobSchema.parse({ request: "接入钉钉" }), "guide");
   assert.ok(prompt.includes("现成方案") && prompt.includes("official or mature open-source"));
   assert.ok(prompt.indexOf("现成方案") < prompt.indexOf("改动"));
 });
 
-test("a reply without plain lines is kept whole", () => {
+test("a reply without plain lines is kept whole", async () => {
   assert.deepEqual(plainLines("改了 api.py\nSTATUS: FIXED"), ["", "", "改了 api.py\nSTATUS: FIXED"]);
 });
 
-test("a stopped platform repair says why", () => {
+test("a stopped platform repair says why", async () => {
   const db = newDb("t.db");
   const executor = new Executor(db, nobody, {});
   const task = (status: string) => db.saveRun(ExecutionRunSchema.parse({ id: "r", prompt: "p", status, budget_usd: 1, plan: { summary: "s", nodes: [] } }));
@@ -96,25 +96,25 @@ function fallbackExecutor(overrides: Record<string, boolean> = {}): Executor {
   for (const [id, enabled] of Object.entries(overrides)) catalog[id].enabled = enabled;
   return new Executor(newDb(), nobody, catalog);
 }
-const allowed = (executor: Executor, run: ExecutionRun, node: TaskNode) => executor.fallbackAllowed(run, node);
+const allowed = async (executor: Executor, run: ExecutionRun, node: TaskNode) => (await executor.fallbackAllowed(run, node));
 
-test("the fallback needs the API model turned on", () => {
+test("the fallback needs the API model turned on", async () => {
   const run = cliRun(100);
-  assert.ok(allowed(fallbackExecutor(), run, run.plan.nodes[0]));
-  assert.ok(!allowed(fallbackExecutor({ "anthropic:claude-sonnet-5": false }), run, run.plan.nodes[0]));
+  assert.ok((await allowed(fallbackExecutor(), run, run.plan.nodes[0])));
+  assert.ok(!(await allowed(fallbackExecutor({ "anthropic:claude-sonnet-5": false }), run, run.plan.nodes[0])));
 });
 
-test("the fallback must fit the budget left by spent and running steps", () => {
+test("the fallback must fit the budget left by spent and running steps", async () => {
   const executor = fallbackExecutor();
-  assert.ok(!allowed(executor, cliRun(1e-9), cliRun(1e-9).plan.nodes[0]));
-  assert.ok(!allowed(executor, cliRun(1, 1), cliRun(1).plan.nodes[0]));
+  assert.ok(!(await allowed(executor, cliRun(1e-9), cliRun(1e-9).plan.nodes[0])));
+  assert.ok(!(await allowed(executor, cliRun(1, 1), cliRun(1).plan.nodes[0])));
   const crowded = cliRun(1, 0, 1);
-  assert.ok(!allowed(executor, crowded, crowded.plan.nodes[0]));
+  assert.ok(!(await allowed(executor, crowded, crowded.plan.nodes[0])));
 });
 
-test("steps not on a CLI are unaffected", () => {
+test("steps not on a CLI are unaffected", async () => {
   const run = cliRun(0.0001);
-  assert.ok(allowed(fallbackExecutor(), run, run.plan.nodes[1]));
+  assert.ok((await allowed(fallbackExecutor(), run, run.plan.nodes[1])));
 });
 
 test("an artifact's acceptance keeps the task's network and host permissions", async () => {
@@ -133,7 +133,7 @@ function savedRun(db: Database): [ExecutionRun, TaskNode] {
   return [run, run.plan.nodes[0]];
 }
 
-test("the executor restores a checkpoint in flight, and a new generation drops it", () => {
+test("the executor restores a checkpoint in flight, and a new generation drops it", async () => {
   const db = newDb("state.db");
   const [run, node] = savedRun(db);
   const conversation = new Executor(db, nobody, {}).conversation(run, node);
@@ -148,7 +148,7 @@ test("the executor restores a checkpoint in flight, and a new generation drops i
   assert.equal(restarted.conversation(run, node).state, null);
 });
 
-test("a model switch's handoff and recall are scoped", () => {
+test("a model switch's handoff and recall are scoped", async () => {
   const db = newDb("state.db");
   const [run, node] = savedRun(db);
   const executor = new Executor(db, nobody, {});
@@ -181,7 +181,7 @@ test("a declared check that fails blocks a claimed success", async () => {
   assert.equal(executor.toolLogs.get(`${run.id}\0${node.id}`)!.at(-1)!.ok, false);
 });
 
-test("a graceful interruption restores without replaying the tools that finished", () => {
+test("a graceful interruption restores without replaying the tools that finished", async () => {
   const db = newDb("state.db");
   const [run, node] = savedRun(db);
   const held = new Executor(db, nobody, {}).conversation(run, node);

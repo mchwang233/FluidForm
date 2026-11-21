@@ -2,7 +2,7 @@
 // One short call to the cheapest API model (routing.briefWriter's choice). Anything that goes
 // wrong, or no such model, means a task: what FluidForm did before chats existed. Either way the
 // user can switch: a chat turns into a task, a task waiting for confirmation into a chat.
-import { tokenCost } from "./budget.js";
+import * as pricing from "./pricing.js";
 import { log } from "./log.js";
 import type { ModelProfile } from "./models.js";
 import { head, isObject, pyRegex, pyStr, splitlines, tail } from "./py.js";
@@ -29,15 +29,6 @@ export const PROMPT =
   + 'Answer with only {"kind": "chat"} or {"kind": "task"}.\n\nRequest:\n';
 const KIND = pyRegex(String.raw`"kind"\s*:\s*"(chat|task)"`);
 
-const addressedPrompt = (name: string, context: string, text: string) =>
-  `You are ${name}, an assistant in a group chat. Its members mostly talk among themselves; you `
-  + "answer only a message meant for you: it asks you (by name or by what you do) a question or for "
-  + "help, follows up on your last answer, or asks the group something an assistant is expected to "
-  + "answer. Members talking to each other, small talk, thanks, announcements: not for you. When "
-  + "unsure, it is not for you.\n"
-  + `Answer with only {"reply": true} or {"reply": false}.\n\nRecent messages:\n${context}\n\nNew message:\n${text}`;
-const REPLY = pyRegex(String.raw`"reply"\s*:\s*(true|false)`);
-
 /** ``complete`` on ``model``, at low effort, given up (and cancelled) after TIMEOUT_SECONDS. */
 async function ask(providers: Completer, model: ModelProfile, prompt: string) {
   const signal = AbortSignal.timeout(TIMEOUT_SECONDS * 1000);
@@ -48,23 +39,21 @@ async function ask(providers: Completer, model: ModelProfile, prompt: string) {
 }
 
 const costOf = (model: ModelProfile, result: Awaited<ReturnType<Completer["complete"]>>) =>
-  tokenCost(model, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
+  pricing.charge(model, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
 
-/** Whether a group message nobody @-mentioned the assistant in is meant for it, and what deciding
- *  cost. Anything that goes wrong, or no model, keeps it quiet. */
-export async function addressed(text: string, context: string, name: string, providers: Completer,
-  model: ModelProfile | null): Promise<[boolean, number]> {
-  if (model === null) return [false, 0];
-  const prompt = addressedPrompt(name, tail(context, MAX_REQUEST_CHARS) || "（none）", head(text, MAX_REQUEST_CHARS));
+/** What ``model`` answers to the chat package's question whether a group message nobody
+ *  @-mentioned the assistant in is meant for it (``prompt``), and what asking cost. Anything that goes
+ *  wrong, or no model, is no answer: the message is not for it. */
+export async function addressed(prompt: string, providers: Completer, model: ModelProfile | null): Promise<[string, number]> {
+  if (model === null) return ["", 0];
   let result;
   try {
     result = await ask(providers, model, prompt);
   } catch (error) {
     log.warning(`deciding whether to answer with ${model.id} failed: ${(error as Error).message ?? error}`);
-    return [false, 0];
+    return ["", 0];
   }
-  const match = REPLY.exec(result.text || "");
-  return [Boolean(match && match[1] === "true"), costOf(model, result)];
+  return [result.text || "", await costOf(model, result)];
 }
 
 const quickPrompt = (text: string) =>
@@ -114,7 +103,7 @@ export async function quick(text: string, providers: Completer, model: ModelProf
     log.warning(`judging whether a task is quick with ${model.id} failed: ${(error as Error).message ?? error}`);
     return [null, 0];
   }
-  const cost = costOf(model, result);
+  const cost = await costOf(model, result);
   const found = OBJECT.exec(result.text || "");
   let step: unknown = null;
   try {
@@ -157,5 +146,5 @@ export async function classify(text: string, providers: Completer, model: ModelP
     log.warning(`triage with ${model.id} failed: ${(error as Error).message ?? error}`);
     return ["task", 0];
   }
-  return [readKind(result.text), costOf(model, result)];
+  return [readKind(result.text), await costOf(model, result)];
 }

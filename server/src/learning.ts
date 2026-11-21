@@ -254,7 +254,7 @@ export type LearningHost = {
   modelLookup: Record<string, ModelProfile>;
   providers: { complete(modelId: string, prompt: string, options: Record<string, unknown>): Promise<Completion> };
   configured(run: ExecutionRun): Set<string>;
-  actualCost(result: unknown, node: TaskNode | null, modelId: string): number;
+  actualCost(result: unknown, node: TaskNode | null, modelId: string): Promise<number>;
   engineerRequest(text: string, kind: string, origin: string, options: { runId?: string | null; budgetUsd?: number | null; improvementId?: string | null }): EngineerJob;
 };
 
@@ -468,12 +468,12 @@ async function learningCall(host: LearningHost, review: LearningReview, modelId:
   try {
     const result = await host.providers.complete(modelId, prompt, { workspace: folder, spend_ok: budget, allow_api_fallback: false, act: false,
       network: false, effort: settings.diagnosis_reasoning_effort, cli_timeout: 300, signal });
-    await charge(Math.max(0, host.actualCost(result, null, modelId) - budget.spent));
+    await charge(Math.max(0, (await host.actualCost(result, null, modelId)) - budget.spent));
     learningSource(host, review);
     return result.text;
   } catch (error) {
     const usage = (error as any)?.usage;
-    if (usage) await charge(Math.max(0, host.actualCost(usage, null, modelId) - budget.spent));
+    if (usage) await charge(Math.max(0, (await host.actualCost(usage, null, modelId)) - budget.spent));
     throw error;
   } finally {
     rmSync(folder, { recursive: true, force: true });

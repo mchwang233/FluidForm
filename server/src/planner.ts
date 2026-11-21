@@ -2,7 +2,7 @@
 // (task-planning.ts, supervisor.ts); with no lead model, the best planner plans it in one call; with no
 // planner at all, a fixed fallback plan.
 import { randomUUID } from "node:crypto";
-import { tokenCost } from "./budget.js";
+import * as pricing from "./pricing.js";
 import { settings } from "./config.js";
 import * as contracts from "./contracts.js";
 import { log } from "./log.js";
@@ -161,10 +161,11 @@ export const MAX_NODES = 30;
 export const MAX_SCOPE_FILES = 5;
 export const MAX_READ_FILES = 8;
 
-export function selectPlannerModel(models: ModelProfile[], configured: Set<string>): ModelProfile | null {
+export async function selectPlannerModel(models: ModelProfile[], configured: Set<string>): Promise<ModelProfile | null> {
   const found = models.filter((model) => model.enabled && routingReady(model) && configured.has(model.id));
+  const rates = await pricing.rates(found);
   return minBy<ModelProfile | null>(found, (model) => [-model!.scores!.planning, -model!.scores!.reliability, model!.execution_priority,
-    model!.input_per_million! + model!.output_per_million!], null);
+    rates[model!.id] ?? 0], null);
 }
 
 const FENCES = pyRegex(String.raw`^` + "```" + String.raw`(?:json)?\s*|\s*` + "```" + "$", "ig");
@@ -323,7 +324,7 @@ export type Planning = {
   complete(modelId: string, prompt: string, options?: Json): Promise<ProviderResult>;
 };
 
-const cost = (result: ProviderResult, model: ModelProfile) => tokenCost(model, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
+const cost = (result: ProviderResult, model: ModelProfile) => pricing.charge(model, result.input_tokens, result.output_tokens, result.cached_input_tokens ?? 0);
 
 class PlanningTimeout extends Error {
   override name = "TimeoutError";
@@ -364,7 +365,7 @@ async function planAsLead(request: string, models: ModelProfile[], configured: S
             clearTimeout(timer);
           }
         } else result = await providers.converse(conversation, text);
-        spent += cost(result, model);
+        spent += await cost(result, model);
         return result.text;
       } finally {
         conversation.reasoning_effort = previous;
@@ -435,7 +436,7 @@ export async function autonomousPlan(prompt: string, models: ModelProfile[], giv
     plan.request = body;
     return plan;
   }
-  let planner = selectPlannerModel(models, configured);
+  let planner = await selectPlannerModel(models, configured);
   if (planner === null || planner.provider === "mock") {
     if (artifactWork) throw new contracts.ContractError("Artifact planning blocked: no capable planner to declare evidence and limits");
     plan = heuristicPlan(prompt, inProject);
@@ -454,7 +455,7 @@ export async function autonomousPlan(prompt: string, models: ModelProfile[], giv
         if (!(error instanceof ModelUnavailable)) throw error;
         // Out of quota: the next best planner takes over, up to a few.
         configured = new Set([...configured].filter((id) => id !== planner!.id));
-        const backup = selectPlannerModel(models, configured);
+        const backup = await selectPlannerModel(models, configured);
         if (backup === null || backup.provider === "mock" || switched.length >= 2) throw error;
         switched.push(planner.id);
         planner = backup;
@@ -462,14 +463,14 @@ export async function autonomousPlan(prompt: string, models: ModelProfile[], giv
     }
     const chargedId = result.used_model_id || planner.id;
     const charged = models.find((item) => item.id === chargedId)!;
-    planningCost = cost(result, charged);
+    planningCost = await cost(result, charged);
     try {
       plan = readPlan(result.text);
     } catch (error) {
       if (!(error instanceof contracts.ContractError)) throw error;
       try {
         const correction = await providers.complete(planner.id, request + "\nInvalid artifact plan: " + error.message + "\nReturn the whole corrected plan.", { cli_timeout: 120 });
-        planningCost += cost(correction, charged);
+        planningCost += await cost(correction, charged);
         plan = readPlan(correction.text);
       } catch (invalid) {
         throw new contracts.ContractError(`Artifact planning blocked: ${(invalid as Error)?.message ?? invalid}`);

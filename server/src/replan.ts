@@ -10,7 +10,8 @@ import { MAX_TASKS } from "./lead-planning.js";
 import { type ExecutionRun, folderId, type ModelProfile, type TaskNode, TaskNodeSchema } from "./models.js";
 import { difficulty, packageOf } from "./planner.js";
 import { head, pyDumps, pyStr, truthy } from "./py.js";
-import { NoEligibleModelError, reestimate, routeNode } from "./routing.js";
+import { NoEligibleModelError, routeNode } from "./routing.js";
+import * as pricing from "./pricing.js";
 import * as team from "./team.js";
 
 /** A plan change that cannot be made, and why. */
@@ -26,8 +27,8 @@ type Json = Record<string, any>;
 /** Apply ``change`` ({add, remove, update}) to ``run``'s plan in place. ``deciding`` is the step the
  *  decision is about, which may be changed although it is held as running. Returns the titles added,
  *  removed and updated. */
-export function changePlan(run: ExecutionRun, change: Json, models: ModelProfile[], configured: Set<string>, needsVision = false,
-  deciding: string | null = null): { added: string[]; removed: string[]; updated: string[] } {
+export async function changePlan(run: ExecutionRun, change: Json, models: ModelProfile[], configured: Set<string>, needsVision = false,
+  deciding: string | null = null): Promise<{ added: string[]; removed: string[]; updated: string[] }> {
   // Validate on copies: a rejected edit must not partially mutate the active plan.
   const nodes = new Map(run.plan.nodes.map((item) => [item.id, structuredClone(item)]));
   const changeable = (nodeId: string, what: string): TaskNode => {
@@ -119,15 +120,15 @@ export function changePlan(run: ExecutionRun, change: Json, models: ModelProfile
     try {
       if (run.plan.employees.length) {
         if (!item.employee_id) item.employee_id = run.plan.parts.find((p) => p.id === item.part_id)?.employee_id ?? null;
-        team.route(item, run.plan, models, configured, needsVision);
-      } else routeNode(item, models, configured, needsVision);
+        await team.route(item, run.plan, models, configured, needsVision);
+      } else await routeNode(item, models, configured, needsVision);
     } catch (error) {
       if (error instanceof NoEligibleModelError) throw new PlanError(`no model can take step ${item.title}: ${error.message}`);
       throw error;
     }
   }
   run.plan.nodes = remaining;
-  reestimate(run);
+  await pricing.reestimate(run);
   return { added: added.map((item) => item.title), removed: removed.map((item) => item.title), updated: updated.map((item) => item.title) };
 }
 

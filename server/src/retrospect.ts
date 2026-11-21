@@ -10,7 +10,7 @@
 // Those names follow the records (a module, a program), so one cause can go by several. After a task
 // ends, ``nameProblems`` has the cheapest model name each problem by what it is about, reusing names
 // already given; ``topics`` groups problems across tasks by those names.
-import { tokenCost } from "./budget.js";
+import * as pricing from "./pricing.js";
 import type { Database } from "./db.js";
 import { log } from "./log.js";
 import { DiagnosisStatus, type ExecutionRun, type ModelProfile, Outcome, type TaskNode } from "./models.js";
@@ -315,10 +315,11 @@ export function knownTopics(db: Db, limit = 80): string[] {
 }
 
 /** The cheapest configured API model that can read the problems: naming them needs little. */
-export function namingModel(models: ModelProfile[], configured: Set<string>, tokens: number): ModelProfile | null {
+export async function namingModel(models: ModelProfile[], configured: Set<string>, tokens: number): Promise<ModelProfile | null> {
   const choices = models.filter((m) => configured.has(m.id) && !["cli", "mock"].includes(m.id.split(":", 1)[0])
     && (m.context_window || 0) >= tokens && m.scores !== null);
-  return minBy<ModelProfile | null>(choices, (m) => [(m!.input_per_million || 0) + (m!.output_per_million || 0), m!.id], null);
+  const rates = await pricing.rates(choices);
+  return minBy<ModelProfile | null>(choices, (m) => [rates[m!.id] ?? 0, m!.id], null);
 }
 
 export type Completion = { text: string; input_tokens: number; output_tokens: number };
@@ -332,7 +333,7 @@ export async function nameProblems(db: Db, complete: (modelId: string, prompt: s
     const problems = (body?.problems ?? []).slice(0, MAX_NAMED);
     if (!problems.length || problems.every((item) => item.topic)) return body;
     const prompt = namingPrompt(problems, knownTopics(db));
-    const model = namingModel(models, configured, Math.floor(prompt.length / 2) + 2000);
+    const model = await namingModel(models, configured, Math.floor(prompt.length / 2) + 2000);
     if (model === null) return body;
     const result = await complete(model.id, prompt);
     const names = parseNames(result.text, problems.length);
@@ -342,7 +343,7 @@ export async function nameProblems(db: Db, complete: (modelId: string, prompt: s
       body!.problems[i].topic = name;
     });
     body.topics_model_id = model.id;
-    body.topics_cost_usd = pyRound(tokenCost(model, result.input_tokens, result.output_tokens), 6);
+    body.topics_cost_usd = pyRound(await pricing.charge(model, result.input_tokens, result.output_tokens), 6);
     db.saveRetrospective(runId, body);
     return body;
   } catch (error) {
@@ -393,55 +394,4 @@ export function runsWith(db: Db, kind: string, key: string): Set<string> {
   for (const group of recurring(db)) if (group.kind === kind && group.key === key) for (const run of group.runs) found.add(run);
   for (const group of topics(db)) if (group.members.includes(member)) for (const run of group.runs) found.add(run);
   return found;
-}
-
-// A model's overrun counts once this many of its steps have run; fewer say too little.
-export const CALIBRATION_STEPS = 3;
-
-export type Calibration = { models: Record<string, number>; overall: number | null; overhead: number };
-
-/** How far past tasks went beyond their estimates: per model, the real cost of its steps over their
- *  estimate (``models``, with ``overall`` for models seen too rarely), and the whole task's cost over
- *  its steps' (``overhead``: the lead, diagnoses, planning). Steps that never ran say nothing and are
- *  left out; so is the task ``exclude``, which must not explain itself. */
-export function calibration(reviews: Record<string, any>[], exclude: string | null = null): Calibration {
-  const estimated = new Map<string, number>();
-  const spent = new Map<string, number>();
-  const counted = new Map<string, number>();
-  let inSteps = 0;
-  let inTotal = 0;
-  for (const item of reviews) {
-    if (item.run_id === exclude) continue;
-    const steps = (item.steps || []) as Record<string, any>[];
-    for (const step of steps.filter((entry) => entry.estimated_usd && entry.actual_usd)) {
-      const model = step.model_id;
-      estimated.set(model, (estimated.get(model) ?? 0) + step.estimated_usd);
-      spent.set(model, (spent.get(model) ?? 0) + step.actual_usd);
-      counted.set(model, (counted.get(model) ?? 0) + 1);
-    }
-    const stepsCost = steps.reduce((sum, step) => sum + (step.actual_usd || 0), 0);
-    if (stepsCost > 0) {
-      inSteps += stepsCost;
-      inTotal += Math.max(item.actual_usd || 0, stepsCost);
-    }
-  }
-  const total = (values: Map<string, number>) => [...values.values()].reduce((sum, value) => sum + value, 0);
-  const enough = total(counted) >= CALIBRATION_STEPS;
-  return {
-    models: Object.fromEntries([...counted].filter(([, count]) => count >= CALIBRATION_STEPS).map(([model]) => [model, spent.get(model)! / estimated.get(model)!])),
-    overall: enough ? total(spent) / total(estimated) : null,
-    overhead: inSteps ? inTotal / inSteps : 1.0,
-  };
-}
-
-/** The run's estimate as past tasks suggest it will really go, or null without enough history. */
-export function calibratedCost(run: ExecutionRun, cal: Calibration): number | null {
-  const overall = cal.overall;
-  const estimate = run.plan.estimate;
-  if (overall === null || estimate === null || estimate === undefined) return null;
-  const steps = run.plan.nodes.reduce((sum, node) => sum + node.estimated_cost_usd, 0);
-  let scaled = run.plan.nodes.reduce((sum, node) => sum + node.estimated_cost_usd * (cal.models[node.model_id as string] ?? overall), 0);
-  // Planning and parts not yet split have no model of their own: the overall overrun.
-  scaled += Math.max(0, estimate.base_usd - steps) * overall;
-  return pyRound(scaled * cal.overhead, 6);
 }

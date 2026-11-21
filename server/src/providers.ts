@@ -53,7 +53,7 @@ export class ProviderResult {
 
 /** What a call may spend, as the executor gives it: RequestBudget and what the executor adds. */
 export type SpendOk = {
-  allows(modelId?: string, inputTokens?: number, outputTokens?: number): boolean;
+  allows(modelId?: string, inputTokens?: number, outputTokens?: number): boolean | Promise<boolean>;
   context?: Record<string, unknown>;
   turnRemaining?: (() => number) | null;
   stepRemaining?: (() => number) | null;
@@ -456,7 +456,7 @@ export class ProviderRegistry {
           if (reply.isSuccess) {
             const measured = responseUsage(provider, reply.json());
             if (measured[4]) reservation[1] = measured[0] + measured[1];
-            callRecords.usage(record ? this.models[record.model_id] : null, ...measured);
+            await callRecords.usage(record ? this.models[record.model_id] : null, ...measured);
           }
           return reply;
         }, signal);
@@ -563,7 +563,7 @@ export class ProviderRegistry {
     let tools: Json[] = agent ? [...agentTools.toolsFor(agentTools.sandboxAvailable(), agent.readOnly)] : [];
     if (agent) {
       if (!agent.readOnly && !agent.host) {
-        tools = [...tools, ...chatActions.offered(), ...(await mcp.definitions(agent))];
+        tools = [...tools, ...(await chatActions.offered()), ...(await mcp.definitions(agent))];
         // An MCP tool with a price (a picture, a search) is paid by the call, from the same budget.
         agent.budget = spendOk;
       }
@@ -605,7 +605,7 @@ export class ProviderRegistry {
     const interval = settings.progress_check_minutes * 60_000;
     let nextCheck = performance.now() + interval;
     const seen: Json[] = [];
-    const allows = () => !spendOk || spendOk.allows(modelId, totalIn, totalOut);
+    const allows = async () => !spendOk || await spendOk.allows(modelId, totalIn, totalOut);
 
     /** ``step(state)``, with the check still made while one request takes long: a provider that never
      *  answers is otherwise only noticed after its read timeout and retries, many minutes later. */
@@ -643,7 +643,7 @@ export class ProviderRegistry {
           return new ProviderResult((text as string) || "声明轮次已用尽，保留工具日志供诊断。", totalIn, totalOut, modelId,
             { turns: limit!, turn_limit: true, cached_input_tokens: totalCached });
         }
-        if (!allows()) throw new BudgetExceeded("已达到任务可用的预算，模型调用被中止。");
+        if (!(await allows())) throw new BudgetExceeded("已达到任务可用的预算，模型调用被中止。");
         memory.flush(state);
         conversation?.save();
         const compacted = agent ? await this.compactContext(modelId, state, step, spendOk, conversation, signal) : null;
@@ -679,7 +679,7 @@ export class ProviderRegistry {
         totalOut += usedOut;
         totalCached += usedCached;
         if (spendOk?.record) await spendOk.record(modelId, usedIn, usedOut, usedCached);
-        if (!allows()) throw new BudgetExceeded("已达到任务可用的预算，模型调用被中止。");
+        if (!(await allows())) throw new BudgetExceeded("已达到任务可用的预算，模型调用被中止。");
         if (truncated && !calls.length && (agent || !text)) {
           // A cut-off turn is not an answer; returning it would look like a model that finished
           // without doing anything.

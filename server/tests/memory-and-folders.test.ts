@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { settings } from "../src/config.js";
 import * as folders from "../src/folders.js";
-import * as remembering from "../src/remembering.js";
+import { remembering } from "./helpers/chat-package.js";
 
 const saved = { data_dir: settings.data_dir, workspace_root: settings.workspace_root, user_memory: settings.user_memory,
   lead_root: settings.lead_root };

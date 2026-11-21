@@ -21,7 +21,7 @@ import * as conversation from "../src/conversation.js";
 import { slug } from "../src/folders.js";
 import { ModelProfileSchema, TaskNodeSchema } from "../src/models.js";
 import { formatG, pyDumps, pyRegex, pyRound, shlexQuote, shlexSplit } from "../src/py.js";
-import * as remembering from "../src/remembering.js";
+import { remembering } from "./helpers/chat-package.js";
 import { expectedCost, feedbackKey, note } from "../src/routing-feedback.js";
 import { applyAaScores } from "../src/scoring.js";
 import { inputBound, retryAfter } from "../src/call-control.js";
@@ -30,6 +30,7 @@ import * as diagnosis from "../src/diagnosis.js";
 import { ExecutionRunSchema } from "../src/models.js";
 import * as progress from "../src/progress.js";
 import * as recovery from "../src/recovery.js";
+import * as pricing from "../src/pricing.js";
 import * as routing from "../src/routing.js";
 import { readKind } from "../src/triage.js";
 
@@ -132,7 +133,7 @@ const runOf = (payload: unknown) => ExecutionRunSchema.parse(payload);
 const nodeOf = (run: any, id: string) => run.plan.nodes.find((node: any) => node.id === id);
 const relativeToData = (path: string) => relativePath(data(), path);
 
-const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] }> = {
+const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] } | Promise<{ result: unknown; after: unknown[] }>> = {
   "quality.node_prompt": (c) => {
     data();
     const run = runOf(c.args[0]);
@@ -274,11 +275,13 @@ const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] }> 
   "chat_actions.session": (c) => {
     const [tools, calls] = c.args as [string[] | null, [string, Record<string, unknown>][]];
     const lines: string[] = [];
-    return chatActions.pending.run(tools === null ? null : [lines, new Set(tools)], () => ({
-      result: { offered: chatActions.offered().map((tool) => tool.name),
-        results: calls.map(([name, args]) => chatActions.run(name, args)), lines },
-      after: [],
-    }));
+    // The chat package's tools, as FluidForm asks for them.
+    return chatActions.pending.run(tools === null ? null : [lines, new Set(tools)], async () => {
+      const offered = (await chatActions.offered()).map((tool) => tool.name);
+      const results: [string, boolean][] = [];
+      for (const [name, args] of calls) results.push(await chatActions.run(name, args));
+      return { result: { offered, results, lines }, after: [] };
+    });
   },
   "chat_actions.with_actions": (c) => ({ result: chatActions.withActions(c.args[0], c.args[1]), after: c.args }),
   "py.round": (c) => ({ result: pyRound(c.args[0], c.args[1]), after: [] }),
@@ -308,50 +311,51 @@ const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] }> 
     return { result: [expectedCost(node, { id: "m" }, base, feedback), note(node, { id: "m" }, feedback)], after: [] };
   },
   "folders.slug": (c) => ({ result: slug(c.args[0], c.args[1]), after: c.args }),
-  "routing.scenario": (c) => {
+  "routing.scenario": async (c) => {
     const [payload, raw, configuredIds, vision, preferApi] = c.args;
     settings.subtasks_prefer_api = preferApi;
     const models = payload.map((model: unknown) => ModelProfileSchema.parse(model));
     const configured = new Set<string>(configuredIds);
     const node = () => TaskNodeSchema.parse(raw);
     const result: Record<string, unknown> = {};
-    const attempt = (work: () => unknown) => {
+    const attempt = async (work: () => unknown) => {
       try {
-        return work();
+        return await work();
       } catch (error) {
         if (error instanceof routing.NoEligibleModelError) return ["error", error.message];
         throw error;
       }
     };
-    result.route = attempt(() => {
-      const routed = routing.routeNode(node(), models, configured, vision);
+    result.route = await attempt(async () => {
+      const routed = (await routing.routeNode(node(), models, configured, vision));
       return [routed.model_id, routed.estimated_cost_usd, routed.routing_note];
     });
-    result.strongest = routing.strongestFor(node(), models, configured, vision)?.id ?? null;
-    result.stronger = routing.strongerThan(node(), models, configured, "deepseek:flash", vision, new Set(["glm:glm-5.3"]))?.id ?? null;
-    result.spread = routing.spreadTo(TaskNodeSchema.parse({ ...raw, model_id: "deepseek:flash" }), models, configured, new Set(["glm"]), vision)?.id ?? null;
+    result.strongest = (await routing.strongestFor(node(), models, configured, vision))?.id ?? null;
+    result.stronger = (await routing.strongerThan(node(), models, configured, "deepseek:flash", vision, new Set(["glm:glm-5.3"])))?.id ?? null;
+    result.spread = (await routing.spreadTo(TaskNodeSchema.parse({ ...raw, model_id: "deepseek:flash" }), models, configured, new Set(["glm"]), vision))?.id ?? null;
     const fit = node();
-    result.fit = attempt(() => [routing.fitAndRoute(fit, models, configured, vision), fit.quality_threshold, fit.model_id]);
+    result.fit = await attempt(async () => [(await routing.fitAndRoute(fit, models, configured, vision)), fit.quality_threshold, fit.model_id]);
     result.eligible = routing.eligibleForNode(node(), models, configured, vision).map((model) => model.id);
-    result.costs = Object.fromEntries(models.map((model: any) => [model.id, routing.nodeCost(node(), model)]));
+    result.costs = Object.fromEntries(await Promise.all(models.map(async (model: any) => [model.id, await routing.nodeCost(node(), model)])));
     const failing = TaskNodeSchema.parse({ ...raw, attempts: [{ outcome: "rejected", model_id: "glm:glm-5.3" }, { outcome: "error", model_id: "glm:glm-5.3" }] });
-    result.retry = recovery.retryModel(failing, models, configured, vision)?.id ?? null;
+    result.retry = (await recovery.retryModel(failing, models, configured, vision))?.id ?? null;
     settings.subtasks_prefer_api = true;
     return { result, after: [] };
   },
-  "routing.pickers": (c) => {
+  "routing.pickers": async (c) => {
     const [payload, configuredIds, preferApi] = c.args;
     settings.subtasks_prefer_api = preferApi;
     const models = payload.map((model: unknown) => ModelProfileSchema.parse(model));
     const configured = new Set<string>(configuredIds);
-    const result = { reviewer: routing.pickReviewer(models, configured, "deepseek:flash", 9000)?.id ?? null,
-      writer: routing.briefWriter(models, configured)?.id ?? null,
+    const result = { reviewer: (await routing.pickReviewer(models, configured, "deepseek:flash", 9000))?.id ?? null,
+      writer: (await routing.briefWriter(models, configured))?.id ?? null,
       diagnosers: routing.diagnosers(models, configured).map((model) => model.id),
       engineers: routing.engineers(models, configured).map((model) => model.id) };
     settings.subtasks_prefer_api = true;
     return { result, after: [] };
   },
-  "routing.estimate": (c) => ({ result: routing.estimate(c.args[0].map((node: unknown) => TaskNodeSchema.parse(node)), c.args[1], c.args[2], c.args[3]), after: [] }),
+  // Now the pricing package's (packages/pricing), asked as FluidForm asks it.
+  "routing.estimate": async (c) => ({ result: await pricing.estimate(c.args[0].map((node: unknown) => TaskNodeSchema.parse(node)), c.args[1], c.args[2], c.args[3]), after: [] }),
   "recovery.turns_for": (c) => {
     settings.api_agent_max_turns = c.args[0];
     const result = recovery.turnsFor(TaskNodeSchema.parse({ id: "n", title: "t", instructions: "i", capability: "coding", difficulty: c.args[1] }));
@@ -403,28 +407,28 @@ function record(file: string, changes: [unknown, unknown][]): void {
 
 for (const file of ["conversation", "chat_actions", "py", "remembering", "scoring", "routing_feedback", "folders",
   "catalog", "routing", "recovery", "progress", "diagnosis", "triage", "files", "contracts", "prompts", "quota", "environment"]) {
-  test(`${file}: the same as the Python backend`, () => {
+  test(`${file}: the same as the Python backend`, async () => {
     const cases = load(file);
     const changes: [unknown, unknown][] = [];
     assert.ok(cases.length > 0);
-    cases.forEach((c, index) => {
+    for (const [index, c] of cases.entries()) {
       const run = CALLS[c.call];
       assert.ok(run, `no TS call for ${c.call}`);
       const label = `${c.call} #${index} ${JSON.stringify(c.args).slice(0, 120)}`;
       if (c.error) {
-        assert.throws(() => run(c), undefined, label);
-        return;
+        await assert.rejects(async () => run(c), undefined, label);
+        continue;
       }
-      const got = run(c);
+      const got = await run(c);
       const wrong = same(plain(got.result), plain(c.result));
       // A behaviour changed on purpose: GOLDEN_UPDATE=1 records what the TS modules give now.
       if (wrong && process.env.GOLDEN_UPDATE === "1") {
         changes.push([plain(c.result), plain(got.result)]);
-        return;
+        continue;
       }
       assert.equal(wrong, null, `${label}: ${wrong}`);
       if (c.after.length) assert.equal(same(plain(got.after), plain(c.after)), null, `${label} (arguments after)`);
-    });
+    }
     if (changes.length) record(file, changes);
   });
 }

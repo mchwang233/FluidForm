@@ -8,11 +8,12 @@
 //
 // - calibration: from a baseline reading on, all tokens spent (the ledger plus the user's own
 //   sessions) over the share of the window used since give the tokens a whole window holds; the
-//   window's part of the monthly fee over that is the price per token. It is set as the CLI's catalog
+//   window's part of the monthly fee over that is the price per token. This reads the quota; the
+//   pricing package (pricing.cliPrice) works out the price, which is set as the CLI's catalog
 //   price, so charging, task budgets, routing and the lead's team choice all use it like any API
 //   price. Until enough of the window is used after the baseline, the CLI has no price. Quota used
 //   where its tokens cannot be seen (another machine, the web) would make it look dearer than it is;
-//   it is never priced above the provider's dearest API model (apiCeiling).
+//   it is never priced above the provider's dearest API model (the pricing package caps it: apiModels).
 // - pressure: from `cli_quota_soft_percent` of a window used, the CLI loses its first place in routing
 //   and the lead is told; from `cli_quota_stop_percent` it is marked out of quota until the window
 //   resets (quota.QuotaTracker), so new work goes to other models.
@@ -24,6 +25,7 @@
 // before the time it gave. When the last reading is older than STALE_MINUTES, the reader asks Codex's
 // app server for the quota now (`account/rateLimits/read`: no model call, no quota used), at most every
 // ASK_MINUTES.
+import * as pricing from "./pricing.js";
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -39,14 +41,10 @@ import { fromPythonIso, pythonIso } from "./lax.js";
 import { log } from "./log.js";
 import type { ModelProfile } from "./models.js";
 import { routingReady } from "./models.js";
-import { formatG, isObject, maxBy, pyDumps, pyRound, sortedBy } from "./py.js";
+import { formatG, isObject, maxBy, pyDumps, sortedBy } from "./py.js";
 import type { QuotaTracker } from "./quota.js";
 
 export const CACHED_WEIGHT = 0.1;
-export const WEEKS_PER_MONTH = 52 / 12;
-// Below this share of a window used, the tokens per window are too uncertain to calibrate; the last
-// good calibration is kept instead.
-export const MIN_CALIBRATION_PERCENT = 2.0;
 export const REFRESH_SECONDS = 60;
 export const STALE_MINUTES = 10;
 export const ASK_MINUTES = 10;
@@ -373,17 +371,6 @@ function keepState(state: State): void {
   }
 }
 
-/** [price per million weighted tokens, tokens a full longest window holds]. ``usage.tokens`` were
- *  spent while ``usedSince`` percent of the window was used. */
-export function pricePerMillion(monthlyUsd: number, usage: Usage, usedSince: number, saved: number | null = null): [number | null, number | null] {
-  const longest = usage.longest;
-  let perWindow = saved;
-  if (longest && usedSince >= MIN_CALIBRATION_PERCENT && usage.tokens > 0) perWindow = usage.tokens / (usedSince / 100);
-  if (!perWindow || !longest) return [null, perWindow];
-  const windowUsd = (monthlyUsd / WEEKS_PER_MONTH) * (longest.minutes / (7 * 24 * 60));
-  return [(windowUsd / perWindow) * 1_000_000, perWindow];
-}
-
 /** The plan's price per million [input, output] until its quota calibrates one, if set. */
 export function startingPrice(plan: Record<string, unknown>): [number, number] | null {
   const input = Number(plan.input_per_million);
@@ -392,16 +379,18 @@ export function startingPrice(plan: Record<string, unknown>): [number, number] |
   return Math.min(input, output) >= 0 ? [input, output] : null;
 }
 
-/** The most a membership's tokens can cost: the provider's dearest API model [input, output, cached
- *  per million]. A subscription is never dearer than paying the API; a calibration above this means
- *  quota went where its tokens cannot be seen here (another machine, the web). */
-export function apiCeiling(models: Record<string, ModelProfile>, provider: string): [number, number, number] | null {
-  // Models still offered: a retired premium tier's price says nothing about the subscription.
-  const priced = Object.values(models).filter((model) => model.provider === provider && model.channel !== "cli" && routingReady(model)
-    && model.input_per_million && model.output_per_million);
-  if (!priced.length) return null;
-  return [Math.max(...priced.map((model) => model.input_per_million!)), Math.max(...priced.map((model) => model.output_per_million!)),
-    Math.max(...priced.map((model) => model.cached_input_per_million || model.input_per_million! * CACHED_WEIGHT))];
+/** The provider's API models still offered: what pricing caps a membership's tokens at (a
+ *  subscription is never dearer than paying the API; a calibration above it means quota went where
+ *  its tokens cannot be seen here: another machine, the web). A retired premium tier says nothing. */
+export function apiModels(models: Record<string, ModelProfile>, provider: string): ModelProfile[] {
+  return Object.values(models).filter((model) => model.provider === provider && model.channel !== "cli" && routingReady(model));
+}
+
+/** The terms the pricing package gives a membership by its plan (packages/pricing cliPrice). */
+async function planTerms(models: Record<string, ModelProfile>, model: ModelProfile, monthly: number, set: [number, number] | null,
+  usage: Usage | null, usedSince = 0, saved: number | null = null) {
+  return pricing.cliPrice({ monthly_usd: monthly, longest_minutes: usage?.longest?.minutes ?? null, tokens: usage?.tokens ?? 0,
+    used_since: usedSince, saved, set, api: apiModels(models, model.provider) });
 }
 
 function setPrice(model: ModelProfile, input: number | null, output: number | null, cached: number | null): void {
@@ -452,7 +441,8 @@ export async function apply(models: Record<string, ModelProfile>, tracker: Quota
         warned.add(modelId);
         log.warning(`${modelId}: membership usage could not be read; it keeps its catalog price`);
       }
-      if (set) setPrice(model, set[0], set[1], set[0] * CACHED_WEIGHT);
+      const terms = set && pricing.enabled() ? await planTerms(models, model, monthly, set, null) : null;
+      if (terms && terms.input !== null) setPrice(model, terms.input, terms.output, terms.cached);
       else if (original) setPrice(model, original.input_per_million, original.output_per_million, original.cached_input_per_million);
       if (original) model.execution_priority = original.execution_priority;
       model.usage_note = null;
@@ -472,17 +462,15 @@ export async function apply(models: Record<string, ModelProfile>, tracker: Quota
       usage = (await reader.read(since, now)) ?? usage;
     }
     usage.tokens += recorded(modelId, since);
-    const [price, perWindow] = pricePerMillion(monthly, usage, longest.used_percent - base.percent!, mine.per_window ?? null);
-    if (perWindow && perWindow !== mine.per_window) {
-      mine.per_window = perWindow;
+    // Without pricing its quota is still read and guarded; it is just not priced.
+    const terms = pricing.enabled() ? await planTerms(models, model, monthly, set, usage, longest.used_percent - base.percent!, mine.per_window ?? null) : null;
+    const price = terms?.price ?? null;
+    const capped = Boolean(terms?.capped);
+    if (terms?.per_window && terms.per_window !== mine.per_window) {
+      mine.per_window = terms.per_window;
       changed = true;
     }
-    const ceiling = apiCeiling(models, model.provider);
-    const capped = price !== null && ceiling !== null && price > ceiling[0];
-    if (price !== null) {
-      if (ceiling) setPrice(model, pyRound(Math.min(price, ceiling[0]), 6), pyRound(Math.min(price, ceiling[1]), 6), pyRound(Math.min(price * CACHED_WEIGHT, ceiling[2]), 6));
-      else setPrice(model, pyRound(price, 6), pyRound(price, 6), pyRound(price * CACHED_WEIGHT, 6));
-    } else if (set) setPrice(model, set[0], set[1], set[0] * CACHED_WEIGHT);
+    if (terms && terms.input !== null) setPrice(model, terms.input, terms.output, terms.cached);
     if (settings.cli_free) setPrice(model, 0, 0, 0);
     const fullest = usage.fullest;
     const tight = fullest !== null && fullest.used_percent >= settings.cli_quota_soft_percent;

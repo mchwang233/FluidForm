@@ -18,30 +18,30 @@ const raw = (node: TaskNode): Record<string, any> => {
 };
 const firstLine = (text: string) => text.split("\n", 1)[0];
 
-test("an artifact replan cannot remove a contract, a handoff or the acceptance", () => {
+test("an artifact replan cannot remove a contract, a handoff or the acceptance", async () => {
   for (const change of [{ remove: ["report"] }, { update: [{ id: "report", dependencies: [] }] }, { update: [{ id: "report", artifact_contract: null }] },
     { update: [{ id: "report", acceptance_criteria: "Trust the claim" }] }]) {
     const current = plan(...coverageNodes());
     const before = JSON.stringify(current);
-    assert.throws(() => changePlan(current, change, Object.values(MODELS), CONFIGURED), PlanError, JSON.stringify(change));
+    await assert.rejects(changePlan(current, change, Object.values(MODELS), CONFIGURED), PlanError, JSON.stringify(change));
     assert.equal(JSON.stringify(current), before);
   }
 });
 
-test("an artifact replan keeps the usage on an allowed change of instructions", () => {
+test("an artifact replan keeps the usage on an allowed change of instructions", async () => {
   const current = plan(...coverageNodes());
   current.plan.nodes[1].contract_turns = 2;
   current.plan.nodes[1].contract_cost_usd = 0.5;
-  changePlan(current, { update: [{ id: "report", instructions: "Parse only the declared VDB" }] }, Object.values(MODELS), CONFIGURED);
+  await changePlan(current, { update: [{ id: "report", instructions: "Parse only the declared VDB" }] }, Object.values(MODELS), CONFIGURED);
   assert.equal(current.plan.nodes[1].contract_turns, 2);
   assert.equal(current.plan.nodes[1].contract_cost_usd, 0.5);
 });
 
-test("an artifact replan cannot copy a used-up deliverable with fresh limits", () => {
+test("an artifact replan cannot copy a used-up deliverable with fresh limits", async () => {
   const nodes = coverageNodes();
   const current = plan(...nodes);
   current.plan.nodes[0].contract_turns = 3;
-  assert.throws(() => changePlan(current, { add: [{ ...raw(nodes[0]), key: "fresh" }] }, Object.values(MODELS), CONFIGURED), /duplicate artifact producer/);
+  await assert.rejects(changePlan(current, { add: [{ ...raw(nodes[0]), key: "fresh" }] }, Object.values(MODELS), CONFIGURED), /duplicate artifact producer/);
   assert.ok(current.plan.nodes.length === 3 && current.plan.nodes[0].contract_turns === 3);
 });
 

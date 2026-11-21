@@ -183,7 +183,7 @@ export abstract class Preflighting extends Engineering {
   async writeSkill(run: ExecutionRun, workspace: string, name: string, tools: string[], general: skills.Skill | null, checks: PreflightCheck[],
     signal?: AbortSignal): Promise<string> {
     const node = TaskNodeSchema.parse({ id: "skill", title: `Skill: ${name}`, instructions: "", capability: "coding", difficulty: "normal", needs_workspace: true });
-    routeNode(node, Object.values(this.modelLookup), this.configured(run));
+    await routeNode(node, Object.values(this.modelLookup), this.configured(run));
     const scratch = join(workspace, `.skill-${name}`);
     mkdirSync(scratch, { recursive: true });
     try {
