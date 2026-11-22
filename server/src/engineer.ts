@@ -20,7 +20,8 @@ import { AsyncEvent, fixed, head, pyRegex, pyRound, splitlines, tail } from "./p
 import * as quality from "./quality.js";
 import { engineers } from "./routing.js";
 import { SelfRepair } from "./self-repair.js";
-import { ENGINEER_CALLERS, engineerMessage } from "./supervisor.js";
+import { ENGINEER_CALLERS } from "./supervisor.js";
+import { engineerMessage } from "./lead.js";
 import { currentTask, isCancelled, sleep, Task } from "./tasks.js";
 
 // Models tried in turn when one fails (its usage ran out, say).
@@ -598,7 +599,7 @@ export abstract class Engineering extends SelfRepair {
     const left = SelfRepair.decisionsLeft(run, node);
     if (this.canLead() && Math.min(...left) > 0) {
       const choices = this.choices(run, node);
-      decision = await this.askForDecision(run.id, node.id, engineerMessage(run, node, job, choices, left), new Set(choices.map((item) => item.id)), null, false, "engineer_done");
+      decision = await this.askForDecision(run.id, node.id, await engineerMessage(run, node, job, choices, left), new Set(choices.map((item) => item.id)), null, false, "engineer_done");
     }
     if (decision === "budget") return;
     if (decision === null) {

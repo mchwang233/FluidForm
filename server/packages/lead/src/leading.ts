@@ -12,6 +12,7 @@ import { pyRound } from "../../../src/py.js";
 import * as quality from "../../../src/quality.js";
 import { nodeCost } from "../../../src/routing.js";
 import * as supervisor from "../../../src/supervisor.js";
+import * as prompts from "./prompts.js";
 import { currentTask, isCancelled } from "../../../src/tasks.js";
 import { Leading } from "../../../src/leading.js";
 
@@ -42,11 +43,11 @@ export async function decide(this: Leading, runId: string, nodeId: string, verdi
   const blocked = outcome === "blocked";
   // A blocked step may need work it builds on redone (a coverage gap, a missing output).
   const targets = verifying ? Leading.targets(run, node) : blocked ? Leading.upstream(run, node) : null;
-  let prompt = verifying ? supervisor.verificationMessage(run, node, verdict, choices, left)
-    : supervisor.failureMessage(run, node, node.attempts.at(-1)!, verdict, choices, left, targets);
+  let prompt = verifying ? prompts.verificationMessage(run, node, verdict, choices, left)
+    : prompts.failureMessage(run, node, node.attempts.at(-1)!, verdict, choices, left, targets);
   let limited = outcome === "stopped" && node.artifact_contract !== null;
-  if (limited) prompt += "\n" + supervisor.limitNote(node, contracts.extension(node));
-  if (blocked) prompt += "\n" + supervisor.blockedNote();
+  if (limited) prompt += "\n" + prompts.limitNote(node, contracts.extension(node));
+  if (blocked) prompt += "\n" + prompts.blockedNote();
   limited = limited || blocked;
   const event = verifying ? "verify_failed" : "attempt_failed";
   const decision = await this.askForDecision(runId, nodeId, prompt, new Set(choices.map((item) => item.id)), targets, false, event);
@@ -72,7 +73,7 @@ export async function decide(this: Leading, runId: string, nodeId: string, verdi
 
 export async function decision(this: Leading, runId: string, nodeId: string | null, prompt: string, modelIds: Set<string>, targets: Set<string> | null, final: boolean): Promise<Choice> {
   const read = async (reply: string): Promise<[supervisor.Decision | null, string]> => {
-    const found = supervisor.parseDecision(reply, modelIds, targets, final);
+    const found = prompts.parseDecision(reply, modelIds, targets, final);
     if (found && found.action === "replan") {
       const problem = await this.planProblem(runId, found.plan!, nodeId);
       if (problem) return [null, `That plan change cannot be made: ${problem}`];
@@ -83,7 +84,7 @@ export async function decision(this: Leading, runId: string, nodeId: string | nu
     let [found, problem] = await read(await this.askLead(runId, prompt));
     if (found === null) {
       // Same conversation: it only has to say what it decided in the asked form.
-      [found] = await read(await this.askLead(runId, `${problem}\n` + supervisor.decisionFormat(Boolean(targets?.size), final)));
+      [found] = await read(await this.askLead(runId, `${problem}\n` + prompts.decisionFormat(Boolean(targets?.size), final)));
     }
     return found;
   } catch (error) {
@@ -107,7 +108,7 @@ export async function finalDecision(this: Leading, runId: string): Promise<boole
   const left = settings.max_run_decisions - counted.length;
   if (left <= 0) return false;
   const targets = new Set(run.plan.nodes.map((node) => node.id));
-  const decision = await this.askForDecision(runId, null, supervisor.finalMessage(run, left), new Set(), targets, true, "all_done");
+  const decision = await this.askForDecision(runId, null, prompts.finalMessage(run, left), new Set(), targets, true, "all_done");
   if (decision === "budget") return true;
   if (decision === null) return false;
   const { action } = decision;
@@ -144,7 +145,7 @@ export async function applyDecision(this: Leading, runId: string, nodeId: string
       try {
         if (action === "accept") contracts.accepted(run, node);
         else if (this.contractLimitReason(node)) {
-          // Running it again is the lead granting it more calls (supervisor.limitNote).
+          // Running it again is the lead granting it more calls (prompts.limitNote).
           const granted = contracts.extend(node);
           this.emit(runId, "node.limit_extended", { node_id: nodeId, ...granted });
         }
@@ -245,7 +246,7 @@ export async function afterRepair(this: Leading, runId: string, nodeId: string, 
   const left = Leading.decisionsLeft(run, node);
   if (Math.min(...left) <= 0) return false;
   const choices = this.choices(run, node);
-  const decision = await this.askForDecision(runId, nodeId, supervisor.repairMessage(run, node, diagnosis, choices, left), new Set(choices.map((item) => item.id)),
+  const decision = await this.askForDecision(runId, nodeId, prompts.repairMessage(run, node, diagnosis, choices, left), new Set(choices.map((item) => item.id)),
     null, false, "repair_done");
   if (decision === null) return false;
   if (decision !== "budget") await this.applyDecision(runId, nodeId, decision, verdict, outcome, "repair_done");
@@ -284,7 +285,7 @@ export async function leadAnswer(this: Leading, runId: string, questionId: strin
     const answer = [reply.choice, reply.text].filter(Boolean).join("\n");
     const choices = this.choices(run, node);
     const targets = Leading.targets(run, node);
-    const decision = await this.askForDecision(runId, node.id, supervisor.answerMessage(node, question.question ?? "", answer, targets.size > 0),
+    const decision = await this.askForDecision(runId, node.id, prompts.answerMessage(node, question.question ?? "", answer, targets.size > 0),
       new Set(choices.map((m) => m.id)), targets.size ? targets : null, false, "user_answer");
     if (decision === "budget") return;
     if (decision === null) {

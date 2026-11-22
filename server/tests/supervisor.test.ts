@@ -9,6 +9,7 @@ import { settings } from "../src/config.js";
 import { ExecutionRunSchema, ModelProfileSchema, SupervisorSessionSchema, TaskNodeSchema } from "../src/models.js";
 import { ProviderRegistry, ProviderResult } from "../src/providers.js";
 import { eligibleForNode } from "../src/routing.js";
+import * as prompts from "../packages/lead/src/prompts.js";
 import * as supervisor from "../src/supervisor.js";
 import { conftest } from "./helpers/conftest.js";
 import * as pkg from "./helpers/chat-package.js";
@@ -146,8 +147,8 @@ test("which chats get which tools", async () => {
 });
 
 test("a component request needs to say what to add", async () => {
-  assert.ok(supervisor.parseDecision('{"action": "request_component", "instructions": "加一个 PDF 工具"}', new Set()));
-  assert.equal(supervisor.parseDecision('{"action": "request_component"}', new Set()), null);
+  assert.ok(prompts.parseDecision('{"action": "request_component", "instructions": "加一个 PDF 工具"}', new Set()));
+  assert.equal(prompts.parseDecision('{"action": "request_component"}', new Set()), null);
 });
 
 test("a call for the engineer is read from a chat answer and from a decision", async () => {
@@ -156,19 +157,19 @@ test("a call for the engineer is read from a chat answer and from a decision", a
   assert.equal(text, "沙箱连不到宿主机的许可证端口，我请平台工程师来修。");
   assert.deepEqual(call, { kind: "repair", request: "放行许可证端口 26585" });
   assert.equal(supervisor.splitEngineer("没有要找平台工程师的事")[1], null);
-  const made = supervisor.parseDecision('{"action": "accept", "reason": "代码写好了", "engineer": {"kind": "component", "request": "加 EDA 许可证检查"}}', new Set());
+  const made = prompts.parseDecision('{"action": "accept", "reason": "代码写好了", "engineer": {"kind": "component", "request": "加 EDA 许可证检查"}}', new Set());
   assert.deepEqual(made!.engineer, { kind: "component", request: "加 EDA 许可证检查" });
 });
 
 test("call_engineer and the old actions are read", async () => {
-  assert.equal(supervisor.parseDecision(decision("call_engineer", { kind: "component", instructions: "加一个飞书工具" }), new Set())!.kind, "component");
-  assert.equal(supervisor.parseDecision(decision("call_engineer", { instructions: "x" }), new Set())!.kind, "repair");
+  assert.equal(prompts.parseDecision(decision("call_engineer", { kind: "component", instructions: "加一个飞书工具" }), new Set())!.kind, "component");
+  assert.equal(prompts.parseDecision(decision("call_engineer", { instructions: "x" }), new Set())!.kind, "repair");
   // Old decisions, and leads answering the old way, still read.
   settings.engineer_repairs = true;
-  assert.equal(supervisor.parseDecision(decision("repair_environment", { instructions: "x" }), new Set())!.action, "repair_environment");
+  assert.equal(prompts.parseDecision(decision("repair_environment", { instructions: "x" }), new Set())!.action, "repair_environment");
   // Off: the three actions as before, and no call_engineer offered.
   settings.engineer_repairs = false;
-  const offered = supervisor.decisionFormat();
+  const offered = prompts.decisionFormat();
   assert.ok(offered.includes("repair_environment") && !offered.includes("call_engineer"));
 });
 

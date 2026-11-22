@@ -1,7 +1,7 @@
 // The lead and review capabilities, as FluidForm asks them: their code is the lead extension's
 // (packages/lead/src), loaded the first time it is needed while it is on. Nothing here imports it.
 import * as extensions from "./extensions.js";
-import type { ArtifactEvidence, ExecutionRun, TaskNode } from "./models.js";
+import type { ArtifactEvidence, EngineerJob, ExecutionRun, ModelProfile, TaskNode } from "./models.js";
 import type { Leading } from "./leading.js";
 import { available } from "./provided.js";
 import type * as quality from "./quality.js";
@@ -11,6 +11,7 @@ import type * as supervisor from "./supervisor.js";
 type Choice = supervisor.Decision | "budget" | null;
 
 export interface LeadPackage {
+  engineerMessage(run: ExecutionRun, node: TaskNode, job: EngineerJob, choices: ModelProfile[], left: [number, number]): string | Promise<string>;
   decide(this: Leading, runId: string, nodeId: string, verdict: quality.Verdict, outcome: string): Promise<void>;
   decision(this: Leading, runId: string, nodeId: string | null, prompt: string, modelIds: Set<string>, targets: Set<string> | null, final: boolean): Promise<Choice>;
   finalDecision(this: Leading, runId: string): Promise<boolean>;
@@ -54,3 +55,4 @@ export const proposeCapabilities: LeadPackage["proposeCapabilities"] = async fun
 export const leadAnswer: LeadPackage["leadAnswer"] = async function (...args) {
   return (await pack("lead")).leadAnswer.call(this, ...args);
 };
+export const engineerMessage: LeadPackage["engineerMessage"] = async (...args) => (await pack("lead")).engineerMessage(...args);

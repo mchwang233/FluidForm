@@ -7,7 +7,7 @@ import { Executor } from "../src/executor.js";
 import { DiagnosisMessageSchema, DiagnosisSchema, NodeAttemptSchema, type SupervisorSession, TaskNodeSchema } from "../src/models.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as quality from "../src/quality.js";
-import { BEYOND_THE_BAR, failureMessage } from "../src/supervisor.js";
+import { BEYOND_THE_BAR, failureMessage } from "../packages/lead/src/prompts.js";
 import { contractNode, restoreAcceptance, setupExecutor } from "./helpers/artifacts.js";
 import { conftest } from "./helpers/conftest.js";
 import { decision, leadDatabase, MODELS, run, Team } from "./helpers/lead-run.js";

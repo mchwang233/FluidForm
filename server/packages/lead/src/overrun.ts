@@ -8,7 +8,7 @@ import { pyRound } from "../../../src/py.js";
 import * as quality from "../../../src/quality.js";
 import type { ReviewHost } from "../../../src/review.js";
 import { loopTurns } from "../../../src/routing.js";
-import * as supervisor from "../../../src/supervisor.js";
+import * as prompts from "./prompts.js";
 import { isCancelled } from "../../../src/tasks.js";
 
 /** A step others wait for that runs far past its expected time is not stuck, but holds the whole task:
@@ -27,7 +27,7 @@ export async function criticalCheck(host: ReviewHost, runId: string, node: TaskN
   let reason: string | null;
   try {
     const reply = await host.thinking(runId, "critical_overrun", node.id, () => host.askLead(runId,
-      supervisor.criticalOverrunMessage(node, modelId, minutes, expected, waiting, evidence)));
+      prompts.criticalOverrunMessage(node, modelId, minutes, expected, waiting, evidence)));
     reason = progress.parse(reply);
   } catch (error) {
     if (isCancelled(error) || error instanceof BudgetExceeded || error instanceof StepLimitExceeded) throw error;
@@ -45,7 +45,7 @@ export async function overrun(host: ReviewHost, run: ExecutionRun, node: TaskNod
   try {
     // The lead's call is not the step's work.
     const reply = await host.thinking(run.id, "overrun", node.id, () => activity.paused(() => host.askLead(run.id,
-      supervisor.overrunMessage(node, turns, expected, evidence))));
+      prompts.overrunMessage(node, turns, expected, evidence))));
     reason = progress.parse(reply);
   } catch (error) {
     if (isCancelled(error) || error instanceof BudgetExceeded || error instanceof StepLimitExceeded) throw error;

@@ -8,7 +8,7 @@ import * as packages from "../src/capability-packages.js";
 import { Executor } from "../src/executor.js";
 import { uses } from "../src/features.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
-import * as supervisor from "../src/supervisor.js";
+import * as prompts from "../packages/lead/src/prompts.js";
 import { TASK_CAPABILITIES, without } from "./helpers/capabilities.js";
 import { conftest } from "./helpers/conftest.js";
 import { decision, leadDatabase, MODELS, run as runTask, Team } from "./helpers/lead-run.js";
@@ -39,7 +39,7 @@ test("without the task capabilities a task is the whole request as one step, don
     assert.ok(asked.status_code === 409 && asked.json().detail.includes("负责人能力"), asked.text);
     const engineer = await client.post("/api/engineer/jobs", { json: { request: "加一个 PDF 工具", kind: "component" }, headers: ORIGIN });
     assert.ok(engineer.status_code >= 400 && engineer.text.includes("平台工程师"), engineer.text);
-    assert.ok(!supervisor.offeredActions().some((action) => ["replan", "call_engineer", "repair_platform"].includes(action)));
+    assert.ok(!prompts.offeredActions().some((action) => ["replan", "call_engineer", "repair_platform"].includes(action)));
   } finally {
     restore();
   }
@@ -48,11 +48,15 @@ test("without the task capabilities a task is the whole request as one step, don
 test("each capability is offered only with what it needs", () => {
   const restore = without("planning");
   try {
-    assert.ok(!supervisor.offeredActions().includes("replan"));
+    // Every question follows the switches as they are when it is asked.
+    const node = leadDatabase(folder()).getRun("r")!;
+    const asked = prompts.repairMessage(node, node.plan.nodes[0], { status: "done", verdict: "fixed", error: null, report: "修好了" }, [], [1, 1]);
+    assert.doesNotMatch(asked, /"replan"|\breplan \|/);
+    assert.ok(!prompts.offeredActions().includes("replan"));
   } finally {
     restore();
   }
-  assert.ok(supervisor.offeredActions().includes("replan"));
+  assert.ok(prompts.offeredActions().includes("replan"));
 });
 
 test("without a lead or an engineer a failed step is tried again on its model, then on a stronger one, then fails", async () => {
