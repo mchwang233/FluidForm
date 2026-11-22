@@ -6,7 +6,7 @@ import { CatalogSync, OFFICIAL_URLS, PUBLIC_CATALOG_URL, PUBLIC_PROVIDERS, publi
 import { Database } from "../src/db.js";
 import { pythonIso } from "../src/lax.js";
 import { ModelProfileSchema, TaskNodeSchema } from "../src/models.js";
-import { selectPlannerModel } from "../src/planner.js";
+import { selectPlannerModel } from "../packages/planning/src/planner.js";
 import { costsFor, NoEligibleModelError, routeNode } from "../src/routing.js";
 import { PROVIDER_ENV } from "../src/secret-names.js";
 import { conftest } from "./helpers/conftest.js";

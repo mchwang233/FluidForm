@@ -1,15 +1,15 @@
 // Forming a project team and delegating work through the task graph (team.form and team.delegate in
 // team.ts). Apart from team.ts, which lower modules use, because these need the planner.
-import { settings } from "./config.js";
-import * as contracts from "./contracts.js";
+import { settings } from "../../../src/config.js";
+import * as contracts from "../../../src/contracts.js";
 import { ask, MAX_TASKS } from "./lead-planning.js";
-import { type Employee, EmployeeSchema, type ExecutionRun, type ModelProfile, routingReady, type TaskNode, type TaskPlan, TaskPlanSchema } from "./models.js";
+import { type Employee, EmployeeSchema, type ExecutionRun, type ModelProfile, routingReady, type TaskNode, type TaskPlan, TaskPlanSchema } from "../../../src/models.js";
 import { PlanProblem, type Say, scopeProblems, taskNode } from "./planner.js";
-import { minBy, pyDumps } from "./py.js";
+import { minBy, pyDumps } from "../../../src/py.js";
 import { checkAcyclic } from "./replan.js";
-import { NoEligibleModelError } from "./routing.js";
-import * as skills from "./skills.js";
-import { ancestors, CAPABILITIES, digest, member, refreshSkills, route } from "./team.js";
+import { NoEligibleModelError } from "../../../src/routing.js";
+import * as skills from "../../../src/skills.js";
+import { ancestors, CAPABILITIES, digest, member, refreshSkills, route } from "../../../src/team.js";
 
 /** A separate lead decision, completed before the tasks are planned. */
 export async function form(say: Say, request: string, models: ModelProfile[], configured: Set<string>): Promise<TaskPlan> {

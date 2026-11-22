@@ -9,14 +9,14 @@ import { settings } from "../src/config.js";
 import { ContractError } from "../src/contracts.js";
 import { Database } from "../src/db.js";
 import { CapabilityScoreSchema, ExecutionRunSchema, ModelProfileSchema, SupervisorSessionSchema, TaskNodeSchema, TaskPlanSchema } from "../src/models.js";
-import { autonomousPlan, heuristicPlan, NO_ACCEPTANCE_NOTE, scopeProblems, taskNode, validatePlan } from "../src/planner.js";
+import { autonomousPlan, heuristicPlan, NO_ACCEPTANCE_NOTE, scopeProblems, taskNode, validatePlan } from "../packages/planning/src/planner.js";
 import { ProviderResult } from "../src/providers.js";
 import { QuotaTracker } from "../src/quota.js";
 import { eligibleForNode, NoEligibleModelError, routeNode } from "../src/routing.js";
 import * as pricing from "../src/pricing.js";
 import * as supervisor from "../src/supervisor.js";
-import { planTasks } from "../src/task-planning.js";
-import { form } from "../src/team-planning.js";
+import { planTasks } from "../packages/planning/src/task-planning.js";
+import { form } from "../packages/planning/src/team-planning.js";
 import { conftest, scoredModels } from "./helpers/conftest.js";
 
 const { folder } = conftest();

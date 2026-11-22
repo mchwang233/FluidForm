@@ -3,16 +3,16 @@
 // lead can be asked again.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { settings } from "./config.js";
-import * as contracts from "./contracts.js";
-import { newId } from "./lax.js";
+import { settings } from "../../../src/config.js";
+import * as contracts from "../../../src/contracts.js";
+import { newId } from "../../../src/lax.js";
 import { MAX_TASKS } from "./lead-planning.js";
-import { type ExecutionRun, folderId, type ModelProfile, type TaskNode, TaskNodeSchema } from "./models.js";
+import { type ExecutionRun, folderId, type ModelProfile, type TaskNode, TaskNodeSchema } from "../../../src/models.js";
 import { difficulty, packageOf } from "./planner.js";
-import { head, pyDumps, pyStr, truthy } from "./py.js";
-import { NoEligibleModelError, routeNode } from "./routing.js";
-import * as pricing from "./pricing.js";
-import * as team from "./team.js";
+import { head, pyDumps, pyStr, truthy } from "../../../src/py.js";
+import { NoEligibleModelError, routeNode } from "../../../src/routing.js";
+import * as pricing from "../../../src/pricing.js";
+import * as team from "../../../src/team.js";
 
 /** A plan change that cannot be made, and why. */
 export class PlanError extends Error {

@@ -9,6 +9,7 @@
 // A step is given the skills whose tools its own text names (forStep). Skills found in public
 // repositories are kept apart, in <data_dir>/skills-discovered/: never given to a step, only shown
 // to the model that writes this machine's skill, as a reference it must check.
+import { SERVER } from "./paths.js";
 import { uses } from "./features.js";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -17,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { settings } from "./config.js";
 import { head, pyRegex, reEscape, splitlines } from "./py.js";
 
-export const SOURCE = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "steps");
+export const SOURCE = join(SERVER, "..", "skills", "steps");
 // Where the platform's skills are read from (tests point it elsewhere).
 export const places = { source: SOURCE };
 // How much of one skill a step's prompt carries, and how many skills.

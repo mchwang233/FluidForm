@@ -1,7 +1,6 @@
 // Steps working in one folder at the same time: those whose files do not overlap run
 // together; a step without a scope (planner.packageOf) has the folder to itself.
 import type { TaskNode } from "./models.js";
-import { writesFiles } from "./planner.js";
 
 export function within(path: string, scope: Iterable<string>): boolean {
   for (const item of scope) if (path === item || path.startsWith(item.replace(/\/+$/, "") + "/")) return true;
@@ -121,4 +120,10 @@ export class FolderLock {
       for (const wake of waiting) wake();
     }
   }
+}
+
+/** Whether a step produces files, and so must be a scoped work package: it works on the project, writes
+ *  code, or names files it writes. */
+export function writesFiles(item: TaskNode): boolean {
+  return !item.verifies.length && (item.needs_workspace || item.capability === "coding" || item.files.length > 0);
 }

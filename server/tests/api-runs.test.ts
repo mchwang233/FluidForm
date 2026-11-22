@@ -14,7 +14,7 @@ import {
   CapabilityScoreSchema, DiagnosisSchema, EventSchema, type ExecutionRun, ExecutionRunSchema, folderId, ModelProfileSchema, NodeAttemptSchema,
   type SupervisorSession, SupervisorSessionSchema, TaskNodeSchema, TaskPlanSchema,
 } from "../src/models.js";
-import { autonomousPlan } from "../src/planner.js";
+import { autonomousPlan } from "../packages/planning/src/planner.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as quality from "../src/quality.js";
 import * as pricing from "../src/pricing.js";

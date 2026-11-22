@@ -4,7 +4,8 @@
 // uploaded package cannot become one.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { PACKAGES } from "./paths.js";
 import { log } from "./log.js";
 import type { Capability } from "./models.js";
 
@@ -29,7 +30,7 @@ function read(folder: string): Extension[] {
 }
 
 /** The extensions this FluidForm ships, as they were when it started. */
-export const shipped: readonly Extension[] = read(fileURLToPath(new URL("../packages/", import.meta.url)));
+export const shipped: readonly Extension[] = read(PACKAGES);
 
 export const byId = (id: string) => shipped.find((item) => item.id === id) ?? null;
 export const providing = (name: string) => shipped.find((item) => item.provides.includes(name)) ?? null;
@@ -38,4 +39,13 @@ export const providing = (name: string) => shipped.find((item) => item.provides.
 export function on(extension: Extension, library: Capability[]): boolean {
   const record = library.find((item) => item.id === extension.id && item.kind === KIND);
   return !record || record.status === "active";
+}
+
+// Beside this module's folder, as source and as built: packages/<id>/src/index.
+const entry = (id: string) => fileURLToPath(new URL(`../packages/${id}/src/index${import.meta.url.endsWith(".ts") ? ".ts" : ".js"}`, import.meta.url));
+
+/** The code of the shipped extension ``id``: never from the data folder, where only its switch is. */
+export async function load<T>(id: string): Promise<T> {
+  if (!byId(id)) throw new Error(`no shipped extension ${id}`);
+  return (await import(pathToFileURL(entry(id)).href)) as T;
 }

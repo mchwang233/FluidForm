@@ -198,7 +198,7 @@ npm run dev
 
 ## 命令行
 
-`cd server && npm run build && npm link` 之后可以直接用 `fluidform` 命令（或运行 `node server/dist/cli.js`）。
+`cd server && npm run build && npm link` 之后可以直接用 `fluidform` 命令（或运行 `node server/dist/src/cli.js`）。
 
 ```bash
 # 任务：FluidForm 最基础的功能。模型由它自己在会员 CLI 和 API 模型之间选；

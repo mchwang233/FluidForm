@@ -62,7 +62,12 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 - 没有经验时：不复盘，也不能手动复盘；已有的记录留着。
 - 网页按能力显示。测试在 `server/tests/task-core.test.ts`。
 
-第 2–5 步还没做：四块的代码仍在 `server/src`，包里只有清单。
+第 2 步进行中：排计划、改计划、委派（`planner`、`task-planning`、`lead-planning`、`team-planning`、`replan`）
+已经搬到 `server/packages/planning/src`，本体只通过 `planning.ts` 在启用时动态加载。包里的代码和本体一起编译，
+构建产物因此在 `server/dist/src` 和 `server/dist/packages`。还差项目简介（`briefing.ts` 里排计划用的部分）、
+快速/单人判断（`triage.ts` 的 quick）和员工分派的提示词。
+
+第 3–5 步还没做：另外三块的代码仍在 `server/src`，包里只有清单。
 
 ## 风险
 

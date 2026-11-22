@@ -264,7 +264,7 @@ Each default above can still be turned off on its own, for example `FLUIDFORM_QU
 ## CLI
 
 `cd server && npm run build && npm link` puts the `fluidform` command on PATH (or run
-`node server/dist/cli.js`).
+`node server/dist/src/cli.js`).
 
 ```bash
 # Tasks: FluidForm's base. Its models are chosen between membership CLIs and API models by itself;

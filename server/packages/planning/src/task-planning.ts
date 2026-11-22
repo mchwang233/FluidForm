@@ -1,10 +1,10 @@
 // Plan complete work items once, using the existing task graph and execution gates.
-import * as contracts from "./contracts.js";
+import * as contracts from "../../../src/contracts.js";
 import { ask, MAX_REQUIRE_CHARS, MAX_REQUIRES, planTitle } from "./lead-planning.js";
-import type { TaskNode, TaskPlan } from "./models.js";
+import type { TaskNode, TaskPlan } from "../../../src/models.js";
 import { CHOICES_RULE, CHOICES_SHAPE, get, INDEPENDENT_RULE, MAX_NODES, PlanProblem, planChoices, type Say, validatePlan } from "./planner.js";
-import { head, pyStr } from "./py.js";
-import * as team from "./team.js";
+import { head, pyStr } from "../../../src/py.js";
+import * as team from "../../../src/team.js";
 
 // Employees, and each employee's sessions, work at the same time; a plan whose tasks wait for one another
 // in a single line leaves them idle and makes every retry redo a large item.

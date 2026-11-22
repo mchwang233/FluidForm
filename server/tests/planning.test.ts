@@ -6,9 +6,9 @@ import { test } from "node:test";
 import { settings } from "../src/config.js";
 import { ContractError, unwrittenScripts } from "../src/contracts.js";
 import { CapabilityScoreSchema, ModelProfileSchema, type SupervisorSession, SupervisorSessionSchema, TaskPlanSchema } from "../src/models.js";
-import { autonomousPlan, planChoices } from "../src/planner.js";
+import { autonomousPlan, planChoices } from "../packages/planning/src/planner.js";
 import { ProviderResult } from "../src/providers.js";
-import { PROMPT } from "../src/task-planning.js";
+import { PROMPT } from "../packages/planning/src/task-planning.js";
 import { Cancelled } from "../src/tasks.js";
 import { conftest } from "./helpers/conftest.js";
 
@@ -126,7 +126,7 @@ test("open scope choices are kept for the user, and independent deliverables run
 });
 
 test("employees are named by their job", () => {
-  assert.ok(readFileSync(new URL("../src/team-planning.ts", import.meta.url), "utf8").includes("never a person's name"));
+  assert.ok(readFileSync(new URL("../packages/planning/src/team-planning.ts", import.meta.url), "utf8").includes("never a person's name"));
 });
 
 test("a single line of hard tasks is sent back once, to run work side by side", async () => {

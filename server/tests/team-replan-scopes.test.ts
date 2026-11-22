@@ -7,11 +7,11 @@ import { test } from "node:test";
 import { settings } from "../src/config.js";
 import { CapabilityScoreSchema, EmployeeSchema, type ExecutionRun, ExecutionRunSchema, folderId, ModelProfileSchema, SupervisorSessionSchema,
   TaskNodeSchema } from "../src/models.js";
-import { autonomousPlan, PlanProblem } from "../src/planner.js";
+import { autonomousPlan, PlanProblem } from "../packages/planning/src/planner.js";
 import { ProviderResult } from "../src/providers.js";
-import { changePlan, PlanError } from "../src/replan.js";
+import { changePlan, PlanError } from "../packages/planning/src/replan.js";
 import * as scopes from "../src/scopes.js";
-import * as teamPlanning from "../src/team-planning.js";
+import * as teamPlanning from "../packages/planning/src/team-planning.js";
 import { conftest } from "./helpers/conftest.js";
 
 const { folder } = conftest();

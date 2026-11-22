@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as contracts from "../src/contracts.js";
 import { ModelProfileSchema, type TaskNode, TaskNodeSchema, TaskPlanSchema } from "../src/models.js";
-import { autonomousPlan, scopeProblems, validatePlan } from "../src/planner.js";
+import { autonomousPlan, scopeProblems, validatePlan } from "../packages/planning/src/planner.js";
 import { expectedTurns } from "../src/progress.js";
 import { ProviderResult } from "../src/providers.js";
 import { nodePrompt } from "../src/quality.js";

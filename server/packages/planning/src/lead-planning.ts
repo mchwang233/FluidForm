@@ -2,12 +2,11 @@
 // more when a reply is not the plan asked for, the plan's short name, and the limits on a plan.
 import { ZodError } from "zod";
 import { extractJson, type Say } from "./planner.js";
-import { head, pySplit, pyStr } from "./py.js";
+import { head, pySplit, pyStr } from "../../../src/py.js";
 
 // Most tasks one plan has, with what replanning adds (replan.ts, team.ts).
 export const MAX_TASKS = 60;
 // Said to the lead whenever it plans for a task that allows the internet (planner.WORK_RULES).
-export const INTERNET_NOTE = "(This task allows the internet: its steps' commands may download packages and call external services.)";
 // Commands a plan may name to check the task's tools before it runs (TaskPlan.requires).
 export const MAX_REQUIRES = 12;
 export const MAX_REQUIRE_CHARS = 4000;

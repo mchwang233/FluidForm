@@ -29,7 +29,7 @@ import { collect } from "./routing-feedback.js";
 import * as scopes from "./scopes.js";
 import { currentTask, first, isCancelled, Task } from "./tasks.js";
 import * as team from "./team.js";
-import { delegate } from "./team-planning.js";
+import { delegate } from "./planning.js";
 
 // What a step started early (headStart) is called among the tasks at work.
 export const HEAD = "head:";
@@ -461,7 +461,7 @@ export class Executor extends Preflighting {
       const latest = this.db.getRun(runId);
       const stale = latest !== null && latest.plan.nodes.find((n) => n.id === nodeId)!.generation !== generation;
       let verdict: Verdict;
-      if (run.plan.employees.length && result.text.trimStart().startsWith(team.DELEGATE)) {
+      if (run.plan.employees.length && uses.delegation() && result.text.trimStart().startsWith(team.DELEGATE)) {
         try {
           const payload = team.parseDelegation(result.text)!;
           await this.delegateResult(runId, nodeId, payload, result, inputs, changed, cost, generation);

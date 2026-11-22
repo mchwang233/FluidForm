@@ -10,6 +10,8 @@ export const uses = {
   planning: () => available("planning"),
   /** Employees the lead assigns the steps to. */
   team: () => settings.employee_teams && available("team") && available("planning"),
+  /** A step of a task with employees may hand work to another employee. */
+  delegation: () => available("team") && available("planning"),
   /** The lead decides after a failure and at the end, and answers in the task. */
   lead: () => settings.lead_decisions && available("lead"),
   /** Another model checks each step's result. */

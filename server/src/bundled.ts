@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { PACKAGES } from "./paths.js";
 import * as capabilities from "./capabilities.js";
 import * as packages from "./capability-packages.js";
 import * as sandbox from "./capability-sandbox.js";
@@ -18,7 +18,7 @@ import type { Capability } from "./models.js";
 
 export const deps = {
   // Where the shipped packages are: server/packages, from src/ and from dist/ alike.
-  folder: () => fileURLToPath(new URL("../packages/", import.meta.url)),
+  folder: () => PACKAGES,
 };
 
 type Offered = Record<string, string>;

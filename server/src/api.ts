@@ -18,7 +18,6 @@ import { ContractError } from "./contracts.js";
 import { Database } from "./db.js";
 import { Executor } from "./executor.js";
 import * as folders from "./folders.js";
-import { INTERNET_NOTE } from "./lead-planning.js";
 import * as learning from "./learning.js";
 import { log } from "./log.js";
 import { imageServers } from "./mcp.js";
@@ -27,7 +26,7 @@ import {
   type Attachment, type ExecutionRun, ExecutionRunSchema, EventSchema, FINISHED, folderId, type ModelProfile,
   type SupervisorSession, SupervisorSessionSchema, type TaskPlan, TaskNodeSchema, TaskPlanSchema,
 } from "./models.js";
-import { autonomousPlan } from "./planner.js";
+import { autonomousPlan } from "./planning.js";
 import { ProjectDirError, projectContext, resolveProjectDir } from "./projects.js";
 import { ProviderRegistry } from "./providers.js";
 import * as publish from "./publish.js";
@@ -45,6 +44,8 @@ import { ServiceHost } from "./services.js";
 import { sleep, Task } from "./tasks.js";
 import * as team from "./team.js";
 import * as triage from "./triage.js";
+
+export const INTERNET_NOTE = "(This task allows the internet: its steps' commands may download packages and call external services.)";
 
 type Json = Record<string, any>;
 

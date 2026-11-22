@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { settings } from "../src/config.js";
 import { type ExecutionRun, ExecutionRunSchema, type TaskNode } from "../src/models.js";
-import { changePlan, PlanError } from "../src/replan.js";
+import { changePlan, PlanError } from "../packages/planning/src/replan.js";
 import { coverageNodes } from "./helpers/artifacts.js";
 import { conftest } from "./helpers/conftest.js";
 import { decision, leadDatabase, MODELS, run, Team } from "./helpers/lead-run.js";

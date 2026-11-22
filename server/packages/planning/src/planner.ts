@@ -1,20 +1,21 @@
 // Planning a request: the task's lead plans it as tasks in a conversation it keeps
 // (task-planning.ts, supervisor.ts); with no lead model, the best planner plans it in one call; with no
 // planner at all, a fixed fallback plan.
-import { uses } from "./features.js";
+import { uses } from "../../../src/features.js";
 import { randomUUID } from "node:crypto";
-import * as pricing from "./pricing.js";
-import { settings } from "./config.js";
-import * as contracts from "./contracts.js";
-import { log } from "./log.js";
-import { difficultyFor, toPercentScale } from "./model-hooks.js";
+import * as pricing from "../../../src/pricing.js";
+import { settings } from "../../../src/config.js";
+import * as contracts from "../../../src/contracts.js";
+import { log } from "../../../src/log.js";
+import { difficultyFor, toPercentScale } from "../../../src/model-hooks.js";
 import { DIFFICULTY_THRESHOLDS, type ModelProfile, type PlanChoice, PlanChoiceSchema, routingReady, type SupervisorSession,
-  SupervisorSessionSchema, type TaskNode, TaskNodeSchema, type TaskPlan, TaskPlanSchema } from "./models.js";
-import type { ProviderResult } from "./providers.js";
-import { head, minBy, pyFloat2, pyInt, pyRegex, pyRound, pySplit, pyStr, truthy } from "./py.js";
-import { ModelUnavailable } from "./quota.js";
-import * as supervisor from "./supervisor.js";
-import * as team from "./team.js";
+  SupervisorSessionSchema, type TaskNode, TaskNodeSchema, type TaskPlan, TaskPlanSchema } from "../../../src/models.js";
+import type { ProviderResult } from "../../../src/providers.js";
+import { head, minBy, pyFloat2, pyInt, pyRegex, pyRound, pySplit, pyStr, truthy } from "../../../src/py.js";
+import { ModelUnavailable } from "../../../src/quota.js";
+import { writesFiles } from "../../../src/scopes.js";
+import * as supervisor from "../../../src/supervisor.js";
+import * as team from "../../../src/team.js";
 import { form } from "./team-planning.js";
 
 type Json = Record<string, any>;
@@ -254,12 +255,6 @@ function folders(value: unknown): string[] {
 export function packageOf(raw: Json): { files: string[]; reads: string[]; folders: string[]; provides: string; check: string } {
   return { files: paths(get(raw, "files")), reads: paths(get(raw, "reads")), folders: folders(get(raw, "folders")),
     provides: head(pyStr(get(raw, "provides") || "").trim(), 2000), check: head(pyStr(get(raw, "check") || "").trim(), 500) };
-}
-
-/** Whether a step produces files, and so must be a scoped work package: it works on the project, writes
- *  code, or names files it writes. */
-export function writesFiles(item: TaskNode): boolean {
-  return !item.verifies.length && (item.needs_workspace || item.capability === "coding" || item.files.length > 0);
 }
 
 /** Why some work packages of a plan are not small and scoped, to send back to the planner: a step that

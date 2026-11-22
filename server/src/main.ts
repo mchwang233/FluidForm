@@ -1,4 +1,4 @@
-// Starts FluidForm's API: node dist/main.js [--host 127.0.0.1] [--port 8000]
+// Starts FluidForm's API: node dist/src/main.js [--host 127.0.0.1] [--port 8000]
 import { parseArgs } from "node:util";
 import { Api } from "./api.js";
 import { buildApp } from "./app.js";

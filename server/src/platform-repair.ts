@@ -3,6 +3,7 @@
 // and the frontend's tests, the build); a worker outside the service (repair-worker.ts, copied with the
 // job so a repair cannot change it) puts the files in place, builds the server, restarts the service
 // and rolls it all back when the new version does not answer.
+import { SERVER } from "./paths.js";
 import { PLATFORM_SCOPE } from "./models.js";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -22,7 +23,7 @@ export const ENTRY_FILES = ["server/package.json", "server/src/main.ts", "fronte
 export const TEST_DIRS = ["server/tests/", "frontend/tests/", "tests/"];
 // Where a regression test for the repair goes, and where the repair itself.
 export const REGRESSION_DIRS = ["server/tests/", "frontend/tests/"];
-export const CODE_DIRS = ["server/src/", "frontend/", "scripts/"];
+export const CODE_DIRS = ["server/src/", "server/packages/", "frontend/", "scripts/"];
 
 // How to diagnose and repair the platform, and where its code is; given to every model that does.
 export const REPAIR_GUIDES = ["skills/platform-repair/SKILL.md", "docs/ARCHITECTURE.md", "skills/platform-rules/SKILL.md"];
@@ -76,7 +77,7 @@ export interface PlatformRepairs {
 
 /** The source checkout to repair: ``configured``, or the one this server runs from. */
 export function sourceRoot(configured: string | null = null): string | null {
-  const root = configured ? resolve(configured) : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const root = configured ? resolve(configured) : resolve(SERVER, "..");
   return ENTRY_FILES.slice(0, 2).every((name) => existsSync(join(root, name)) && statSync(join(root, name)).isFile()) ? root : null;
 }
 

@@ -9,7 +9,7 @@ import { Executor } from "../src/executor.js";
 import { CapabilityScoreFields, type ExecutionRun, ExecutionRunSchema, ModelProfileSchema, NodeAttemptSchema, TaskNodeSchema } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
 import type { Task } from "../src/tasks.js";
-import * as team from "../src/team-planning.js";
+import * as team from "../packages/planning/src/team-planning.js";
 import { contractNode } from "./helpers/artifacts.js";
 import { conftest } from "./helpers/conftest.js";
 

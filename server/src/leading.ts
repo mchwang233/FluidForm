@@ -12,7 +12,7 @@ import { log } from "./log.js";
 import { type Attachment, DecisionSchema, DiagnosisSchema, type ExecutionRun, LeadMessageSchema, type TaskNode } from "./models.js";
 import { head, pyRound } from "./py.js";
 import * as quality from "./quality.js";
-import * as replan from "./replan.js";
+import * as planning from "./planning.js";
 import { Reviewing } from "./reviewing.js";
 import { nodeCost } from "./routing.js";
 import * as supervisor from "./supervisor.js";
@@ -132,7 +132,7 @@ export abstract class Leading extends Reviewing {
   }
 
   changePlan(run: ExecutionRun, change: Json, deciding: string | null): Promise<{ added: string[]; removed: string[]; updated: string[] }> {
-    return replan.changePlan(run, change, Object.values(this.modelLookup), this.configured(run), this.needsVision(run), deciding);
+    return planning.changePlan(run, change, Object.values(this.modelLookup), this.configured(run), this.needsVision(run), deciding);
   }
 
   /** Why a plan change cannot be made, tried on a copy of the task; null if it can. */

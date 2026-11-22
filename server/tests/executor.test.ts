@@ -8,7 +8,7 @@ import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { Executor } from "../src/executor.js";
 import { ExecutionRunSchema, type ExecutionRun, ModelProfileSchema, type TaskNode, TaskNodeSchema } from "../src/models.js";
-import { heuristicPlan } from "../src/planner.js";
+import { heuristicPlan } from "../packages/planning/src/planner.js";
 import { type CompleteOptions, ProviderRegistry, ProviderResult } from "../src/providers.js";
 import * as pricing from "../src/pricing.js";
 import { withoutChat } from "./helpers/chat.js";

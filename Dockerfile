@@ -18,4 +18,4 @@ COPY --from=web /app/server/packages/web/site ./server/packages/web/site
 COPY skills ./skills
 RUN npm run --prefix server build && npm prune --omit=dev --prefix server
 EXPOSE 8000
-CMD ["node", "--disable-warning=ExperimentalWarning", "server/dist/main.js", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["node", "--disable-warning=ExperimentalWarning", "server/dist/src/main.js", "--host", "0.0.0.0", "--port", "8000"]
