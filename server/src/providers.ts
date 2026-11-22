@@ -194,7 +194,12 @@ type Stepped = [unknown, Call[], number, number, boolean]; // text, tool calls, 
 type Step = (state: Json, signal: AbortSignal) => Promise<Stepped>;
 export type Fetch = typeof fetch;
 
+/** A conversation so far, as the model is sent it: its system prompt (instead of an agent's
+ *  instructions) and the turns before the prompt. */
+export type Dialogue = { system: string; messages: { role: "user" | "assistant"; content: string }[] };
+
 export type CompleteOptions = {
+  dialogue?: Dialogue | null;
   workspace?: string | null; cli_timeout?: number; allow_api_fallback?: boolean; attachments?: Attachment[]; act?: boolean;
   spend_ok?: SpendOk | null; repair?: boolean; max_turns?: number | null; tool_log?: Json[] | null; network?: boolean;
   review_workspace?: string | null; review_files?: string[]; watch?: progress.Watch | null; conversation?: Conversation | null;
@@ -265,8 +270,8 @@ export class ProviderRegistry {
   /** One message in a conversation that lasts (the task's lead, supervisor): a membership CLI
    *  continues its own conversation; an API model is sent the whole history again, which its prompt
    *  cache makes cheap. ``session`` is updated in place. */
-  converse(session: SupervisorSession, text: string, { timeout = null, spend_ok = null, attachments = [], tools = null, signal }:
-    { timeout?: number | null; spend_ok?: SpendOk | null; attachments?: Attachment[]; tools?: ChatTools | null; signal?: AbortSignal } = {}): Promise<ProviderResult> {
+  converse(session: SupervisorSession, text: string, { timeout = null, spend_ok = null, attachments = [], tools = null, dialogue = null, signal }:
+    { dialogue?: Dialogue | null; timeout?: number | null; spend_ok?: SpendOk | null; attachments?: Attachment[]; tools?: ChatTools | null; signal?: AbortSignal } = {}): Promise<ProviderResult> {
     const modelId = session.model_id as string;
     const effort = session.reasoning_effort || settings.lead_reasoning_effort;
     return callRecords.observed(this, "converse", modelId, { spend_ok }, async () => {
@@ -304,8 +309,9 @@ export class ProviderRegistry {
         const stop = new AbortController();
         const both = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
         result = await chatActions.pending.run(tools ? [noted, new Set(tools.actions ?? [])] : null, async () => {
-          const call = this.complete(modelId, transcript(session.history as { role: string; content: string }[], prompt),
-            { spend_ok, effort, ...extra, signal: both });
+          // A chat is sent as it stands (dialogue, built each turn); a task's lead keeps what it was sent.
+          const call = this.complete(modelId, dialogue ? text : transcript(session.history as { role: string; content: string }[], prompt),
+            { spend_ok, effort, ...extra, ...(dialogue ? { dialogue, attachments } : {}), signal: both });
           if (!tools) return call;
           try {
             return await within(tools.seconds, call);
@@ -317,7 +323,8 @@ export class ProviderRegistry {
           }
         });
         result.text = chatActions.withActions(result.text, noted);
-        session.history = [...session.history, { role: "user", content: prompt }, { role: "assistant", content: result.text }];
+        // What an older version kept of a chat as sent stays as it is, to be read; it is not sent.
+        if (!dialogue) session.history = [...session.history, { role: "user", content: prompt }, { role: "assistant", content: result.text }];
       }
       session.calls += 1;
       return result;
@@ -336,7 +343,7 @@ export class ProviderRegistry {
   async completeOnce(modelId: string, given: string, options: CompleteOptions): Promise<ProviderResult> {
     const { workspace = null, cli_timeout = 900, allow_api_fallback = true, act = false, spend_ok = null, repair = false, max_turns = null,
       tool_log = null, network = false, review_workspace = null, review_files = [], watch = null, conversation = null, effort = null,
-      overrun = null, tool_trace = null, signal } = options;
+      overrun = null, tool_trace = null, dialogue = null, signal } = options;
     const attachments = [...(options.attachments ?? [])];
     const provider = modelId.slice(0, modelId.indexOf(":"));
     const model = modelId.slice(modelId.indexOf(":") + 1);
@@ -391,9 +398,9 @@ export class ProviderRegistry {
       agent.overrun = overrun;
     }
     try {
-      if (provider === "anthropic") return await this.anthropic(model, prompt, images, agent, spend_ok, effort, conversation, signal);
-      if (provider === "google") return await this.gemini(model, prompt, images, agent, spend_ok, effort, conversation, signal);
-      return await this.openaiCompatible(provider, model, prompt, images, agent, spend_ok, agent ? conversation : null, effort, signal);
+      if (provider === "anthropic") return await this.anthropic(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
+      if (provider === "google") return await this.gemini(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
+      return await this.openaiCompatible(provider, model, prompt, images, agent, spend_ok, agent ? conversation : null, effort, signal, dialogue);
     } finally {
       agent?.close(); // this attempt's /tmp
     }
@@ -557,7 +564,7 @@ export class ProviderRegistry {
    *  token cap. Without a workspace this is a single plain call. With ``conversation`` (OpenAI format
    *  only), the state is kept there, and a conversation of this model with a ``followup`` is continued. */
   private async loop(provider: string, model: string, given: string, images: Attachment[], agent: agentTools.Workspace | null,
-    spendOk: SpendOk | null, step: Step, conversation: Conversation | null, signal?: AbortSignal): Promise<ProviderResult> {
+    spendOk: SpendOk | null, step: Step, conversation: Conversation | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
     const modelId = `${provider}:${model}`;
     let prompt = given;
     let tools: Json[] = agent ? [...agentTools.toolsFor(agentTools.sandboxAvailable(), agent.readOnly)] : [];
@@ -571,8 +578,8 @@ export class ProviderRegistry {
     if (conversation?.recall && agent) tools = [...tools, memory.RECALL_TOOL];
     if (conversation?.handoff) prompt += conversation.handoff;
     // How to work with the tools is a system prompt, as Claude Code gives it; the task is the user's.
-    const system = agent ? await agent.instructions() : null;
-    const fresh: Json = { prompt, system, images, tools, history: null, results: null, provider };
+    const system = dialogue ? dialogue.system : agent ? await agent.instructions() : null;
+    const fresh: Json = { prompt, system, before: dialogue?.messages ?? [], images, tools, history: null, results: null, provider };
     let state = fresh;
     let resumed = Boolean(conversation && conversation.modelId === modelId && conversation.followup && conversation.state?.history);
     if (resumed) {
@@ -711,8 +718,8 @@ export class ProviderRegistry {
             }
           }
           // Someone shows the work as it happens (a chat's quick job, supervisor.ChatActivity).
-          const starting = (work.log as any)?.starting;
-          if (typeof starting === "function") starting(name, agentTools.describeCall(name, args));
+          const shown = work.log as any;
+          if (typeof shown?.starting === "function") shown.starting(name, agentTools.describeCall(name, args));
           const [output, ok] = name === "RecallHistory" && conversation ? memory.recall(conversation, args) : await work.run(name, args);
           results.push([callId, name, output]);
           conversation?.save(); // each completion survives a later interrupted sibling
@@ -883,7 +890,7 @@ export class ProviderRegistry {
   }
 
   private openaiCompatible(provider: string, model: string, prompt: string, images: Attachment[], agent: agentTools.Workspace | null,
-    spendOk: SpendOk | null, conversation: Conversation | null, effort: string | null, signal?: AbortSignal): Promise<ProviderResult> {
+    spendOk: SpendOk | null, conversation: Conversation | null, effort: string | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
     const urls: Record<string, string> = {
       openai: "https://api.openai.com/v1/chat/completions", deepseek: "https://api.deepseek.com/chat/completions",
       qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", doubao: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
@@ -896,6 +903,7 @@ export class ProviderRegistry {
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
         state.history = state.system ? [{ role: "system", content: state.system }] : [];
+        for (const item of state.before ?? []) state.history.push({ role: item.role, content: item.content });
         state.history.push({ role: "user", content: state.images.length ? [{ type: "text", text: state.prompt },
           ...state.images.map((item: Attachment) => ({ type: "image_url", image_url: { url: `data:${item.media_type};base64,${files.imageData(item)}` } }))]
           : state.prompt });
@@ -928,14 +936,15 @@ export class ProviderRegistry {
       return [answer(message.content ?? null), calls.map((call: Json): Call => [call.id, call.function.name, toolArguments(call.function.arguments)]),
         usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, choice.finish_reason === "length"];
     };
-    return this.loop(provider, model, prompt, images, agent, spendOk, step, conversation, signal);
+    return this.loop(provider, model, prompt, images, agent, spendOk, step, conversation, signal, dialogue);
   }
 
   private anthropic(model: string, prompt: string, images: Attachment[], agent: agentTools.Workspace | null, spendOk: SpendOk | null,
-    effort: string | null, conversation: Conversation | null, signal?: AbortSignal): Promise<ProviderResult> {
+    effort: string | null, conversation: Conversation | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
-        state.history = [{ role: "user", content: state.images.length ? [
+        state.history = [...(state.before ?? []).map((item: Json) => ({ role: item.role, content: item.content })),
+          { role: "user", content: state.images.length ? [
           ...state.images.map((item: Attachment) => ({ type: "image", source: { type: "base64", media_type: item.media_type, data: files.imageData(item) } })),
           { type: "text", text: state.prompt }] : state.prompt }];
       }
@@ -964,14 +973,15 @@ export class ProviderRegistry {
       return [text, calls.map((block): Call => [block.id, block.name, block.input || {}]),
         usage.input_tokens + state.cached + (usage.cache_creation_input_tokens || 0), usage.output_tokens, data.stop_reason === "max_tokens"];
     };
-    return this.loop("anthropic", model, prompt, images, agent, spendOk, step, conversation, signal);
+    return this.loop("anthropic", model, prompt, images, agent, spendOk, step, conversation, signal, dialogue);
   }
 
   private gemini(model: string, prompt: string, images: Attachment[], agent: agentTools.Workspace | null, spendOk: SpendOk | null,
-    effort: string | null, conversation: Conversation | null, signal?: AbortSignal): Promise<ProviderResult> {
+    effort: string | null, conversation: Conversation | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
-        state.history = [{ role: "user", parts: [...state.images.map((item: Attachment) => ({ inline_data: { mime_type: item.media_type, data: files.imageData(item) } })),
+        state.history = [...(state.before ?? []).map((item: Json) => ({ role: item.role === "assistant" ? "model" : "user", parts: [{ text: item.content }] })),
+          { role: "user", parts: [...state.images.map((item: Attachment) => ({ inline_data: { mime_type: item.media_type, data: files.imageData(item) } })),
           { text: state.prompt }] }];
       }
       if (state.results?.length) {
@@ -998,7 +1008,7 @@ export class ProviderRegistry {
       return [text, calls.map((call, i): Call => [`${call.name}:${i}`, call.name, call.args || {}]),
         usage.promptTokenCount ?? 0, (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0), candidate.finishReason === "MAX_TOKENS"];
     };
-    return this.loop("google", model, prompt, images, agent, spendOk, step, conversation, signal);
+    return this.loop("google", model, prompt, images, agent, spendOk, step, conversation, signal, dialogue);
   }
 }
 

@@ -562,6 +562,8 @@ export const ExecutionRunFields = {
   project_dir: z.string().nullable().default(() => (null)),
   attachments: z.array(AttachmentSchema).default(() => []),
   lead_seen_attachments: z.array(z.string()).nullable().default(() => (null)),
+  // A chat's older turns, summarised: up to the message ``until`` (the chat package's compaction).
+  chat_summary: z.object({ text: z.string(), until: z.string() }).nullish(),
   rework_rounds: lax.int().default(() => (0)),
   github_url: z.string().nullable().default(() => (null)),
   diagnoses: z.array(DiagnosisSchema).default(() => []),

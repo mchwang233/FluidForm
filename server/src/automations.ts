@@ -16,6 +16,7 @@ import { type Capability, type ExecutionRun, folderId, LeadMessageSchema, type M
 import { briefWriter } from "./routing.js";
 import * as streaming from "./streaming.js";
 import * as supervisor from "./supervisor.js";
+import { Mutex } from "./tasks.js";
 
 type Json = Record<string, any>;
 
@@ -42,6 +43,8 @@ const cut = (text: string, count: number) => [...text].slice(0, count).join("");
 
 export class CapabilityAutomations {
   readonly runner: Runner;
+  /** One message of a conversation at a time finds or begins its chat, so only one is begun. */
+  private readonly opening = new Map<string, Mutex>();
 
   constructor(readonly api: Api) {
     this.runner = new Runner((capability, asked, automation) => this.message(capability, asked, automation));
@@ -115,9 +118,21 @@ export class CapabilityAutomations {
     const notes = asked.conversation ? notesByConversation[asked.conversation] ?? [] : [];
     const framed = await chats.ask("chat.frame", { asked: message, line, earlier, notes, files_before: filesBefore.length });
     // Only @-mentioned, with nothing new to answer: said briefly, not the past gone over again.
+    const opening = `${capability.id}\0${asked.conversation}`;
+    if (!this.opening.has(opening)) this.opening.set(opening, new Mutex());
     if (framed.reply) return [String(framed.reply), judged];
     const said = String(framed.said);
     const shown = String(framed.shown);
+    // "/new" and the like are answered by themselves, before anything kept is used up by them.
+    const alone = await chats.ask("chat.session", { ...chats.clock(), text: asked.text });
+    if (alone.reply) {
+      await this.opening.get(opening)!.run(() => {
+        for (const kept of [state.chats, heard, heardFiles, state.answered ?? {}]) delete kept[asked.conversation];
+        automation.save();
+      });
+      automation.note("开了新对话");
+      return [String(alone.reply), judged];
+    }
     if (earlier.length) delete heard[asked.conversation];
     if (asked.conversation) delete notesByConversation[asked.conversation];
     if (filesBefore.length) {
@@ -128,6 +143,8 @@ export class CapabilityAutomations {
     }
     const spent = judged;
     const origin = { ...asked.origin, capability: capability.id };
+    // Where a chat is remembered by: kept on the chat (not on the tasks it asks for, which have their own).
+    const chatOrigin = { ...origin, ...(asked.conversation ? { conversation: asked.conversation } : {}) };
     const attached = asked.attachments.map((item) => item.id);
     const needsVision = asked.attachments.some((item) => item.kind === "image");
     // The person sees the answer as it is written, never its lines for FluidForm (the chat package
@@ -137,64 +154,75 @@ export class CapabilityAutomations {
       const show = asked.on_text;
       asked.on_text = (text) => show(chats.forPerson(text, lines));
     }
-    let run: ExecutionRun | null;
-    let requested: string | null;
-    let pick: ModelProfile;
+    let run!: ExecutionRun;
+    let requested!: string | null;
+    let pick!: ModelProfile;
     let before = 0;
     let extra = 0;
-    for (;;) {
-      const known = asked.conversation ? state.chats[asked.conversation] : null;
-      run = known ? db.getRun(known) : null;
-      if (!run || run.kind !== "chat") {
-        [requested, pick] = [state.model_id, await this.chatModel(automation, null, needsVision)];
-        // The answer's lead runs in a task started here, which takes this context along.
-        // A new chat of this conversation is told what was kept about its people.
-        const told = settings.user_memory && asked.conversation
-          ? await chats.text("chat.told", { place: chats.automationKey(capability.id, asked.conversation) }) : "";
-        const chosen = pick;
-        const prefix = `${capability.name} · `;
-        const title = prefix + cut(firstLine(asked.text), Math.max(CHAT_TITLE_CHARS - [...prefix].length, 10));
-        run = await streaming.listener.run(asked.on_text, () => api.startChat(told + said, settings.default_budget_usd, true, null,
-          chosen.id, attached, { autoRouted: true, spent, shown, origin, title }));
-        if (asked.conversation) state.chats[asked.conversation] = run.id;
-        break;
-      }
-      const chat = run;
-      const active = executor.leadTasks.get(chat.id);
-      if (active && !active.done) {
-        await active.settled();
-        continue;
-      }
-      const started = await executor.locked(chat.id, async () => {
-        // Someone may have started a reply while we were waiting for the run lock.
-        const answering = executor.leadTasks.get(chat.id);
-        if (answering && !answering.done) return false;
-        const latest = api.getTask(chat.id);
-        if (latest.kind !== "chat") return false;
-        [requested, pick] = [state.model_id, await this.chatModel(automation, latest, needsVision)];
-        const previous = latest.supervisor?.model_id ?? null;
-        if (previous !== pick.id) {
-          latest.supervisor = supervisor.newSession(pick, latest.supervisor, supervisor.chatFolder(latest));
-          latest.lead_seen_attachments = [];
+    await this.opening.get(opening)!.run(async () => {
+      // A conversation left for hours, or since yesterday, begins a new chat; the old one stays to be read.
+      const held = asked.conversation ? state.chats[asked.conversation] : null;
+      const last = held ? db.getRun(held)?.lead_messages.filter((item) => item.role === "user").at(-1)?.created_at : null;
+      if (last) {
+        const found = await chats.ask("chat.session", { ...chats.clock(), last_at: Date.parse(last) / 1000, text: asked.text });
+        if (found.fresh) {
+          delete state.chats[asked.conversation];
+          automation.note("隔了一阵，开了新对话（旧的还在记录里）");
         }
-        // Where it is (private or a group), for a chat started before automations said so.
-        if (asked.origin.chat_type && !(latest.origin ?? {}).chat_type) latest.origin = { ...(latest.origin ?? {}), chat_type: asked.origin.chat_type };
-        db.saveRun(latest);
-        if (previous !== pick.id) executor.emit(chat.id, "run.lead_changed", { model_id: pick.id, previous_model_id: previous });
-        [before, extra] = [latest.actual_cost_usd, spent];
-        streaming.listener.run(asked.on_text, () => {
-          try {
-            executor.startLeadChat(chat.id, said, asked.attachments, shown);
-          } catch (error) {
-            if (!(error instanceof files.AttachmentError)) throw error;
-            automation.note(`附件没带上：${error.message}`);
-            executor.startLeadChat(chat.id, said, [], shown);
+      }
+      for (;;) {
+        const known = asked.conversation ? state.chats[asked.conversation] : null;
+        const existing = known ? db.getRun(known) : null;
+        if (!existing || existing.kind !== "chat") {
+          [requested, pick] = [state.model_id, await this.chatModel(automation, null, needsVision)];
+          // The answer's lead runs in a task started here, which takes this context along.
+          const chosen = pick;
+          const prefix = `${capability.name} · `;
+          const title = prefix + cut(firstLine(asked.text), Math.max(CHAT_TITLE_CHARS - [...prefix].length, 10));
+          run = await streaming.listener.run(asked.on_text, () => api.startChat(said, settings.default_budget_usd, true, null,
+            chosen.id, attached, { autoRouted: true, spent, shown, origin: chatOrigin, title }));
+          if (asked.conversation) state.chats[asked.conversation] = run.id;
+          break;
+        }
+        run = existing;
+        const chat = existing;
+        const active = executor.leadTasks.get(chat.id);
+        if (active && !active.done) {
+          await active.settled();
+          continue;
+        }
+        const started = await executor.locked(chat.id, async () => {
+          // Someone may have started a reply while we were waiting for the run lock.
+          const answering = executor.leadTasks.get(chat.id);
+          if (answering && !answering.done) return false;
+          const latest = api.getTask(chat.id);
+          if (latest.kind !== "chat") return false;
+          [requested, pick] = [state.model_id, await this.chatModel(automation, latest, needsVision)];
+          const previous = latest.supervisor?.model_id ?? null;
+          if (previous !== pick.id) {
+            latest.supervisor = supervisor.newSession(pick, latest.supervisor, supervisor.chatFolder(latest));
+            latest.lead_seen_attachments = [];
           }
+          if (asked.conversation && !latest.origin?.conversation) latest.origin = { ...(latest.origin ?? {}), conversation: asked.conversation };
+          // Where it is (private or a group), for a chat started before automations said so.
+          if (asked.origin.chat_type && !(latest.origin ?? {}).chat_type) latest.origin = { ...(latest.origin ?? {}), chat_type: asked.origin.chat_type };
+          db.saveRun(latest);
+          if (previous !== pick.id) executor.emit(chat.id, "run.lead_changed", { model_id: pick.id, previous_model_id: previous });
+          [before, extra] = [latest.actual_cost_usd, spent];
+          streaming.listener.run(asked.on_text, () => {
+            try {
+              executor.startLeadChat(chat.id, said, asked.attachments, shown);
+            } catch (error) {
+              if (!(error instanceof files.AttachmentError)) throw error;
+              automation.note(`附件没带上：${error.message}`);
+              executor.startLeadChat(chat.id, said, [], shown);
+            }
+          });
+          return true;
         });
-        return true;
-      });
-      if (started) break;
-    }
+        if (started) break;
+      }
+    });
     // Remember the preference actually used for this turn, not a later change saved mid-reply.
     state.chat_preferences[run.id] = requested!;
     automation.save();

@@ -3,7 +3,7 @@
 // the composer can show them while the user types. CLI agents get the file paths (and Codex the
 // images as --image); API models get images as image inputs and text files inline.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { settings } from "./config.js";
 import { type Attachment, AttachmentSchema, type ExecutionRun } from "./models.js";
@@ -146,4 +146,29 @@ export function inlineText(attachments: Attachment[]): string {
 
 export function imageData(item: Attachment): string {
   return readFileSync(path(item)).toString("base64");
+}
+
+/** Copies of ``items`` in a chat's ``folder`` (attachments/), where its tools can read them again:
+ *  their paths there, by id. The folder is the model's to write, so nothing is followed or
+ *  overwritten. */
+export function copiesIn(folder: string, items: Attachment[]): Record<string, string> {
+  const found: Record<string, string> = {};
+  if (!items.length) return found;
+  const inside = join(folder, "attachments");
+  try {
+    mkdirSync(inside, { recursive: true });
+    if (!lstatSync(inside).isDirectory()) return found;
+  } catch {
+    return found;
+  }
+  for (const item of items) {
+    const name = `${safeName(item.id).slice(0, 12)}-${safeName(item.name)}`;
+    try {
+      copyFileSync(path(item), join(inside, name), constants.COPYFILE_EXCL);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") continue; // gone: named only
+    }
+    found[item.id] = `attachments/${name}`;
+  }
+  return found;
 }

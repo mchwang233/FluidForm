@@ -13,7 +13,8 @@ import { SESSION_CLIS, SessionLost } from "./cli-channels.js";
 import { settings } from "./config.js";
 import * as folders from "./folders.js";
 import { type Attachment, type EngineerJob, type ExecutionRun, folderId, type ModelProfile, partPath, routingReady, type SupervisorSession, SupervisorSessionSchema, type TaskNode } from "./models.js";
-import type { ChatTools, ProviderResult, SpendOk } from "./providers.js";
+import * as files from "./attachments.js";
+import type { ChatTools, Dialogue, ProviderResult, SpendOk } from "./providers.js";
 import { head, pyRegex, pyStr, sortedBy } from "./py.js";
 import { ModelUnavailable } from "./quota.js";
 import * as skills from "./skills.js";
@@ -150,6 +151,18 @@ async function chatBriefing(run: ExecutionRun, model: ModelProfile | null): Prom
   return await chat.text("chat.role", { ctx }) + await chat.text("chat.handover", { ctx, current: model ? model.id : null });
 }
 
+/** Whether a chat is sent whole each turn, built from its records (an API model), rather than kept as
+ *  its model's own conversation (a membership CLI). */
+const sentEachTurn = (run: ExecutionRun, model: ModelProfile | null) => run.kind === "chat" && model !== null && model.channel !== "cli";
+
+/** What an API model is sent of a chat for this turn, by the chat package (docs/design/chat-context.md). */
+async function chatDialogue(run: ExecutionRun, model: ModelProfile, tools: ChatTools | null): Promise<Dialogue & { now: string }> {
+  const paths = tools ? files.copiesIn(tools.folder, run.attachments) : {};
+  const ctx = chat.context(run, model, tools);
+  ctx.chat.history = chat.history(run, paths);
+  return (await chat.ask("chat.dialogue", { ctx, ...chat.clock() })) as Dialogue & { now: string };
+}
+
 /** What a new lead needs to take over a running task: the request, the plan and where every step
  *  stands, and the latest problems. */
 export function handover(run: ExecutionRun): string {
@@ -180,15 +193,15 @@ const briefing = (run: ExecutionRun, model: ModelProfile | null) => (run.kind ==
 /** Bills a call to the task: runs ``call`` with the budget it may spend. */
 export type Charged = (modelId: string, call: (budget: SpendOk) => Promise<ProviderResult>) => Promise<ProviderResult>;
 export type Conversing = { converse(session: SupervisorSession, text: string, options: { spend_ok?: SpendOk | null; attachments?: Attachment[];
-  tools?: ChatTools | null }): Promise<ProviderResult> };
+  tools?: ChatTools | null; dialogue?: Dialogue | null }): Promise<ProviderResult> };
 
 /** Send ``prompt`` to ``session``'s lead through ``charged``, which bills the call to the task: the
  *  reply and the session, now continued. ``tools``: a chat's quick jobs (chatTools). */
 export async function converse(providers: Conversing, session: SupervisorSession, prompt: string, charged: Charged, attachments: Attachment[] = [],
-  tools: ChatTools | null = null): Promise<[string, SupervisorSession]> {
+  tools: ChatTools | null = null, dialogue: Dialogue | null = null): Promise<[string, SupervisorSession]> {
   const result = await charged(session.model_id!, (budget) => providers.converse(session, prompt, { spend_ok: budget,
-    ...(attachments.length ? { attachments } : {}), ...(tools ? { tools } : {}) }));
-  if (session.history.length) trim(session);
+    ...(attachments.length ? { attachments } : {}), ...(tools ? { tools } : {}), ...(dialogue ? { dialogue } : {}) }));
+  if (!dialogue && session.history.length) trim(session);
   return [result.text, session];
 }
 
@@ -208,7 +221,7 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
       const pick = run.kind === "chat" ? (await chat.order(found, Boolean((run.origin || {}).capability)))[0] : found[0];
       if (!pick) break;
       session = newSession(pick, run.supervisor, chatFolder(run));
-      message = await briefing(run, pick) + prompt;
+      message = sentEachTurn(run, pick) ? prompt : await briefing(run, pick) + prompt;
     }
     try {
       const model = byId.get(session.model_id!) ?? null;
@@ -219,7 +232,17 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
         tools.log = activity;
       }
       try {
-        return await converse(providers, session, message + (tools ? toolSkills(message) : ""), charged, attachments, tools);
+        let asked = message + (tools ? toolSkills(message) : "");
+        let dialogue: Dialogue | null = null;
+        if (sentEachTurn(run, model)) {
+          const turn = await chatDialogue({ ...run, supervisor: session }, model!, tools);
+          dialogue = { system: turn.system, messages: turn.messages };
+          asked = `${turn.now}\n\n${asked}`;
+        } else if (run.kind === "chat" && model && session === run.supervisor && !session.calls) {
+          // A membership CLI keeps its own conversation: its first message carries the rules.
+          asked = await chatOpening(run, message, model) + (tools ? toolSkills(message) : "");
+        }
+        return await converse(providers, session, asked, charged, attachments, tools, dialogue);
       } finally {
         if (tools) CHAT_ACTIVITY.delete(run.id);
       }
@@ -229,7 +252,7 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
         lastError = error;
         const model = byId.get(session.model_id!) ?? null;
         session = model ? newSession(model, session, chatFolder(run)) : null;
-        message = await briefing(run, model) + prompt;
+        message = sentEachTurn(run, model) ? prompt : await briefing(run, model) + prompt;
       } else if (error instanceof ModelUnavailable || error instanceof ProviderError || (error as Error)?.name === "TimeoutError") {
         lastError = error;
         tried.add(session.model_id!);

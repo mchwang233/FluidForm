@@ -39,7 +39,7 @@ test("a chat is answered by the model chosen, without planning anything", async 
   // The chosen model answers as a conversation partner, told so once; not as a task's lead.
   assert.deepEqual(sent.map(([model]) => model), ["x:other", "x:other"]);
   assert.ok(sent[0][2].startsWith(CHAT_ROLE) && sent[0][2].includes("WAL 是什么") && !sent[0][2].includes("MESSAGE from the user"));
-  assert.equal(sent[1][2], "检查点呢？");
+  assert.ok(sent[1][2].endsWith("检查点呢？") && sent[1][2].includes("SQLite 的 WAL 模式允许读写并发。")); // and what was said before
   assert.ok(run.status === "draft" && run.supervisor!.model_id === "x:other");
 });
 
@@ -295,7 +295,7 @@ test("with chat tools, an API chat does quick jobs in its own folder", async () 
   const sent = chatting(api);
   const given: (ChatTools | null | undefined)[] = [];
   api.providers.converse = async (session: SupervisorSession, prompt: string, options: ConverseOptions = {}) => {
-    sent.push([session.model_id, session.cwd, prompt]);
+    sent.push([session.model_id, session.cwd, `${(options as any).dialogue?.system ?? ""}\n\n${prompt}`]);
     given.push(options.tools);
     session.calls += 1;
     return new ProviderResult("北京：晴 18°C", 10, 10);

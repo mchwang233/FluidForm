@@ -285,7 +285,7 @@ test("in a group it answers only what is meant for it, knowing what was said bef
   assert.ok(judged.length === 3 && judged[1].includes("成员1：今天三点开会"));
   // The model answering is told what the group said before.
   assert.ok(sent[0][2].includes("群里此前的消息") && sent[0][2].includes("成员1：今天三点开会，记得带电脑") && sent[0][2].includes("成员2：助手，几点开会？"));
-  assert.equal(sent[1][2], "谢谢");
+  assert.ok(sent[1][2].endsWith("谢谢"));
   const state = runner.get("fake-bot").state;
   assert.ok(Object.keys(state.heard).length === 0 && Object.keys(state.spent).length);
 });
@@ -340,7 +340,7 @@ test("its chats are told how to talk there, and whether it is a group", async ()
   chat.origin = { capability: "fake-bot" };
   api.db.saveRun(chat);
   await message(api, runner, { conversation: "g1", text: "在吗", origin: { chat_type: "group" } });
-  assert.deepEqual(api.db.getRun(chat.id)!.origin, { capability: "fake-bot", chat_type: "group" });
+  assert.deepEqual(api.db.getRun(chat.id)!.origin, { capability: "fake-bot", chat_type: "group", conversation: "g1" });
   // Chats it did not bring, and packages without the file, are told nothing of it.
   assert.ok(packages.chatGuide("other") === "" && packages.chatGuide("../x") === "");
 });
@@ -352,8 +352,8 @@ test("a chat sends the pictures it made, and only from its own folder", async ()
   const outside = join(folder(), "secret.txt");
   writeFileSync(outside, "not for them");
   const prompts: string[] = [];
-  api.providers.converse = async (session: SupervisorSession, prompt: string, options: { tools?: { folder: string } | null } = {}) => {
-    prompts.push(prompt);
+  api.providers.converse = async (session: SupervisorSession, prompt: string, options: { tools?: { folder: string } | null; dialogue?: { system: string } | null } = {}) => {
+    prompts.push(`${options.dialogue?.system ?? ""}\n\n${prompt}`);
     writeFileSync(join(options.tools!.folder, "cat.png"), PNG);
     session.calls += 1;
     return new ProviderResult(`画好了，给你。\nSEND: cat.png\nSEND: ${outside}\nSEND: ../x`, 10, 10);
@@ -482,7 +482,7 @@ for (const modelId of [OTHER.id, "cli:codex"]) {
     assert.deepEqual(sent.map((item) => item[0]), [modelId, modelId]);
     assert.ok(first === "好的。" && second === "嗯。" && cost > 0);
     assert.equal(classified.length, 0); // every message goes to the chat; its model asks for work itself
-    assert.ok(sent[0][2].startsWith(CHAT_ROLE) && sent[1][2] === "检查点呢？");
+    assert.ok(sent[0][2].startsWith(CHAT_ROLE) && sent[1][2].endsWith("检查点呢？"));
     const chat = api.db.getRun(runner.get("fake-bot").state.chats.c1)!;
     assert.ok(chat.kind === "chat" && chat.plan.nodes.length === 0 && chat.supervisor!.model_id === modelId);
   });
@@ -497,7 +497,9 @@ for (const [firstModel, nextModel] of [[OTHER.id, "cli:codex"], ["cli:codex", OT
     let release!: () => void;
     const released = new Promise<void>((done) => (release = done));
     const calls: [SupervisorSession, string][] = [];
-    api.providers.converse = async (session: SupervisorSession, prompt: string) => {
+    api.providers.converse = async (session: SupervisorSession, asked: string, options: any = {}) => {
+      // An API model is told the rules and what was said each turn; a membership CLI only once.
+      const prompt = options.dialogue ? [options.dialogue.system, ...options.dialogue.messages.map((item: any) => item.content), asked].join("\n\n") : asked;
       calls.push([structuredClone(session), prompt]);
       if (calls.length === 1) {
         entered();
@@ -535,7 +537,8 @@ for (const [firstModel, nextModel] of [[OTHER.id, "cli:codex"], ["cli:codex", OT
     assert.ok(prompt.startsWith(CHAT_ROLE) && prompt.includes("项目名是海棠，请记住。"));
     assert.ok(prompt.includes("记住了，项目名是海棠。") && prompt.includes("它叫什么？"));
     await botMessage(api, runner, "再确认一次。");
-    assert.ok(calls[2][0].session_id === `native-${nextModel}` && calls[2][1] === "再确认一次。");
+    assert.ok(calls[2][0].session_id === `native-${nextModel}` && calls[2][1].endsWith("再确认一次。"));
+    if (nextModel.startsWith("cli:")) assert.equal(calls[2][1], "再确认一次。");
     done = [true, true];
   });
 }
@@ -554,7 +557,7 @@ test("restoring automatic after a reload switches existing chats, with bounded h
   await botMessage(api, runner, "项目名是什么？");
   assert.equal(sent.at(-1)![0], BEST.id); // chosen automatically: an API model first, people wait for answers
   const prompt = sent.at(-1)![2];
-  assert.ok(prompt.includes("项目名是海棠。") && prompt.includes("好的。") && !prompt.includes("旧内容"));
+  assert.ok(prompt.includes("项目名是海棠。") && prompt.includes("好的。") && prompt.split("旧内容").length <= 2001); // one long message is cut
   assert.ok(prompt.length < MAX_CHAT_HANDOVER_CHARS);
 });
 
@@ -593,7 +596,7 @@ test("automatic, an automation keeps the conversation it fell back to", async ()
   assert.ok(!reply!.includes("暂不可用"));
   await botMessage(api, runner, "接着说。");
   assert.deepEqual(sent.map((item) => item[0]), [BEST.id, BEST.id]);
-  assert.equal(sent.at(-1)![2], "接着说。");
+  assert.ok(sent.at(-1)![2].endsWith("接着说。"));
   assert.equal(runner.get("fake-bot").public().model_id, null);
 });
 
@@ -623,7 +626,7 @@ test("an automation asks FluidForm, and a conversation goes on in one chat", asy
   const chat = api.db.getRun(automation.state.chats.c1)!;
   assert.ok(chat.kind === "chat" && chat.plan.title!.startsWith("假机器人 · WAL") && chat.project_dir === null);
   assert.deepEqual(chat.lead_messages.filter((m) => m.role === "user").map((m) => m.text), ["WAL 是什么？", "检查点呢？"]);
-  assert.deepEqual(chat.origin, { message_id: "om_0", capability: "fake-bot" });
+  assert.deepEqual(chat.origin, { message_id: "om_0", capability: "fake-bot", conversation: "c1" });
   const runtime = (await client.get("/api/capabilities/runtime")).json().capabilities["fake-bot"];
   assert.ok(runtime.status === "running" && runtime.text === "就绪");
   assert.ok(runtime.log.some((line: string) => line.includes("plain output goes to the log")));
@@ -815,4 +818,32 @@ test("only an @ with nothing new gets a short answer", async () => {
   const [reply, cost] = await message(api, runner, { conversation: "g2", text: runners.CALLED_ONLY, sender: "成员1" });
   assert.deepEqual([reply, cost], ["在呢，要我做什么？", 0]);
   assert.equal(sent.length, 0);
+});
+
+test("/new begins a new chat, and what is remembered is still told", async () => {
+  const { api, runner, sent } = await modelBot();
+  settings.user_memory = true;
+  remembering.update("fake-bot:c1", ["用户: 喜欢简短"], []);
+  await botMessage(api, runner, "先聊一句。");
+  const first = runner.get("fake-bot").state.chats.c1;
+  const asked = sent.length;
+  const [reply] = await botMessage(api, runner, "/new");
+  assert.ok(reply!.includes("开了新对话") && sent.length === asked);
+  await botMessage(api, runner, "你好");
+  const second = runner.get("fake-bot").state.chats.c1;
+  assert.notEqual(second, first);
+  assert.ok(api.db.getRun(first)); // the old one stays to be read
+  assert.ok(sent.at(-1)![2].includes("喜欢简短") && !sent.at(-1)![2].includes("先聊一句。"));
+});
+
+test("idle two hours, a conversation goes on in a new chat", async () => {
+  const { api, runner, sent } = await modelBot();
+  await botMessage(api, runner, "看看这个日志。");
+  const first = runner.get("fake-bot").state.chats.c1;
+  const chat = api.db.getRun(first)!;
+  for (const item of chat.lead_messages) item.created_at = new Date(Date.now() - 3 * 3600_000).toISOString();
+  api.db.saveRun(chat);
+  await botMessage(api, runner, "hello");
+  assert.notEqual(runner.get("fake-bot").state.chats.c1, first);
+  assert.ok(!sent.at(-1)![2].includes("看看这个日志。"));
 });

@@ -1,5 +1,6 @@
 // test_chat.py's chatting and triaging: API models that talk, the cheap one that tells a chat from a
 // task, and a stub planner.
+import type { Dialogue } from "../../src/providers.js";
 import type { Attachment, ModelProfile, SupervisorSession } from "../../src/models.js";
 import { ModelProfileSchema, TaskPlanSchema } from "../../src/models.js";
 import { type ChatTools, ProviderResult } from "../../src/providers.js";
@@ -13,7 +14,7 @@ export const CHEAP = ModelProfileSchema.parse({ id: "x:cheap", provider: "x", di
   output_per_million: 0.1, execution_priority: 10, scores: { coding: 50, planning: 50, reliability: 80 } });
 
 export type Api = ReturnType<typeof taskApi>["api"];
-export type ConverseOptions = { attachments?: Attachment[]; tools?: ChatTools | null };
+export type ConverseOptions = { attachments?: Attachment[]; tools?: ChatTools | null; dialogue?: Dialogue | null };
 /** (model, cwd, prompt) of every message sent; ``attached``: the attachment names of each. */
 export type Sent = [string | null, string | null, string][] & { attached: string[][]; planned: string[] };
 
@@ -32,7 +33,11 @@ export function chatting(api: Api, answers: string[] = ["好的。"]): Sent {
   const replies = [...answers];
   useModels(api, { [BEST.id]: BEST, [OTHER.id]: OTHER });
   api.providers.converse = async (session: SupervisorSession, prompt: string, options: ConverseOptions = {}) => {
-    sent.push([session.model_id, session.cwd, prompt]);
+    // All the model is told: for an API model the system prompt and the turns before, then the message
+    // (without the time put before it).
+    const asked = prompt.replace(/^（现在：[^）]*）\n\n/, "");
+    const before = options.dialogue ? [options.dialogue.system, ...options.dialogue.messages.map((item) => item.content)] : [];
+    sent.push([session.model_id, session.cwd, [...before, asked].join("\n\n")]);
     sent.attached.push((options.attachments ?? []).map((item) => item.name));
     session.calls += 1;
     return new ProviderResult(replies.length ? replies.shift()! : "嗯。", 10, 10);

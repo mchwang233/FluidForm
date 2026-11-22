@@ -74,6 +74,8 @@ export abstract class ExecutorBase {
   readonly leadLocks = new Map<string, Mutex>();
   // The user's messages to each task's lead, answered in the background.
   readonly leadTasks = new Map<string, Task<void>>();
+  /** A long chat's older turns being summarised, by chat. */
+  readonly chatSummaries = new Map<string, Task<void>>();
   // A succeeded task's lead, asked what it built that is reusable (capabilities.ts).
   readonly capabilityTasks = new Map<string, Task<void>>();
   // Called with (run id, end event) whenever a task ends (emit).

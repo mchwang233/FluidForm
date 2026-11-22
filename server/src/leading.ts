@@ -1,5 +1,7 @@
 // Carrying out the task lead's decisions after a failed attempt, and handing the user's answers to its
 // questions back to it (supervisor.ts words the questions and reads the answers).
+import * as streaming from "./streaming.js";
+import { log } from "./log.js";
 import * as chat from "./chat.js";
 import { attach } from "./attachments.js";
 import * as capabilities from "./capabilities.js";
@@ -166,8 +168,7 @@ export abstract class Leading extends Reviewing {
     try {
       const run = this.db.getRun(runId)!;
       // A chat is only a conversation; a task's lead answers as the lead who follows it.
-      const model = run.supervisor ? this.modelLookup[run.supervisor.model_id ?? ""] ?? null : null;
-      const prompt = run.kind === "chat" ? await supervisor.chatOpening(run, text, model) : supervisor.chatMessage(text);
+      const prompt = run.kind === "chat" ? text : supervisor.chatMessage(text);
       // The files sent with this message (and a chat's first ones) are among the task's attachments the
       // lead has not seen yet; askLead gives them to it.
       answer = await this.askLead(runId, prompt);
@@ -195,7 +196,42 @@ export abstract class Leading extends Reviewing {
       status = "failed";
     }
     await this.saveReply(runId, replyId, answer, status, job);
+    if (status === "done") this.startChatSummary(runId);
     this.emit(runId, "run.lead_message", { role: "lead", status });
+  }
+
+  /** A chat grown long has its older turns summarised, after the answer so that nobody waits for it.
+   *  A summary that cannot be made leaves the chat to its latest turns. */
+  private startChatSummary(runId: string): void {
+    const run = this.db.getRun(runId);
+    const model = this.modelLookup[run?.supervisor?.model_id ?? ""];
+    const busy = this.chatSummaries.get(runId);
+    if (run?.kind !== "chat" || !model || model.channel === "cli" || (busy && !busy.done)) return;
+    // Nobody hears it being written: it is not the answer.
+    this.chatSummaries.set(runId, streaming.listener.run(null, () => new Task(() => this.summariseChat(runId, model.id))));
+  }
+
+  private async summariseChat(runId: string, modelId: string): Promise<void> {
+    try {
+      const run = this.db.getRun(runId);
+      if (!run) return;
+      const ctx = chat.context(run, null, null);
+      ctx.chat.history = chat.history(run);
+      const { prompt, until } = await chat.ask("chat.compaction", { ctx });
+      if (!prompt) return;
+      const result = await this.complete(run, null, modelId, prompt, null, { effort: "low", allow_api_fallback: false });
+      const text = await chat.text("chat.summary", { text: result.text });
+      if (!text) return;
+      await this.locked(runId, () => {
+        const latest = this.db.getRun(runId);
+        if (!latest) return;
+        latest.chat_summary = { text, until };
+        this.save(latest);
+      });
+    } catch (error) {
+      if (isCancelled(error)) throw error;
+      log.warning(`summarising chat ${runId} failed: ${(error as Error)?.message ?? error}`);
+    }
   }
 
   private saveReply(runId: string, replyId: string, answer: string, status: string, job: { id: string } | null): Promise<void> {

@@ -70,7 +70,7 @@ test("the pricing package ships enabled, and prices over JSON-RPC in its sandbox
   assert.equal(capabilities.load("pricing"), null);
   assert.ok(!pricing.enabled());
   const offered = JSON.parse(readFileSync(join(settings.data_dir, "bundled.json"), "utf8"));
-  assert.ok(offered.pricing.startsWith("1.0.0#") && offered.chat.startsWith("1.0.0#"), JSON.stringify(offered));
+  assert.ok(offered.pricing.startsWith("1.0.0#") && /^\d+\.\d+\.\d+#/.test(offered.chat), JSON.stringify(offered));
 });
 
 test("switched off, the pricing package stops answering and nothing more is priced", async () => {

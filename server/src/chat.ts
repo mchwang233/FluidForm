@@ -61,6 +61,8 @@ export function context(run: ExecutionRun, model: ModelProfile | null, tools: { 
   const automation = Boolean(origin.capability);
   return {
     chat: { automation, chat_type: origin.chat_type ?? null, project_dir: run.project_dir,
+      place: automation ? (origin.conversation ? automationKey(pyStr(origin.capability), pyStr(origin.conversation)) : null) : WEB,
+      summary: run.chat_summary ?? null,
       session: run.supervisor ? { model_id: run.supervisor.model_id, previous: run.supervisor.previous, calls: run.supervisor.calls } : null,
       messages: run.lead_messages.map((item) => ({ role: item.role, text: item.text, status: item.status })) },
     model: model ? { id: model.id, display_name: model.display_name, channel: model.channel } : null,
@@ -94,4 +96,23 @@ export async function actionLines(): Promise<RegExp> {
 export function forPerson(answer: string, lines: RegExp): string {
   const found = lines.exec(answer || "");
   return found ? answer.slice(0, found.index).trimEnd() : answer;
+}
+
+/** The time as the package is told it: this machine's. */
+export const clock = (now = new Date()) => ({ now: now.getTime() / 1000, utc_offset: -now.getTimezoneOffset() * 60 });
+
+/** A chat's messages before the one being answered, with their files as ``paths`` has them. A chat's
+ *  first files are kept on the chat, not on its first message. */
+export function history(run: ExecutionRun, paths: Record<string, string> = {}): Json[] {
+  let end = run.lead_messages.length;
+  for (let index = end - 1; index > 0; index -= 1) {
+    if (run.lead_messages[index].status !== "pending") continue;
+    end = index - 1; // the message asked, and the answer being written
+    break;
+  }
+  const placed = new Set(run.lead_messages.flatMap((item) => item.attachments.map((file) => file.id)));
+  const first = run.lead_messages.findIndex((item) => item.role === "user");
+  return run.lead_messages.slice(0, end).map((item, index) => ({ id: item.id, role: item.role, text: item.text, status: item.status,
+    files: [...item.attachments, ...(index === first ? run.attachments.filter((file) => !placed.has(file.id)) : [])]
+      .map((file) => ({ name: file.name, path: paths[file.id] ?? null })) }));
 }
