@@ -213,11 +213,13 @@ export class CapabilityAutomations {
           if (answering && !answering.done) return false;
           const latest = api.getTask(chat.id);
           if (latest.kind !== "chat") return false;
-          [requested, pick] = [state.model_id, await this.chatModel(automation, latest, needsVision)];
+          [requested, pick] = [state.model_id, await this.chatModel(automation, latest, needsVision || await chats.showsPictures(latest))];
           const previous = latest.supervisor?.model_id ?? null;
           if (previous !== pick.id) {
             latest.supervisor = supervisor.newSession(pick, latest.supervisor, supervisor.chatFolder(latest));
-            latest.lead_seen_attachments = [];
+            // A membership CLI is handed them all again; an API model is sent the chat as it stands.
+          if (pick.channel === "cli") latest.lead_seen_attachments = [];
+          else latest.lead_seen_attachments ??= latest.attachments.map((item) => item.id);
           }
           if (asked.conversation && !latest.origin?.conversation) latest.origin = { ...(latest.origin ?? {}), conversation: asked.conversation };
           // Where it is (private or a group), for a chat started before automations said so.

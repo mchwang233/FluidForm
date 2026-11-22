@@ -8,7 +8,7 @@ import * as agentTools from "./agent.js";
 import * as files from "./attachments.js";
 import { BudgetExceeded, ProviderError, StepLimitExceeded } from "./budget.js";
 import * as callRecords from "./calls.js";
-import { inputBound, ProviderGate, retryAfter, type Limits } from "./call-control.js";
+import { boundBytes, inputBound, ProviderGate, retryAfter, type Limits } from "./call-control.js";
 import * as chatActions from "./chat-actions.js";
 import { CLI_SPECS, CliChannelRegistry, CliError, type CliText, InputTooLarge, inputTooLarge, SessionLost } from "./cli-channels.js";
 import { settings } from "./config.js";
@@ -196,7 +196,7 @@ export type Fetch = typeof fetch;
 
 /** A conversation so far, as the model is sent it: its system prompt (instead of an agent's
  *  instructions) and the turns before the prompt. */
-export type Dialogue = { system: string; messages: { role: "user" | "assistant"; content: string }[]; effort?: string | null };
+export type Dialogue = { system: string; messages: { role: "user" | "assistant"; content: string; images?: Attachment[] }[]; effort?: string | null };
 
 export type CompleteOptions = {
   dialogue?: Dialogue | null;
@@ -207,6 +207,10 @@ export type CompleteOptions = {
 };
 
 export type ChatTools = { folder: string; turns: number; network: boolean; log?: Json[] | null; actions?: string[]; seconds: number };
+
+const openaiImage = (item: Attachment) => ({ type: "image_url", image_url: { url: `data:${item.media_type};base64,${files.imageData(item)}` } });
+const anthropicImage = (item: Attachment) => ({ type: "image", source: { type: "base64", media_type: item.media_type, data: files.imageData(item) } });
+const geminiImage = (item: Attachment) => ({ inline_data: { mime_type: item.media_type, data: files.imageData(item) } });
 
 export class ProviderRegistry {
   readonly cli = new CliChannelRegistry();
@@ -679,7 +683,7 @@ export class ProviderRegistry {
         }
         state.calls = calls;
         state.last_input_tokens = usedIn;
-        state.last_history_size = Buffer.byteLength(pyDumps(state.history ?? null, false));
+        state.last_history_size = boundBytes(state.history ?? null);
         const usedCached = state.cached || 0;
         delete state.cached;
         totalIn += usedIn;
@@ -777,7 +781,7 @@ export class ProviderRegistry {
     signal?: AbortSignal): Promise<[number, number, number] | null> {
     const history: Json[] = state.history || [];
     if (!history.length) return null;
-    const size = Buffer.byteLength(pyDumps(history, false));
+    const size = boundBytes(history);
     const estimate = Math.max(Math.floor(size / 3), (state.last_input_tokens ?? 0) + Math.floor(Math.max(0, size - (state.last_history_size ?? 0)) / 3));
     const context = this.models[modelId]?.context_window || 64000;
     if (estimate < context * 0.65) return null;
@@ -817,7 +821,7 @@ export class ProviderRegistry {
       + `\nFull history: RecallHistory archive_id=${archiveId}.`);
     // No private marker is sent to providers; archive references distinguish generated memory.
     const reduced = [...original, notice];
-    if (Math.floor(Buffer.byteLength(pyDumps(reduced, false)) / 3) > context * 0.5) throw new ProviderError("必须保留的任务约束超过上下文容量，已归档；需要拆分步骤。");
+    if (Math.floor(boundBytes(reduced) / 3) > context * 0.5) throw new ProviderError("必须保留的任务约束超过上下文容量，已归档；需要拆分步骤。");
     Object.assign(state, { history: reduced, summary, memory_message: notice, last_input_tokens: 0, last_history_size: 0 });
     conversation.save();
     return [usedIn, usedOut, cached];
@@ -904,7 +908,9 @@ export class ProviderRegistry {
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
         state.history = state.system ? [{ role: "system", content: state.system }] : [];
-        for (const item of state.before ?? []) state.history.push({ role: item.role, content: item.content });
+        for (const item of state.before ?? []) {
+          state.history.push({ role: item.role, content: item.images?.length ? [{ type: "text", text: item.content }, ...item.images.map(openaiImage)] : item.content });
+        }
         state.history.push({ role: "user", content: state.images.length ? [{ type: "text", text: state.prompt },
           ...state.images.map((item: Attachment) => ({ type: "image_url", image_url: { url: `data:${item.media_type};base64,${files.imageData(item)}` } }))]
           : state.prompt });
@@ -944,7 +950,7 @@ export class ProviderRegistry {
     effort: string | null, conversation: Conversation | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
-        state.history = [...(state.before ?? []).map((item: Json) => ({ role: item.role, content: item.content })),
+        state.history = [...(state.before ?? []).map((item: Json) => ({ role: item.role, content: item.images?.length ? [...item.images.map(anthropicImage), { type: "text", text: item.content }] : item.content })),
           { role: "user", content: state.images.length ? [
           ...state.images.map((item: Attachment) => ({ type: "image", source: { type: "base64", media_type: item.media_type, data: files.imageData(item) } })),
           { type: "text", text: state.prompt }] : state.prompt }];
@@ -981,7 +987,7 @@ export class ProviderRegistry {
     effort: string | null, conversation: Conversation | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
-        state.history = [...(state.before ?? []).map((item: Json) => ({ role: item.role === "assistant" ? "model" : "user", parts: [{ text: item.content }] })),
+        state.history = [...(state.before ?? []).map((item: Json) => ({ role: item.role === "assistant" ? "model" : "user", parts: [...(item.images ?? []).map(geminiImage), { text: item.content }] })),
           { role: "user", parts: [...state.images.map((item: Attachment) => ({ inline_data: { mime_type: item.media_type, data: files.imageData(item) } })),
           { text: state.prompt }] }];
       }

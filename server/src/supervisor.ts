@@ -157,12 +157,20 @@ async function chatBriefing(run: ExecutionRun, model: ModelProfile | null): Prom
 const sentEachTurn = (run: ExecutionRun, model: ModelProfile | null) => run.kind === "chat" && model !== null && model.channel !== "cli";
 
 /** What an API model is sent of a chat for this turn, by the chat package (docs/design/chat-context.md). */
-async function chatDialogue(run: ExecutionRun, model: ModelProfile, tools: ChatTools | null, asked: string, sent: number): Promise<Dialogue & { now: string }> {
+async function chatDialogue(run: ExecutionRun, model: ModelProfile, tools: ChatTools | null, asked: string, sent: Attachment[]): Promise<Dialogue & { now: string }> {
   const paths = tools ? files.copiesIn(tools.folder, run.attachments) : {};
   const ctx = chat.context(run, model, tools);
   ctx.chat.history = chat.history(run, paths);
-  ctx.chat.asked = { text: asked, files: sent };
-  return (await chat.ask("chat.dialogue", { ctx, ...chat.clock() })) as Dialogue & { now: string };
+  const pictures = sent.filter((item) => item.kind === "image").length;
+  ctx.chat.asked = { text: asked, files: sent.length - pictures, pictures };
+  const turn = await chat.ask("chat.dialogue", { ctx, ...chat.clock() });
+  const byId = new Map([...run.attachments, ...run.lead_messages.flatMap((item) => item.attachments)].map((item) => [item.id, item]));
+  // The package names the pictures to show; they are FluidForm's to read, and only this chat's.
+  const messages = (turn.messages as Json[]).map(({ images, ...message }) => {
+    const shown = ((images ?? []) as string[]).map((id) => byId.get(id)).filter((item): item is Attachment => item !== undefined && item.kind === "image" && files.showable(item));
+    return shown.length ? { ...message, images: shown } : message;
+  });
+  return { ...turn, messages } as Dialogue & { now: string };
 }
 
 /** What a new lead needs to take over a running task: the request, the plan and where every step
@@ -220,7 +228,12 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
   let lastError: unknown = null;
   for (let round = 0; round < MAX_LEADS; round += 1) {
     if (session === null) {
-      const found = candidates(models, configured, tried);
+      let found = candidates(models, configured, tried);
+      // Talking about a picture, whoever takes over must see it.
+      if (run.kind === "chat" && (attachments.some((item) => item.kind === "image") || await chat.showsPictures(run))) {
+        const seeing = found.filter((model) => model.channel === "cli" || model.supports_vision !== false);
+        if (seeing.length) found = seeing;
+      }
       // A chat's model is chosen by the chat package.
       const pick = run.kind === "chat" ? (await chat.order(found, Boolean((run.origin || {}).capability)))[0] : found[0];
       if (!pick) break;
@@ -239,7 +252,7 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
         let asked = message + (tools ? toolSkills(message) : "");
         let dialogue: Dialogue | null = null;
         if (sentEachTurn(run, model)) {
-          const turn = await chatDialogue({ ...run, supervisor: session }, model!, tools, message, attachments.length);
+          const turn = await chatDialogue({ ...run, supervisor: session }, model!, tools, message, attachments);
           dialogue = { system: turn.system, messages: turn.messages, effort: turn.effort };
           asked = `${turn.now}\n\n${asked}`;
         } else if (run.kind === "chat" && model && session === run.supervisor && !session.calls) {

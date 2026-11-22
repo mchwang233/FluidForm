@@ -93,5 +93,27 @@ export class ProviderGate {
 
 /** Byte length is a conservative token bound without provider-specific tokenizers. */
 export function inputBound(body: unknown): number {
-  return Buffer.byteLength(pyDumps(body, false), "utf8") + 256;
+  return boundBytes(body) + 256;
+}
+
+// What a picture in a request is counted as, in bytes of text: more tokens than providers make of
+// one, far fewer than its base64 has characters.
+export const IMAGE_BOUND_BYTES = 12_000;
+
+/** A request's size as tokens are bound by it: its bytes, with each picture's data as IMAGE_BOUND_BYTES. */
+export function boundBytes(payload: unknown): number {
+  let pictures = 0;
+  const counted = () => {
+    pictures += 1;
+    return "";
+  };
+  const without = (value: any): any => {
+    if (Array.isArray(value)) return value.map(without);
+    if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return value;
+    if (value.type === "image_url" && typeof value.image_url?.url === "string" && value.image_url.url.startsWith("data:")) return { ...value, image_url: { url: counted() } };
+    if (value.type === "image" && typeof value.source?.data === "string") return { ...value, source: { ...value.source, data: counted() } };
+    if (typeof value.inline_data?.data === "string") return { ...value, inline_data: { ...value.inline_data, data: counted() } };
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, without(item)]));
+  };
+  return Buffer.byteLength(pyDumps(without(payload), false), "utf8") + pictures * IMAGE_BOUND_BYTES;
 }

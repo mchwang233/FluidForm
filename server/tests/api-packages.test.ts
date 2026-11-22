@@ -393,7 +393,10 @@ test("an image goes to a model that can see it when the chosen one cannot", asyn
   assert.deepEqual(sent.attached.at(-1), ["shot.png"]);
   // The owner reads of the switch in the log; the people chatting are not told.
   assert.ok(!reply!.includes("本次由") && runner.get("fake-bot").log.some((line) => line.includes("本次由")));
-  // Words alone go back to the chosen model.
+  // While the picture is shown again, one that sees answers; without it, the chosen model is back.
+  await botMessage(api, runner, "谢谢");
+  assert.notEqual(sent.at(-1)![0], OTHER.id);
+  await botMessage(api, runner, "/new");
   await botMessage(api, runner, "谢谢");
   assert.equal(sent.at(-1)![0], OTHER.id);
 });
@@ -966,4 +969,21 @@ test("what the group said before is still told when the question is sent on befo
 test("only words that point at a picture wait for one", () => {
   for (const text of ["这张图是什么", "这张是谁", "图里是什么猫", "看看截图", "我发你张截图", "what is in this picture"]) assert.ok(runners.PICTURE_WORDS.test(text), text);
   for (const text of ["帮我生成一张图片", "怎么截图", "这张表怎么算", "照片怎么压缩", "apec全家福照片发我一下"]) assert.ok(!runners.PICTURE_WORDS.test(text), text);
+});
+
+test("while a picture is being talked about, the model is one that sees", async () => {
+  const { api, client, runner } = await modelBot();
+  api.models[OTHER.id] = { ...OTHER, supports_vision: false };
+  assert.equal((await chooseModel(client, OTHER.id)).status_code, 200);
+  settings.data_dir ||= folder();
+  const heron = files.save("heron.png", PNG);
+  const used: (string | null)[] = [];
+  api.providers.converse = async (session: SupervisorSession) => {
+    used.push(session.model_id);
+    session.calls += 1;
+    return new ProviderResult("是苍鹭。", 10, 10);
+  };
+  await message(api, runner, { conversation: "c1", text: "（见附件）", attachments: [heron] });
+  await message(api, runner, { conversation: "c1", text: "这是什么鸟" });
+  assert.deepEqual(used, [BEST.id, BEST.id]);
 });

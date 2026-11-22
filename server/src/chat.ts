@@ -6,6 +6,7 @@
 //
 // Without a chat package there are no chats: none is started or continued (old ones can be read), and
 // automations that need it cannot be enabled.
+import * as attachments from "./attachments.js";
 import * as capabilities from "./capabilities.js";
 import { chatGuide as packageGuide } from "./capability-packages.js";
 import { settings } from "./config.js";
@@ -65,7 +66,7 @@ export function context(run: ExecutionRun, model: ModelProfile | null, tools: { 
       summary: run.chat_summary ?? null,
       session: run.supervisor ? { model_id: run.supervisor.model_id, previous: run.supervisor.previous, calls: run.supervisor.calls } : null,
       messages: run.lead_messages.map((item) => ({ role: item.role, text: item.text, status: item.status })) },
-    model: model ? { id: model.id, display_name: model.display_name, channel: model.channel } : null,
+    model: model ? { id: model.id, display_name: model.display_name, channel: model.channel, vision: model.supports_vision !== false } : null,
     tools: tools ? { folder: tools.folder, network: tools.network, turns: tools.turns, seconds: tools.seconds } : null,
     settings: { user_memory: settings.user_memory, chat_action_tools: settings.chat_action_tools },
     guide: automation ? packageGuide(pyStr(origin.capability)) : "",
@@ -114,5 +115,14 @@ export function history(run: ExecutionRun, paths: Record<string, string> = {}): 
   const first = run.lead_messages.findIndex((item) => item.role === "user");
   return run.lead_messages.slice(0, end).map((item, index) => ({ id: item.id, role: item.role, text: item.text, status: item.status,
     files: [...item.attachments, ...(index === first ? run.attachments.filter((file) => !placed.has(file.id)) : [])]
-      .map((file) => ({ name: file.name, path: paths[file.id] ?? null })) }));
+      .map((file) => ({ id: file.id, name: file.name, kind: file.kind, path: paths[file.id] ?? null,
+        ...(file.kind === "image" ? { show: attachments.showable(file) } : {}) })) }));
+}
+
+/** Whether ``run``'s next turn shows pictures sent before (the chat package says which). */
+export async function showsPictures(run: ExecutionRun): Promise<boolean> {
+  if (!run.attachments.some((file) => file.kind === "image")) return false;
+  const ctx = context(run, null, null);
+  ctx.chat.history = history(run);
+  return Boolean(((await ask("chat.pictures", { ctx })).ids ?? []).length);
 }

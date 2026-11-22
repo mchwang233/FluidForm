@@ -172,3 +172,16 @@ export function copiesIn(folder: string, items: Attachment[]): Record<string, st
   }
   return found;
 }
+
+/** A picture past this is not sent again with each turn. */
+export const MAX_SHOWN_AGAIN_BYTES = 5 * 1024 * 1024;
+
+/** Whether a picture is still there to be shown again. */
+export function showable(item: Attachment): boolean {
+  try {
+    const found = statSync(path(item));
+    return found.isFile() && found.size <= MAX_SHOWN_AGAIN_BYTES;
+  } catch {
+    return false;
+  }
+}

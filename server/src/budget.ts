@@ -1,6 +1,7 @@
 // Request reservations shared by all calls of a run, including reviews and repairs.
 import * as pricing from "./pricing.js";
-import { AsyncEvent, pyDumps } from "./py.js";
+import { boundBytes } from "./call-control.js";
+import { AsyncEvent } from "./py.js";
 
 export class ProviderError extends Error {
   constructor(message = "") {
@@ -100,7 +101,7 @@ export class RequestBudget {
     if (this.countOnly || !pricing.enabled()) return maximum;
     const model = this.model(modelId);
     // UTF-8 bytes plus protocol overhead bound the input tokens (pricing decides what they cost).
-    const inputBytes = Buffer.byteLength(pyDumps(payload, false), "utf8");
+    const inputBytes = boundBytes(payload);
     for (;;) {
       let held = 0;
       if (this.stepRemaining !== null) {

@@ -159,3 +159,61 @@ test("stopping a chat's answer stops the command it runs", async () => {
   await executor.leadTasks.get("c")!.settled();
   assert.ok(performance.now() - at < 3000, "it waited for the command");
 });
+
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(300_000, 7)]);
+const picture = (name = "heron.jpg") => {
+  settings.data_dir = join(folder(), "data");
+  return files.save(name, JPEG);
+};
+const shown = (message: any) => (Array.isArray(message.content) ? message.content.filter((part: any) => part.type === "image_url").length : 0);
+
+test("asked about a picture sent before, the model is shown that picture again, where it was sent", async () => {
+  // Regression: sent 苍鹭, then asked 这是什么鸟, it had no picture, read the file, and took its right answer back.
+  const heron = picture();
+  const { body, sent } = await asked([said("user", "北京的天气"), said("lead", "1℃"), said("user", "（见附件）", { attachments: [heron] }),
+    said("lead", "水边站着一只苍鹭。")], "这是什么鸟", { attachments: [heron], supervisor: { calls: 1 } });
+  assert.deepEqual(body.map(shown), [0, 0, 0, 1, 0, 0]);
+  const words = JSON.stringify(body.slice(1).map((item: any) => (Array.isArray(item.content) ? item.content.filter((part: any) => part.type === "text") : item.content)));
+  assert.ok(!words.includes("attachments/") && !words.includes("read it again"));
+  assert.match(body[0].content, /Read cannot show pictures/);
+  assert.equal(sent[0].reasoning_effort, "high"); // asked about the picture
+});
+
+test("only the latest two pictures, of the last turns, are shown again; older ones are said to have been seen", async () => {
+  const three = [picture("a.jpg"), picture("b.jpg"), picture("c.jpg")];
+  const turns = three.flatMap((item) => [said("user", "（见附件）", { attachments: [item] }), said("lead", "看到了。")]);
+  const { body } = await asked(turns, "hello", { attachments: three, supervisor: { calls: 1 } });
+  assert.deepEqual(body.map(shown), [0, 0, 0, 1, 0, 1, 0, 0]);
+  assert.ok(String(body[1].content).includes("a.jpg") && !String(body[1].content).includes("attachments/"));
+  const later = Array.from({ length: 9 }, (_, n) => [said("user", `闲聊${n}`), said("lead", "嗯")]).flat();
+  const old = await asked([said("user", "（见附件）", { attachments: [three[0]] }), said("lead", "看到了。"), ...later], "hello", { attachments: [three[0]], supervisor: { calls: 1 } });
+  assert.equal(old.body.reduce((sum: number, item: any) => sum + shown(item), 0), 0);
+});
+
+test("a picture sent alone is told with little thinking", async () => {
+  const { sent } = await asked([], "（见附件）", { attachments: [picture()] });
+  assert.equal(sent[0].reasoning_effort, "low");
+});
+
+test("a picture that is gone does not break the chat", async () => {
+  const gone = picture();
+  files.remove(gone.id);
+  const { body, run } = await asked([said("user", "（见附件）", { attachments: [gone] }), said("lead", "看到了。")], "hello", { attachments: [gone], supervisor: { calls: 1 } });
+  assert.equal(body.reduce((sum: number, item: any) => sum + shown(item), 0), 0);
+  assert.equal(run.lead_messages.at(-1)!.status, "done");
+});
+
+test("a picture's bytes are not counted as that many tokens", async () => {
+  const { inputBound } = await import("../src/call-control.js");
+  const data = JPEG.toString("base64");
+  for (const content of [[{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${data}` } }],
+    [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }], [{ inline_data: { mime_type: "image/jpeg", data } }]]) {
+    assert.ok(inputBound({ messages: [{ role: "user", content }] }) < 20_000);
+  }
+});
+
+test("the words a group is framed with do not make every message work", () => {
+  const people = `群里的人：${"张三、".repeat(80)}\n（要 @ 谁就写 @ 加这里的名字，原样照写）\n\n`;
+  assert.equal(pkg.effortFor({ text: `${people}你好`, files: 0 }), "low");
+  assert.equal(pkg.effortFor({ text: `${people}帮我写一段代码`, files: 0 }), "high");
+});

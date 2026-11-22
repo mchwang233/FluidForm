@@ -49,6 +49,10 @@ export const CHAT_ROLE = "You are FluidForm's assistant, talking with people. Th
   + "last message says, directly and naturally, in Chinese unless they write in another language (a word like hello or ok is no reason to switch). What was "
   + "talked about earlier is background: do not bring an earlier subject up again unless they do, and "
   + "do not end each answer with a menu of what you could do.\n\n";
+export const PICTURES_GUIDE = "Pictures: you see the pictures in this conversation yourself, as they are shown to you. "
+  + "The file tool Read cannot show pictures: do not use it to look at one, and what it says of a picture is no sign that "
+  + "you cannot see. If an earlier answer here said you cannot see pictures, it was wrong. Of a picture sent without words, "
+  + "say in a sentence or two what it shows: only what is visible, no guess at the story behind it, and no question at the end.\n\n";
 const READ_ONLY = "You may read files and run read-only commands to look things up; do not edit anything.\n\n";
 const NO_TOOLS = "You have no tools here: answer from what you know, and say so when that needs looking up.\n\n";
 const WEB_WORK = "If what they want needs real work done (files changed, programs built), say so: they can "
@@ -189,6 +193,11 @@ export const KEPT_MAX = 24_000;
 export const SENT_MAX = 40_000;
 export const MAX_TURN_CHARS = 6000;
 export const MAX_SUMMARY_CHARS = 2000;
+// Pictures sent in the last turns are shown again each turn, where they were sent: this many, the latest.
+export const PICTURES_SHOWN = 2;
+export const PICTURE_TURNS = 8;
+// A picture this many turns back is still what "这是什么" is about.
+export const PICTURE_TALK_TURNS = 3;
 
 const sized = (messages) => messages.reduce((sum, item) => sum + item.text.length, 0);
 
@@ -209,11 +218,39 @@ function unsummarised(ctx) {
   const until = ctx.chat.summary?.until;
   const from = until ? all.findIndex((item) => item.id === until) + 1 : 0;
   return all.slice(from).filter((item) => item.status === "done" && (item.text || item.files?.length)).map((item) => {
-    const files = (item.files ?? []).map((file) => (file.path ? `${file.name}: ${file.path}` : file.name));
-    return { id: item.id, role: item.role === "user" ? "user" : "assistant",
+    const sent = item.files ?? [];
+    const pictures = sent.filter((file) => file.kind === "image");
+    const files = sent.filter((file) => file.kind !== "image").map((file) => (file.path ? `${file.name}: ${file.path}` : file.name));
+    return { id: item.id, role: item.role === "user" ? "user" : "assistant", pictures,
       text: head(item.text || "", MAX_TURN_CHARS) + (item.text && item.text.length > MAX_TURN_CHARS ? "\n[...]" : "")
         + (files.length ? `\n[sent with it, not repeated here; read it again only if asked: ${files.join(", ")}]` : "") };
   });
+}
+
+/** The pictures of ``turns`` shown again: the latest few of the last turns that can be shown ({id: how
+ *  many turns back}). Only a picture itself can be asked about: a tool cannot show one. */
+function picturesShown(turns) {
+  const shown = new Map();
+  let back = 0;
+  for (let index = turns.length - 1; index >= 0 && back < PICTURE_TURNS; index -= 1) {
+    if (turns[index].role !== "user") continue;
+    back += 1;
+    for (const file of [...turns[index].pictures].reverse()) {
+      if (file.show && shown.size < PICTURES_SHOWN && !shown.has(file.id)) shown.set(file.id, back);
+    }
+  }
+  return shown;
+}
+
+/** The turns that are sent of a chat's history. */
+const sentTurns = (ctx) => {
+  const turns = unsummarised(ctx);
+  return turns.slice(latest(turns, SENT_MAX));
+};
+
+/** Which pictures of a chat its next turn shows: its model must be one that sees. */
+export function pictures(ctx) {
+  return [...picturesShown(sentTurns(ctx)).keys()];
 }
 
 /** When it is, where this machine is. */
@@ -229,24 +266,33 @@ export function clock(now, offset) {
  *  nothing people said; what is remembered and the summary are told as the conversation's first
  *  words. ``now`` goes with the message asked, so all before it stays the same for the cache. */
 export function dialogue(ctx, memory, now, offset = 0) {
-  const turns = unsummarised(ctx);
-  const kept = turns.slice(latest(turns, SENT_MAX));
+  const kept = sentTurns(ctx);
+  const sees = ctx.model?.vision !== false;
+  const shown = sees ? picturesShown(kept) : new Map();
   const summary = ctx.chat.summary?.text;
   const background = known(ctx, memory) + (summary ? `之前聊过的（摘要，只作背景）：\n${summary}\n\n` : "");
   const messages = [];
   if (background) messages.push({ role: "user", content: background.trimEnd() });
   for (const turn of kept) {
+    const images = turn.pictures.filter((file) => shown.has(file.id)).map((file) => file.id);
+    const notes = turn.pictures.filter((file) => !shown.has(file.id)).map((file) => (sees
+      ? `\n[a picture, ${file.name}: it was shown when it was sent and is not shown again. What was said of it then stands; to look closer, ask them to send it again.]`
+      : `\n[a picture, ${file.name}: the model answering now cannot see pictures.]`)).join("");
+    const content = turn.text + notes;
     if (!messages.length && turn.role === "assistant") messages.push({ role: "user", content: "（更早的对话略）" });
     const before = messages[messages.length - 1];
-    if (before?.role === turn.role) before.content += `\n\n${turn.text}`;
-    else messages.push({ role: turn.role, content: turn.text });
+    if (before?.role === turn.role) {
+      before.content += `\n\n${content}`;
+      if (images.length) before.images = [...(before.images ?? []), ...images];
+    } else messages.push({ role: turn.role, content, ...(images.length ? { images } : {}) });
   }
   const before = [...new Set((ctx.chat.session?.previous ?? []).filter(Boolean))];
   const others = before.some((id) => id !== ctx.model?.id)
     ? `Some earlier answers here were another model (${before.join(", ")})'s, not yours: what they say about who they are or what `
       + "they can do is not about you.\n\n" : "";
   const project = ctx.chat.project_dir && ctx.model?.channel !== "cli" ? `The user's project folder is ${ctx.chat.project_dir}; its files are not visible to you here.\n\n` : "";
-  return { system: (role(ctx) + others + project).trimEnd(), messages, effort: effortFor(ctx.chat.asked), now: `（现在：${clock(now, offset)}）` };
+  const seeing = sees && (shown.size || ctx.chat.asked?.pictures) ? PICTURES_GUIDE : "";
+  return { system: (role(ctx) + others + project + seeing).trimEnd(), messages, effort: effortFor(ctx.chat.asked, Math.min(Infinity, ...shown.values())), now: `（现在：${clock(now, offset)}）` };
 }
 
 // Work, or something to think about, rather than talk.
@@ -258,9 +304,34 @@ export const LONG_MESSAGE = 200;
 
 /** How hard to think about the message asked: little for talk (people wait for each answer), more
  *  for work. */
-export function effortFor(asked) {
+export function effortFor(asked, pictureBack = Infinity) {
   if (!asked) return "low";
-  return asked.files || length(asked.text) > LONG_MESSAGE || THINKING.test(asked.text) ? "high" : "low";
+  if (asked.files) return "high";
+  const text = ownWords(asked.text);
+  if (!text || text === FILES_ONLY || text === CALLED_ONLY) return "low"; // a picture alone, say
+  if (length(text) > LONG_MESSAGE || THINKING.test(text)) return "high";
+  if (!asked.pictures && pictureBack === Infinity) return "low";
+  if (NAMES_PICTURE.test(text)) return "high";
+  return (asked.pictures || pictureBack <= PICTURE_TALK_TURNS) && ASKS_OF_PICTURE.test(text) ? "high" : "low";
+}
+
+// Files alone, as FluidForm words such a message (capability-runner.ts).
+const FILES_ONLY = "（见附件）";
+const NAMES_PICTURE = /图|照片|截图|picture|photo|image|screenshot/iu;
+const ASKS_OF_PICTURE = /这|那[只个张是边里]|什么|是谁|哪|认|几[只个条人]|多少|颜色|写的|写着|看|what|who|which/iu;
+
+/** What the person said themselves, without what it is framed with for the model (frame). */
+function ownWords(given) {
+  let text = given || "";
+  if (text.startsWith("FluidForm 告诉你，这之后发生了：") || text.startsWith("群里的人：")) {
+    for (let part = 0; part < 2 && /^(FluidForm 告诉你，这之后发生了：|群里的人：)/u.test(text); part += 1) {
+      const end = text.indexOf("\n\n");
+      if (end < 0) break;
+      text = text.slice(end + 2);
+    }
+  }
+  const asked = text.lastIndexOf("现在问你的：\n");
+  return (asked < 0 ? text : text.slice(asked + "现在问你的：\n".length)).trim();
 }
 
 /** What to ask a model so that older turns become the summary: {prompt, until}, or {} while few. */
@@ -601,6 +672,7 @@ export function methods(folder) {
     "chat.role": ({ ctx }) => ({ text: role(ctx) }),
     "chat.handover": ({ ctx, current = null }) => ({ text: handover(ctx, current) }),
     "chat.opening": ({ ctx, text }) => ({ text: opening(ctx, text, memory) }),
+    "chat.pictures": ({ ctx }) => ({ ids: pictures(ctx) }),
     "chat.dialogue": ({ ctx, now, utc_offset = 0 }) => dialogue(ctx, memory, now, utc_offset),
     "chat.compaction": ({ ctx }) => compaction(ctx),
     "chat.summary": ({ text }) => ({ text: head((text || "").trim(), MAX_SUMMARY_CHARS) }),
