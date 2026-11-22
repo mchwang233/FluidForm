@@ -69,9 +69,9 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 记录怎么读（`team.ts`）、给步骤看项目文件（`briefing.ts`）、分辨对话和任务（`triage.ts`）、产物约定的检查
 （`contracts.ts`，执行和验收都用）。
 
-第 3 步进行中：验收（另一个模型审结果、验证步骤的结论）和超时时问负责人已经搬到 `server/packages/lead/src`，
-本体通过 `lead.ts` 动态加载。还差负责人本身：`leading.ts`（失败后的决定、收尾、对话）和 `supervisor.ts` 里
-任务部分的提示词。`leading.ts` 在执行器的类继承链里，`supervisor.ts` 和聊天共用会话，都要先拆开。
+第 3 步进行中：验收（另一个模型审结果、验证步骤的结论）、超时时问负责人、负责人的决定（失败后、收尾、
+你回答之后、提议能力）已经搬到 `server/packages/lead/src`，本体通过 `lead.ts` 动态加载；`leading.ts` 只剩改任务
+的动作和对话的管道（和聊天共用）。还差 `supervisor.ts` 里负责人专用的提示词和读决定的代码。
 
 第 4–5 步还没做：平台工程师和经验的代码仍在 `server/src`，包里只有清单。
 
