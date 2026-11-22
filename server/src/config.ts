@@ -19,7 +19,9 @@ export const RETIRED = new Set([
   // Built-in tools replaced by MCP servers (mcp_servers): pictures, web search, reading a page.
   "image_models", "web_search_models", "web_fetch", "direct_task_planning", "adaptive_refinement",
   // Removed by the user's decision with the move to TypeScript: tools and hooks are added with MCP or skills.
-  "api_tool_extensions", "api_tool_hooks"]);
+  "api_tool_extensions", "api_tool_hooks",
+  // An automation's spending is counted, not limited (docs/design/capability-packages.md).
+  "capability_daily_budget_usd"]);
 
 const SettingsObject = z.object(SettingsFields).superRefine((value, context) => {
   for (const limits of Object.values(value.provider_limits)) {

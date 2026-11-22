@@ -6,7 +6,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import * as files from "../src/attachments.js";
-import { ProviderError } from "../src/budget.js";
+import { BudgetExceeded, ProviderError } from "../src/budget.js";
+import * as pricing from "../src/pricing.js";
 import * as capabilities from "../src/capabilities.js";
 import * as packages from "../src/capability-packages.js";
 import * as runners from "../src/capability-runner.js";
@@ -289,16 +290,6 @@ test("in a group it answers only what is meant for it, knowing what was said bef
   assert.ok(Object.keys(state.heard).length === 0 && Object.keys(state.spent).length);
 });
 
-test("past its budget it stays quiet where it was not called on", async () => {
-  const { api, client, runner } = withPackages();
-  triaging(api, '{"kind": "chat"}');
-  await upload(client, pkg([{ conversation: "g1", text: "随便聊聊", addressed: false }]));
-  await client.put("/api/capabilities/fake-bot/budget", { json: { daily_budget_usd: 0 }, headers: ORIGIN });
-  await enable(client);
-  const [reply] = await eventually(() => lines("replies.jsonl").length && lines("replies.jsonl"));
-  assert.ok(reply.reply === null && runner.get("fake-bot").state.notified !== runners.today());
-});
-
 test("a picture sent in a group without @ is seen when it is asked about", async () => {
   // Regression: a picture cannot @ the bot, and the question about it, asked next, came without it.
   const { api, client, runner } = withPackages();
@@ -447,7 +438,7 @@ test("an automation's model setting survives a reload and an upgrade, and is its
   const reloaded = new runners.Runner((c, a, i) => api.automations.message(c, a, i)).get("fake-bot");
   assert.equal(reloaded.public().model_id, OTHER.id);
   assert.deepEqual(reloaded.state.chats, { old: "old-chat" });
-  assert.ok(reloaded.public().daily_budget_usd === 3 && reloaded.public().handled === 7);
+  assert.ok(reloaded.public().handled === 7); // an older version's state, its limit included, still loads
   assert.equal((await chooseModel(client, null)).json().model_id, null);
   assert.equal(new runners.Automation("fake-bot").public().model_id, null);
 });
@@ -612,6 +603,7 @@ test("an automation's model does not change how its work is planned", async () =
   const [sent] = triaging(api, '{"kind": "chat"}', [ASK_FOR_WORK]);
   const [reply] = await botMessage(api, runner, "给商品接口加 Redis 缓存");
   assert.ok(reply!.includes("等主人确认后开工"));
+  assert.ok(!reply!.includes("$"), "no amounts in the chat app");
   assert.deepEqual(sent.map((item) => item[0]), [OTHER.id]);
   const [task] = tasks(api);
   assert.equal(task.status, "awaiting_confirmation");
@@ -652,6 +644,7 @@ test("work is asked for by the chat with the whole conversation, and its end is 
   assert.ok(replies[0].reply === "哪类接口？" && classified.length === 0);
   assert.ok(replies[1].reply.startsWith("好，我让 FluidForm 排个计划。") && replies[1].reply.includes("等主人确认后开工"));
   assert.ok(!replies[1].reply.includes("TASK"));
+  assert.ok(!replies[1].reply.includes("$"), "no amounts in the chat app");
   const [task] = tasks(api);
   assert.equal(task.prompt, "给商品接口加 Redis 缓存：缓存商品详情 5 分钟，改价时清掉");
   // The planner saw the conversation, not only the request.
@@ -674,15 +667,55 @@ test("work is asked for by the chat with the whole conversation, and its end is 
   assert.deepEqual(runner.get("fake-bot").state.notes, {});
 });
 
-test("past its day's budget it is told once, then nothing", async () => {
-  const { api, client } = withPackages();
+/** The models answer as real providers do: asking the budget before, recording what was used after. */
+function metered(api: Api): void {
+  const converse = api.providers.converse!.bind(api.providers);
+  api.providers.converse = async (session: SupervisorSession, prompt: string, options: any = {}) => {
+    if (!(await options.spend_ok.allows())) throw new BudgetExceeded("已达到任务可用的预算，模型调用被中止。");
+    await options.spend_ok.reserve(session.model_id, { prompt }, 4096);
+    const result = await converse(session, prompt, options);
+    await options.spend_ok.record(session.model_id, 500_000, 100_000, 0);
+    return result;
+  };
+}
+
+test("an automation counts what it spends and is never held back by it", async () => {
+  const { api, client, runner } = withPackages();
   triaging(api, '{"kind": "chat"}');
-  await upload(client, pkg([{ conversation: "c1", text: "在吗" }, { conversation: "c1", text: "在吗？" }]));
-  assert.equal((await client.put("/api/capabilities/fake-bot/budget", { json: { daily_budget_usd: 0 }, headers: ORIGIN })).status_code, 200);
+  metered(api);
+  await upload(client, pkg([{ conversation: "c1", text: "在吗" }, { conversation: "c1", text: "再问一句" }]));
+  // What an older version kept as its limit, long passed.
+  Object.assign(runner.get("fake-bot").state, { daily_budget_usd: 0, spent: { [runners.today()]: 500 } });
   await enable(client);
-  const [first, second] = await eventually(() => lines("replies.jsonl").length === 2 && lines("replies.jsonl"));
-  assert.ok(first.reply.includes("额度") && first.over_budget && second.reply === null);
-  assert.equal(api.db.listRuns().filter((run) => run.kind === "chat").length, 0);
+  const replies = await eventually(() => lines("replies.jsonl").length === 2 && lines("replies.jsonl"));
+  assert.deepEqual(replies.map((item: any) => item.reply), ["好的。", "嗯。"]);
+  assert.ok(replies.every((item: any) => !item.over_budget));
+  assert.ok(runner.get("fake-bot").spentToday() > 500);
+  assert.equal("daily_budget_usd" in runner.get("fake-bot").public(), false);
+});
+
+test("an automation answers when pricing does not, and a chat on the page still stops", async () => {
+  const { api, client, runner } = withPackages();
+  triaging(api, '{"meant": true}');
+  metered(api);
+  const ask = pricing.deps.ask;
+  pricing.deps.ask = async () => {
+    throw new Error("连不上");
+  };
+  try {
+    await upload(client, pkg([{ conversation: "c1", text: "在吗" }, { conversation: "g1", text: "随便聊聊", addressed: false }]));
+    await enable(client);
+    const [first, second] = await eventually(() => lines("replies.jsonl").length === 2 && lines("replies.jsonl"));
+    assert.equal(first.reply, "好的。");
+    // Not called on: judged all the same, without an error said in the group.
+    assert.ok(!String(second.reply ?? "").includes("没能处理"), second.reply);
+    assert.equal(runner.get("fake-bot").spentToday(), 0);
+    const page = await client.post("/api/chats", { json: { message: "你好", budget_usd: 1 }, headers: ORIGIN });
+    await api.executor.leadTasks.get(page.json().id)!.settled();
+    assert.match(api.db.getRun(page.json().id)!.lead_messages.at(-1)!.text, /停止花钱/);
+  } finally {
+    pricing.deps.ask = ask;
+  }
 });
 
 test("a crashing automation is restarted a few times, then left stopped", async () => {

@@ -111,7 +111,6 @@ const CapabilitySwitch = z.object({
   confirmed: z.boolean().default(false),
 });
 const CapabilitySecrets = z.object({ values: z.record(z.string(), z.string()) });
-const CapabilityBudget = z.object({ daily_budget_usd: z.number().gte(0).lte(1000) });
 const CapabilityModel = z.object({ model_id: text(200).nullish().default(null) });
 const PublishRequest = z.object({
   // Either create ``name`` with the saved token, or push to an existing empty ``remote``.
@@ -1241,15 +1240,6 @@ export function buildApp(api: Api): FastifyInstance {
     }
     for (const name of item.secrets) await secretStore.deleteSecret(packages.secretName(item.id, name));
     return reply.code(204).send();
-  });
-
-  // What an automation may spend a day deciding and answering.
-  app.put<{ Params: { capability_id: string } }>("/api/capabilities/:capability_id/budget", async (request) => {
-    const body = parse(CapabilityBudget, request.body);
-    const item = runner().get(capability(request.params.capability_id).id);
-    item.state.daily_budget_usd = body.daily_budget_usd;
-    item.save();
-    return item.public();
   });
 
   // Save an automation's chat model. Each chat adopts it before its next reply, after any active

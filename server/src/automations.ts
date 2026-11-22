@@ -13,7 +13,6 @@ import { type Asked, type Automation, CALLED_ONLY, type Handled, keepHeard, MAX_
 import { settings } from "./config.js";
 import { log } from "./log.js";
 import { type Capability, type ExecutionRun, folderId, LeadMessageSchema, type ModelProfile } from "./models.js";
-import { fixed } from "./py.js";
 import { briefWriter } from "./routing.js";
 import * as streaming from "./streaming.js";
 import * as supervisor from "./supervisor.js";
@@ -80,7 +79,7 @@ export class CapabilityAutomations {
       automation.note(chats.NOT_ENABLED);
       return [null, 0];
     }
-    const cheapest = await briefWriter(Object.values(api.models), api.configured());
+    const cheapest = await briefWriter(Object.values(api.models), api.configured(), { countOnly: true });
     // What was said where it was not called on (a group chat): kept, and told with the next message
     // it answers, so it knows what the group was talking about.
     const state = automation.state;
@@ -155,7 +154,7 @@ export class CapabilityAutomations {
         const chosen = pick;
         const prefix = `${capability.name} · `;
         const title = prefix + cut(firstLine(asked.text), Math.max(CHAT_TITLE_CHARS - [...prefix].length, 10));
-        run = await streaming.listener.run(asked.on_text, () => api.startChat(told + said, Math.max(automation.remaining(), 0.01), true, null,
+        run = await streaming.listener.run(asked.on_text, () => api.startChat(told + said, settings.default_budget_usd, true, null,
           chosen.id, attached, { autoRouted: true, spent, shown, origin, title }));
         if (asked.conversation) state.chats[asked.conversation] = run.id;
         break;
@@ -180,8 +179,6 @@ export class CapabilityAutomations {
         }
         // Where it is (private or a group), for a chat started before automations said so.
         if (asked.origin.chat_type && !(latest.origin ?? {}).chat_type) latest.origin = { ...(latest.origin ?? {}), chat_type: asked.origin.chat_type };
-        // The chat may spend what is left of the automation's day.
-        latest.budget_usd = round6(latest.actual_cost_usd + Math.max(automation.remaining(), 0.01));
         db.saveRun(latest);
         if (previous !== pick.id) executor.emit(chat.id, "run.lead_changed", { model_id: pick.id, previous_model_id: previous });
         [before, extra] = [latest.actual_cost_usd, spent];
@@ -300,9 +297,7 @@ export class CapabilityAutomations {
         latest.origin = { ...origin, conversation: asked.conversation, chat_run: chat.id };
         latest.auto_routed = true;
         this.api.db.saveRun(latest);
-        const estimate = latest.plan.estimate;
-        const guess = estimate ? `，预计 $${fixed(estimate.low_usd, 2)}–$${fixed(estimate.high_usd, 2)}` : "";
-        shown = `${shown}\n\n我在 FluidForm 里排好了计划「${taskName(latest)}」${guess}，等主人确认后开工，做完在这里告诉你。`.trim();
+        shown = `${shown}\n\n我在 FluidForm 里排好了计划「${taskName(latest)}」，等主人确认后开工，做完在这里告诉你。`.trim();
         automation.note(`排了任务「${taskName(latest)}」`);
       } catch (error) {
         // The answer still goes out, saying planning failed.

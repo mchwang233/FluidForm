@@ -5,7 +5,7 @@ import { formatUsd } from "./mission-history";
 
 /** A chat's page: its conversation (the lead panel in chat mode), and turning it into a task. */
 export type PromoteOptions = { prompt: string; budget_usd: number; use_cli: boolean; allow_network: boolean; attachments?: string[] };
-type ChatRun = { id: string; prompt?: string; project_dir?: string | null; use_cli: boolean; actual_cost_usd: number; budget_usd: number;
+type ChatRun = { id: string; origin?: { capability?: string } | null; prompt?: string; project_dir?: string | null; use_cli: boolean; actual_cost_usd: number; budget_usd: number;
   lead_messages?: { status: string }[]; plan: { summary: string } };
 
 export function ChatDetail({ run, model, auto = false, attachments, conversation, deleteButton, onPromote }: {
@@ -18,7 +18,7 @@ export function ChatDetail({ run, model, auto = false, attachments, conversation
   return <section className="panel detail task-page chat-page" aria-label="对话">
     <div className="task-header">
       <div className="task-title">
-        <p className="eyebrow task-meta"><span className="pill chat">对话</span>{auto && "自动识别 · "}{model} · 已花 {formatUsd(run.actual_cost_usd)} / {formatUsd(run.budget_usd)}
+        <p className="eyebrow task-meta"><span className="pill chat">对话</span>{auto && "自动识别 · "}{model} · 已花 {formatUsd(run.actual_cost_usd)}{!run.origin?.capability && <> / {formatUsd(run.budget_usd)}</>}
           {run.project_dir && <span className="project-path" title={run.project_dir}> · <Icon name="folder" size={13} /> {run.project_dir}</span>}</p>
         <h3 title={run.plan.summary}>{run.plan.summary}</h3>
       </div>

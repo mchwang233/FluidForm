@@ -163,7 +163,6 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
         for (const name of Object.keys(body.values)) entry.secrets[name] = true;
         return json({ secrets: entry.secrets });
       }
-      if (sub === "budget") { runtime.capabilities[id].daily_budget_usd = body.daily_budget_usd; return json(runtime.capabilities[id]); }
       if (sub === "model") {
         if (state.holdModelSave) await new Promise(resolve => { state.releaseModelSave = resolve; });
         if (state.modelSaveError) return json({ detail: state.modelSaveError }, 422);
@@ -903,7 +902,7 @@ test("a capability package is uploaded, given its secrets, enabled after confirm
     domains: ["*.feishu.cn"], id: "feishu-bot", status: "disabled", source: "upload", version: "1.0.0", entry: "python bot.py", check_output: "", created_at: "2026-11-19T08:00:00Z" };
   state.uploadPackage = bot;
   state.capabilityRuntime = { available: true, missing: "", capabilities: { "feishu-bot": { secrets: { FEISHU_APP_ID: false, FEISHU_APP_SECRET: false }, status: "off", text: "", error: "",
-    log: ["08:00:01 启动"], daily_budget_usd: 2, spent_today_usd: 0.12, handled: 3, conversations: 1 } } };
+    log: ["08:00:01 启动"], spent_today_usd: 0.12, handled: 3, conversations: 1 } } };
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
   await settle();
   await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head")));
@@ -944,12 +943,9 @@ test("a capability package is uploaded, given its secrets, enabled after confirm
   assert.deepEqual(state.capabilityCalls.find(call => call[0] === "PATCH")[3], { enabled: true, confirmed: true });
   assert.match(card().textContent, /可用.*运行中/s);
   assert.equal(card().querySelector('[aria-label="确认启用"]'), null);
-  // Its daily budget.
-  const budget = card().querySelector('[aria-label="每天最多花（美元）"]');
-  await type(budget, "5");
-  await act(async () => budget.dispatchEvent(new window.Event("focusout", { bubbles: true })));
-  await settle();
-  assert.ok(state.capabilityCalls.some(call => call[2] === "budget" && call[3].daily_budget_usd === 5));
+  // What it spent is shown, with no limit to set.
+  assert.match(card().textContent, /今天花了/);
+  assert.equal(card().querySelector('[aria-label="每天最多花（美元）"]'), null);
   // Uninstalled.
   await click(button("卸载", card()));
   await click(button("确认卸载", card()));

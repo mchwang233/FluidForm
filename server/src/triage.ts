@@ -53,7 +53,7 @@ export async function addressed(prompt: string, providers: Completer, model: Mod
     log.warning(`deciding whether to answer with ${model.id} failed: ${(error as Error).message ?? error}`);
     return ["", 0];
   }
-  return [result.text || "", await costOf(model, result)];
+  return [result.text || "", await pricing.countOnly(() => costOf(model, result), 0)];
 }
 
 /** "chat" only when the answer clearly says so. */

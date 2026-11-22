@@ -15,6 +15,9 @@ export type CallRecord = Record<string, any> & {
 
 export const current = new ContextVar<[Pick<Database, "saveModelCall"> | null, CallRecord] | null>("model_call", null);
 
+// Whether the call being made is only counted (budget.countOnly).
+const counting = new ContextVar<boolean>("count_only", false);
+
 /** Membership CLIs' usage against their quota (cli_quota.record), set when that module loads. */
 export const hooks = { membershipUsage: (_modelId: string, _input: number, _output: number, _cached: number): void => undefined };
 
@@ -37,7 +40,8 @@ export async function usage(model: Priced | null | undefined, inputTokens: numbe
   const record = row();
   if (record === null) return;
   // What the pricing package charges for it (asked first: the counts below change together).
-  const cost = await pricing.charge(model ? { ...model, id: record.model_id } : null, inputTokens || 0, outputTokens || 0, cached || 0);
+  const charged = () => pricing.charge(model ? { ...model, id: record.model_id } : null, inputTokens || 0, outputTokens || 0, cached || 0);
+  const cost = counting.get() ? await pricing.countOnly(charged, 0) : await charged();
   record.usage_known = record.usage_known && known;
   for (const [name, count] of [["input_tokens", inputTokens], ["output_tokens", outputTokens], ["cached_input_tokens", cached],
     ["cache_write_tokens", cacheWrite]] as const) record[name] += count || 0;
@@ -65,14 +69,14 @@ export async function observed<R extends Counted>(owner: CallOwner, name: "compl
     started_at: nowIso().replace(/Z$/, "+00:00"), status: "running", requested_effort: options.effort ?? null, effective_effort: "unspecified",
     input_tokens: 0, output_tokens: 0, cached_input_tokens: 0, cache_write_tokens: 0, usage_known: true, cost_usd: 0, requests: 0,
     retries: 0, queue_seconds: 0, duration_seconds: 0, warnings: [], exchanges: [] };
-  return current.run([owner.db, record], async () => {
+  return counting.run(Boolean(context.count_only), () => current.run([owner.db, record], async () => {
     const started = performance.now();
     save();
     try {
       const result = await call();
       if (!record.requests && !record.delegated) {
         const model = owner.models instanceof Map ? owner.models.get(modelId) : owner.models[modelId];
-        usage(model, result.input_tokens, result.output_tokens, result.cached_input_tokens, result.cache_write_tokens ?? 0, result.usage_known ?? true);
+        await usage(model, result.input_tokens, result.output_tokens, result.cached_input_tokens, result.cache_write_tokens ?? 0, result.usage_known ?? true);
       }
       result.warnings = [...new Set([...(result.warnings ?? []), ...record.warnings])];
       result.usage_known = record.usage_known && (result.usage_known ?? true);
@@ -89,5 +93,5 @@ export async function observed<R extends Counted>(owner: CallOwner, name: "compl
       record.duration_seconds = pyRound((performance.now() - started) / 1000, 3);
       save();
     }
-  });
+  }));
 }

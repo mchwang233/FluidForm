@@ -19,7 +19,7 @@
 //
 // What a message becomes (a chat's answer, or a task waiting for the owner's confirmation) is decided by
 // ``handle`` (the API). This module keeps each automation running (a crash is restarted, a few times),
-// its log, its daily budget and its state, which it keeps out of the automation's reach.
+// its log, what it spent and its state, which it keeps out of the automation's reach.
 import type { ChildProcess } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
@@ -31,8 +31,8 @@ import * as sandbox from "./capability-sandbox.js";
 import { settings } from "./config.js";
 import { log } from "./log.js";
 import type { Attachment, Capability } from "./models.js";
-import { formatG, pyDumps, pyRound } from "./py.js";
-import { Mutex, sleep, Task } from "./tasks.js";
+import { pyDumps, pyRound } from "./py.js";
+import { sleep, Task } from "./tasks.js";
 
 // Restarted after a crash at most this many times in a row; running this long resets the count.
 export const limits = { RESTART_PAUSE: 10.0, STABLE_SECONDS: 120.0, PICTURE_WAIT_SECONDS: 8.0, MAX_RESTARTS: 5, PROGRESS_SECONDS: 0.5 };
@@ -61,7 +61,7 @@ export const MAX_PERSON_CHARS = 40;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-/** The automation's day, on this machine's clock: its budget starts again at midnight. */
+/** The automation's day, on this machine's clock: what it spent is counted by the day. */
 export function today(): string {
   const now = new Date();
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -168,10 +168,10 @@ export const deps = { takeFiles };
 /** Why an automation cannot run until the user changes something. */
 export class Fatal extends Error {}
 
-type State = { daily_budget_usd: number; spent: Record<string, number>; notified: string; chats: Record<string, any>; handled: number;
+type State = { spent: Record<string, number>; chats: Record<string, any>; handled: number;
   model_id: string | null; chat_preferences: Record<string, any>; [key: string]: any };
 
-/** One automation: its process, state, log and budget. */
+/** One automation: its process, state, log and what it spent today. */
 export class Automation {
   state: State;
   status = "off";
@@ -180,10 +180,8 @@ export class Automation {
   readonly log: string[] = [];
   task: Task<void> | null = null;
   process: ChildProcess | null = null;
-  readonly lock = new Mutex();
-
   constructor(readonly id: string) {
-    this.state = { daily_budget_usd: settings.capability_daily_budget_usd, spent: {}, notified: "", chats: {}, handled: 0, model_id: null, chat_preferences: {} };
+    this.state = { spent: {}, chats: {}, handled: 0, model_id: null, chat_preferences: {} };
     try {
       Object.assign(this.state, JSON.parse(readFileSync(statePath(id), "utf8")));
     } catch {
@@ -210,12 +208,8 @@ export class Automation {
     if (amount > 0) this.state.spent = { [today()]: pyRound(this.spentToday() + amount, 6) }; // only today's is kept
   }
 
-  remaining(): number {
-    return Math.max(0, Number(this.state.daily_budget_usd) - this.spentToday());
-  }
-
   public(): Record<string, unknown> {
-    return { status: this.status, text: this.text, error: this.error, log: this.log.slice(-80), daily_budget_usd: Number(this.state.daily_budget_usd),
+    return { status: this.status, text: this.text, error: this.error, log: this.log.slice(-80),
       spent_today_usd: this.spentToday(), model_id: this.state.model_id, handled: Math.trunc(Number(this.state.handled ?? 0)),
       conversations: Object.keys(this.state.chats).length };
   }
@@ -468,24 +462,6 @@ export class Runner {
       origin: payload.origin && typeof payload.origin === "object" && !Array.isArray(payload.origin) ? payload.origin as Record<string, unknown> : {},
       attachments: attached, on_text: Runner.progress(item, request), addressed, sender: [...String(payload.sender || "")].slice(0, 40).join(""),
       people: groupPeople(payload.people) });
-    const refused = await item.lock.run(async () => {
-      if (item.remaining() <= 0 && !question.addressed) {
-        await this.send(item, { re: request, reply: null, over_budget: true }); // it was not asked
-        return true;
-      }
-      if (item.remaining() <= 0) {
-        let notice: string | null = null;
-        if (item.state.notified !== today()) {
-          item.state.notified = today();
-          item.save();
-          notice = `今天的额度（$${formatG(Number(item.state.daily_budget_usd))}）用完了，明天再来；也可以请主人在 FluidForm 里调高。`;
-        }
-        await this.send(item, { re: request, reply: notice, over_budget: true });
-        return true;
-      }
-      return false;
-    });
-    if (refused) return;
     let sent: string[] = [];
     let reply: string | null;
     let cost: number;

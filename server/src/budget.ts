@@ -37,6 +37,8 @@ export type RequestBudgetOptions = {
   useTurn?: (() => Promise<void> | void) | null;
   scope?: unknown;
   waitForStep?: boolean;
+  /** What is spent is counted and nothing is limited by it (an automation's chat). */
+  countOnly?: boolean;
 };
 
 export class RequestBudget {
@@ -51,6 +53,7 @@ export class RequestBudget {
   readonly useTurn: (() => Promise<void> | void) | null;
   readonly scope: unknown;
   readonly waitForStep: boolean;
+  readonly countOnly: boolean;
 
   constructor(options: RequestBudgetOptions) {
     this.models = options.models;
@@ -63,6 +66,7 @@ export class RequestBudget {
     this.useTurn = options.useTurn ?? null;
     this.scope = options.scope ?? null;
     this.waitForStep = options.waitForStep ?? true;
+    this.countOnly = options.countOnly ?? false;
   }
 
   private model(id: string): Priced | undefined {
@@ -85,7 +89,7 @@ export class RequestBudget {
   /** Whether the run may go on (Python's __call__): the pricing package decides from what is left.
    *  Usage is already charged by record(); without pricing nothing limits it. */
   async allows(): Promise<boolean> {
-    if (!pricing.enabled()) return true;
+    if (this.countOnly || !pricing.enabled()) return true;
     const answer = await pricing.allows({ remaining: this.remaining(), step_remaining: this.stepRemaining?.() ?? null });
     if (answer.stop === "step") throw new StepLimitExceeded(answer.message!);
     return Boolean(answer.ok);
@@ -93,7 +97,7 @@ export class RequestBudget {
 
   /** The output tokens this call may ask for, holding their cost until record() or release(). */
   async reserve(modelId: string, payload: unknown, maximum = 4096): Promise<number> {
-    if (!pricing.enabled()) return maximum;
+    if (this.countOnly || !pricing.enabled()) return maximum;
     const model = this.model(modelId);
     // UTF-8 bytes plus protocol overhead bound the input tokens (pricing decides what they cost).
     const inputBytes = Buffer.byteLength(pyDumps(payload, false), "utf8");
@@ -126,7 +130,7 @@ export class RequestBudget {
 
   /** Whether ``cost`` more (a picture, say) fits what is left, besides what others hold. */
   async canSpend(cost: number): Promise<boolean> {
-    if (!pricing.enabled()) return true;
+    if (this.countOnly || !pricing.enabled()) return true;
     return pricing.fits({ cost, remaining: this.remaining(), others: this.others(), step_remaining: this.stepRemaining?.() ?? null });
   }
 
@@ -142,7 +146,8 @@ export class RequestBudget {
     try {
       const model = this.model(modelId);
       if (pricing.enabled() && pricing.priced(model)) {
-        const cost = await pricing.charge({ ...model!, id: modelId }, inputTokens, outputTokens, cachedTokens);
+        const charged = () => pricing.charge({ ...model!, id: modelId }, inputTokens, outputTokens, cachedTokens);
+        const cost = this.countOnly ? await pricing.countOnly(charged, 0) : await charged();
         await this.charge(cost);
         this.spent += cost;
       }

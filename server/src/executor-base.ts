@@ -252,26 +252,29 @@ export abstract class ExecutorBase {
     const counted = limits.length > 0 && work && !modelId.startsWith("cli:");
     if (!this.reservations.has(run.id)) this.reservations.set(run.id, new Map());
     if (!this.budgetEvents.has(run.id)) this.budgetEvents.set(run.id, new AsyncEvent());
-    const budget = Object.assign(new RequestBudget({ models: this.modelLookup, remaining, reservations: this.reservations.get(run.id)!, charge,
+    // An automation's chat (the Feishu bot's) is counted, never held back by what it costs.
+    const countOnly = !node && run.kind === "chat" && Boolean(run.origin?.capability);
+    const cost = (work: () => Promise<number>) => (countOnly ? pricing.countOnly(work, 0) : work());
+    const budget = Object.assign(new RequestBudget({ countOnly, models: this.modelLookup, remaining, reservations: this.reservations.get(run.id)!, charge,
       changed: this.budgetEvents.get(run.id)!,
       stepRemaining: limits.length ? () => Math.min(...currentLimits().map((n) => n.artifact_contract!.max_cost_usd - n.contract_cost_usd)) : null,
       turnRemaining: counted ? () => Math.min(...currentLimits().map((n) => n.artifact_contract!.max_turns - n.contract_turns)) : null,
       useTurn: counted ? useTurn : null, scope: limits.length ? `${run.id}\0${limits.at(-1)!.id}` : null, waitForStep: work }), {
       beginTool: counted ? beginTool : null,
       toolRemaining: counted ? () => Math.min(...currentLimits().map((n) => n.artifact_contract!.max_turns - n.contract_tool_calls)) : null,
-      context: { run_id: run.id, node_id: node ? node.id : null, purpose: work ? "work" : "review_or_control" },
+      context: { run_id: run.id, node_id: node ? node.id : null, count_only: countOnly, purpose: work ? "work" : "review_or_control" },
     });
     let result: ProviderResult | null = null;
     try {
       result = await call(budget as unknown as SpendOk);
       // CLI calls and provider adapters without streaming usage are accounted here.
-      const extra = Math.max(0, (await this.actualCost(result, node, node && modelId === node.model_id ? null : modelId)) - budget.spent);
+      const extra = Math.max(0, (await cost(() => this.actualCost(result!, node, node && modelId === node.model_id ? null : modelId))) - budget.spent);
       await charge(extra);
       result.accounted_cost_usd = budget.spent + extra;
       return result;
     } catch (error) {
       const usage = (error as Json)?.usage || result;
-      const extra = usage ? Math.max(0, (await this.actualCost(usage, node, modelId)) - budget.spent) : 0;
+      const extra = usage ? Math.max(0, (await cost(() => this.actualCost(usage, node, modelId))) - budget.spent) : 0;
       await charge(extra);
       if (error && typeof error === "object") (error as Json).accounted_cost_usd = budget.spent + extra;
       throw error;

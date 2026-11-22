@@ -27,7 +27,6 @@ export const SettingsFields = {
   skill_reuse_first: lax.bool().default(() => (true)),
   capability_proposals: lax.bool().default(() => (true)),
   capability_packages: lax.bool().default(() => (true)),
-  capability_daily_budget_usd: lax.number(z.number().min(0).max(1000)).default(() => (2.0)),
   skill_generation_max_turns: lax.int(z.number().int().min(1).max(30)).default(() => (6)),
   learning_enabled: lax.bool().default(() => (false)),
   learning_budget_usd: lax.number(z.number().min(0).max(100)).default(() => (0.5)),

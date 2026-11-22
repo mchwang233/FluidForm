@@ -114,7 +114,7 @@ uninstalled again, without touching FluidForm's source or restarting it
 - **Automations.** An automation package keeps running in the background and talks to FluidForm
   in JSON lines. A question someone sends it is answered in a chat. Work it is asked to do becomes a
   task that waits for your confirmation, and the result goes back to it when the task ends. It has
-  a daily budget (`FLUIDFORM_CAPABILITY_DAILY_BUDGET_USD`, default $2) and is restarted if it
+  its spending counted by the day (shown on its card, never a limit) and is restarted if it
   crashes.
 
 Packages are kept apart from this source, on the `capabilities` branch. The first one there is the

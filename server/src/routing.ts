@@ -202,11 +202,12 @@ export async function pickReviewer(models: ModelProfile[], configured: Set<strin
 
 /** Who writes the project brief: the cheapest API model with a large enough context, the most
  *  reliable among equally cheap ones. Plain summaries need no strong model. */
-export async function briefWriter(models: ModelProfile[], configured: Set<string>): Promise<ModelProfile | null> {
+export async function briefWriter(models: ModelProfile[], configured: Set<string>, { countOnly = false } = {}): Promise<ModelProfile | null> {
   const available = models.filter((model) => model.enabled && routingReady(model) && configured.has(model.id) && model.channel !== "cli"
     && model.provider !== "mock" && (model.context_window || 0) >= BRIEF_CONTEXT);
   if (!available.length) return null;
-  const rates = await pricing.rates(available);
+  const ask = () => pricing.rates(available);
+  const rates = countOnly ? await pricing.countOnly(ask, {}) : await ask();
   return minBy(available, (model) => [rates[model.id] ?? 0, -model.scores!.reliability]);
 }
 

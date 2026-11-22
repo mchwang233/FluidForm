@@ -7,6 +7,7 @@
 // models are chosen by their scores alone. With one that does not answer, spending stops.
 import { PricingUnavailable } from "./budget.js";
 import type { CostEstimate, ExecutionRun, ModelProfile, TaskNode } from "./models.js";
+import { log } from "./log.js";
 import { CostEstimateSchema } from "./model-schemas.js";
 import { hooks as modelHooks } from "./models.js";
 import * as services from "./services.js";
@@ -45,6 +46,18 @@ async function ask(method: string, params: Json): Promise<Json> {
 const terms = (model: Terms) => ({ id: model.id, provider: model.provider ?? "", channel: model.channel ?? "api",
   input_per_million: model.input_per_million ?? null, output_per_million: model.output_per_million ?? null,
   cached_input_per_million: model.cached_input_per_million ?? null });
+
+/** ``work`` where pricing only keeps count (an automation's chat): when it does not answer, nothing
+ *  stops; ``otherwise`` stands in, so that one time is not counted. */
+export async function countOnly<T>(work: () => Promise<T>, otherwise: T): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (!(error instanceof PricingUnavailable)) throw error;
+    log.warning(`not counted: ${error.message}`);
+    return otherwise;
+  }
+}
 
 /** What a call cost; 0 without pricing, or for a model without a price. */
 export async function charge(model: Terms | null | undefined, inputTokens: number, outputTokens: number, cachedTokens = 0): Promise<number> {

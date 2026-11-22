@@ -23,7 +23,7 @@ export type CapabilityProposal = CapabilityCard & { status: "proposed" | "solidi
 /** An uploaded package's secrets stored, and an automation's state (server: capability-runner.ts). */
 type Runtime = {
   secrets: Record<string, boolean>; status?: string; text?: string; error?: string; log?: string[];
-  daily_budget_usd?: number; spent_today_usd?: number; handled?: number; conversations?: number;
+  spent_today_usd?: number; handled?: number; conversations?: number;
   model_id?: string | null;
 };
 type Runtimes = { available: boolean; missing: string; capabilities: Record<string, Runtime> };
@@ -117,7 +117,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
             <li>能访问：{item.domains.length ? item.domains.join("、") : "不联网"}（只有这些）</li>
             {!!item.secrets.length && <li>会拿到你填的：{item.secrets.join("、")}</li>}
             <li>只能写它自己的数据文件夹，看不到你的主目录和 FluidForm 的数据</li>
-            {item.kind === "automation" && <li>别人通过它提的事要你确认才开工，每天的花费有上限</li>}
+            {item.kind === "automation" && <li>别人通过它提的事要你确认才开工；回答的花费只记账，不设上限</li>}
             {!!item.provides?.length && <li>给 FluidForm 提供{named(item.provides)}能力，拿不到你的 API 密钥</li>}
           </ul>}
           {!!lacking.length && <p className="capability-confirm-missing">先在下面填好 {lacking.join("、")}。</p>}
@@ -146,11 +146,11 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
   </section>;
 }
 
-/** An uploaded package's secrets, and an automation's chat model, state, daily budget and log. */
+/** An uploaded package's secrets, and an automation's chat model, state, spending and log. */
 function PackageControls({ apiBase, item, state, onChanged, act }: {
   apiBase: string; item: Capability; state: Runtime; onChanged: () => Promise<unknown>; act: (promise: Promise<unknown>) => Promise<boolean>;
 }) {
-  const [values, setValues] = useState<Record<string, string>>({}), [budget, setBudget] = useState("");
+  const [values, setValues] = useState<Record<string, string>>({});
   const url = `${apiBase}/api/capabilities/${encodeURIComponent(item.id)}`;
   const running = RUNNING[state.status ?? "off"] ?? RUNNING.off, filled = Object.values(values).some(value => value.trim());
   async function save(event: FormEvent) {
@@ -166,13 +166,6 @@ function PackageControls({ apiBase, item, state, onChanged, act }: {
     {state.error && <p className="error" role="alert">{state.error}</p>}
     {item.kind === "automation" && <div className="capability-settings">
       <AutomationModel apiBase={apiBase} url={url} name={item.name} modelId={state.model_id} onChanged={onChanged} />
-      <div className="capability-field capability-budget">
-        <label htmlFor={`budget-${item.id}`}>每天最多花</label>
-        <span className="capability-money"><span>$</span><input id={`budget-${item.id}`} type="number" min="0" step="any" inputMode="decimal" aria-label="每天最多花（美元）"
-          value={budget || String(state.daily_budget_usd ?? "")} onChange={event => setBudget(event.target.value)}
-          onBlur={() => { const value = Number(budget); if (budget && value >= 0 && value !== state.daily_budget_usd) void act(call(`${url}/budget`, sendJson("PUT", { daily_budget_usd: value }))).then(() => setBudget("")); }} /></span>
-        <small>判断和回答的花费；排好的任务按你确认的预算另算。</small>
-      </div>
     </div>}
     {!!item.secrets.length && <form className="capability-secrets" onSubmit={save} aria-label={`${item.name}的密钥`}>
       {item.secrets.map(name => <label key={name}>{name}<input type="password" autoComplete="new-password" value={values[name] ?? ""}

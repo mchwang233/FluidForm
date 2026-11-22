@@ -1726,7 +1726,5 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 .capability-field .error{font-size:12px}
 .capability-field-state{font-size:11.5px;color:var(--faint)}
 .capability-field-state.ok{color:var(--ok,light-dark(#1f9d55,#3ccb7f))}
-.capability-money{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
-.capability-money input{width:96px}
 .capability-package .capability-check{margin:0}
 .capability-confirm .capability-confirm-missing{margin:0 0 8px!important;font-size:12.5px!important;color:var(--danger)!important}

@@ -87,10 +87,13 @@ unpacked and `MAX_PACKAGE_FILES` files.
       automation that does not know it ignores it.
   - **Restarts:** a crash is restarted after a pause, at most `MAX_RESTARTS` times in a row; then
     it stays stopped with its log.
-  - **Daily budget:** each automation has one (`capability_daily_budget_usd`, changeable). Past
-    it, the asker is told once a day, then nothing more is answered that day.
+  - **Spending (2026-11-22, the user's decision):** counted by the day and shown on the card, never a
+    limit: no daily budget, no amounts said in the chat app. A chat from an automation
+    (`origin.capability`) is count-only (`budget.countOnly`): when pricing does not answer, it
+    answers all the same and that call is not counted. A task planned from it has its own budget,
+    confirmed by the owner, as any task.
   - **State:** kept in `<data_dir>/capability-host/<id>.json`, out of the capability's reach:
-    the budget, the spend, the chat that holds each conversation, the count, the chat model
+    the spend, the chat that holds each conversation, the count, the chat model
     preference (`model_id`, null means automatic), and the last preference applied to each chat
     (`chat_preferences`). Old state defaults to automatic; these settings survive restart and
     package upgrades and stay independent for each capability.
