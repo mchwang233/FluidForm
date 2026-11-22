@@ -11,7 +11,7 @@ import { CliError, InputTooLarge } from "../src/cli-channels.js";
 import { settings } from "../src/config.js";
 import { SupervisorSessionSchema } from "../src/models.js";
 import { ProviderRegistry, ProviderResult } from "../src/providers.js";
-import * as triage from "../src/triage.js";
+import * as quickly from "../packages/planning/src/quick.js";
 import { isolated, registryWith } from "./helpers/providers.js";
 
 const { folder } = isolated();
@@ -97,20 +97,20 @@ const cheap = { id: "x:cheap", input_per_million: 0, output_per_million: 0, cach
 const answering = (text: string) => ({ complete: async () => new ProviderResult(text, 1, 1) });
 
 test("a quick answer is read defensively", async () => {
-  const [step] = await triage.quick("x", answering('好的：{"quick": true, "capability": "rm -rf"}'), cheap);
+  const [step] = await quickly.quick("x", answering('好的：{"quick": true, "capability": "rm -rf"}'), cheap);
   assert.ok(step && step.capability === "tool_use" && step.title === "x" && step.needs_images === false);
-  assert.equal((await triage.quick("x", answering("{"), cheap))[0], null);
-  assert.equal((await triage.quick("x", answering(QUICK), null))[0], null);
+  assert.equal((await quickly.quick("x", answering("{"), cheap))[0], null);
+  assert.equal((await quickly.quick("x", answering(QUICK), null))[0], null);
 });
 
 test("shapes are read defensively", async () => {
-  assert.equal((await triage.quick("x", answering(SOLO), cheap, true))[0]!.shape, "solo");
-  assert.equal((await triage.quick("x", answering('{"shape": "plan"}'), cheap, true))[0], null);
+  assert.equal((await quickly.quick("x", answering(SOLO), cheap, true))[0]!.shape, "solo");
+  assert.equal((await quickly.quick("x", answering('{"shape": "plan"}'), cheap, true))[0], null);
   // A project's task is never "quick" (it touches their files), and without solo never judged.
-  assert.equal((await triage.quick("x", answering('{"shape": "quick"}'), cheap, true, true))[0], null);
-  assert.equal((await triage.quick("x", answering(SOLO), cheap, false, true))[0], null);
+  assert.equal((await quickly.quick("x", answering('{"shape": "quick"}'), cheap, true, true))[0], null);
+  assert.equal((await quickly.quick("x", answering(SOLO), cheap, false, true))[0], null);
   // Without solo, the old question and answer.
-  assert.equal((await triage.quick("x", answering(SOLO), cheap))[0], null);
+  assert.equal((await quickly.quick("x", answering(SOLO), cheap))[0], null);
 });
 
 test("an API refinement's effort is sent, and the lead's default stays", async () => {

@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { z } from "zod";
 import * as files from "./attachments.js";
 import { BenchmarkCatalog } from "./benchmarks.js";
-import * as briefing from "./briefing.js";
 import * as capabilities from "./capabilities.js";
 import { CapabilityAutomations } from "./automations.js";
 import { CatalogSync, seedCatalog } from "./catalog-sync.js";
@@ -26,7 +25,7 @@ import {
   type Attachment, type ExecutionRun, ExecutionRunSchema, EventSchema, FINISHED, folderId, type ModelProfile,
   type SupervisorSession, SupervisorSessionSchema, type TaskPlan, TaskNodeSchema, TaskPlanSchema,
 } from "./models.js";
-import { autonomousPlan } from "./planning.js";
+import { autonomousPlan, planningBrief, quick } from "./planning.js";
 import { ProjectDirError, projectContext, resolveProjectDir } from "./projects.js";
 import { ProviderRegistry } from "./providers.js";
 import * as publish from "./publish.js";
@@ -198,7 +197,7 @@ export class Api {
   /** The service packages: capabilities FluidForm itself uses (services.ts). */
   readonly services = new ServiceHost();
   /** What tests replace. */
-  readonly deps = { autonomousPlan, setProviderKey, classify: triage.classify, quick: triage.quick, addressed: triage.addressed };
+  readonly deps = { autonomousPlan, setProviderKey, classify: triage.classify, quick, addressed: triage.addressed };
   // Tasks being planned again with the user's choices (one replanning at a time per task).
   readonly replanning = new Set<string>();
   discovery: { at: number; result: unknown } = { at: 0, result: null };
@@ -384,7 +383,7 @@ export class Api {
     // The brief is the planning capability's: without it the one step reads the project itself.
     if (root && uses.planning() && isFullFolder(root)) {
       const writer = settings.project_brief ? await briefWriter(Object.values(this.models), configured) : null;
-      [brief, briefCost] = await briefing.planningBrief(root, settings.data_dir, this.providers, writer);
+      [brief, briefCost] = await planningBrief(root, settings.data_dir, this.providers, writer);
     }
     const session = SupervisorSessionSchema.parse({});
     const asked = background ? `${background}\n\n新需求：\n${request}` : request;

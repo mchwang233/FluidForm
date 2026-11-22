@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import * as briefing from "../src/briefing.js";
+import * as planningBriefs from "../packages/planning/src/brief.js";
 import { settings } from "../src/config.js";
 import { ModelProfileSchema } from "../src/models.js";
 import * as projects from "../src/projects.js";
@@ -142,7 +143,7 @@ test("the native picker opens at the requested folder when it is allowed", async
 function writer() {
   const state = { summarized: [] as string[], overviews: 0 };
   const ask = async (prompt: string) => {
-    if (prompt.startsWith(briefing.OVERVIEW_PROMPT)) {
+    if (prompt.startsWith(planningBriefs.OVERVIEW_PROMPT)) {
       state.overviews += 1;
       return "A small tool. Run tests with: python -m pytest";
     }
@@ -166,13 +167,13 @@ test("the brief is written once, then only for changed files", async () => {
   const code = project(join(folder, "p"));
   const data = join(folder, "data");
   const ask = writer();
-  let brief = await briefing.refresh(code, data, ask);
+  let brief = await planningBriefs.refresh(code, data, ask);
   assert.deepEqual([...ask.state.summarized].sort(), ["README.md", "app.py"]); // no logs, no secrets
   assert.ok(brief.overview!.startsWith("A small tool"));
   writeFileSync(join(code, "app.py"), "def main():\n    return 1\n");
   unlinkSync(join(code, "README.md"));
   ask.state.summarized.length = 0;
-  brief = await briefing.refresh(code, data, ask);
+  brief = await planningBriefs.refresh(code, data, ask);
   assert.deepEqual(ask.state.summarized, ["app.py"]);
   assert.deepEqual(Object.keys(brief.files), ["app.py"]);
   assert.equal(ask.state.overviews, 1);
@@ -190,6 +191,6 @@ test("the planner gets the brief", async () => {
   const cheap = ModelProfileSchema.parse({ id: "cheap:api", provider: "cheap", display_name: "cheap:api", channel: "api", context_window: 1_000_000,
     input_per_million: 1, output_per_million: 1, execution_priority: 100, scores: { coding: 80, planning: 80, reliability: 90 } });
   const providers = { complete: async (modelId: string, prompt: string) => new ProviderResult(await writer()(prompt), 1000, 100, modelId) };
-  const [text, cost] = await briefing.planningBrief(code, join(folder, "data"), providers, cheap);
+  const [text, cost] = await planningBriefs.planningBrief(code, join(folder, "data"), providers, cheap);
   assert.ok(text.includes("app.py (2 lines): about app.py") && cost > 0);
 });
