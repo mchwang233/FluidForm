@@ -5,6 +5,9 @@
   --warn:light-dark(#b86e00,#ffbd59);--partial:light-dark(#b4531a,#f5a76c);--partial-bg:light-dark(#fdf1e7,#33241a);--danger:light-dark(#c42f4a,#ff8b9c);--danger-bg:light-dark(#fde7eb,#3a2026);--sidebar:light-dark(#f5f7f9,#0b1016);
   font-family:'DM Sans','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;color:var(--text);background:var(--bg);font-synthesis:none;color-scheme:light
 }
+/* The build turns light-dark() into variables that only a color-scheme written in CSS sets. */
+:root[data-theme=dark]{color-scheme:dark}
+:root[data-theme=system]{color-scheme:light dark}
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:light-dark(#c9d3dd,#2e3946) transparent}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:light-dark(#c9d3dd,#2e3946);border-radius:8px}::-webkit-scrollbar-track{background:transparent}
 body{margin:0;background:var(--bg)}

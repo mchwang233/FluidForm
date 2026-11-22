@@ -56,7 +56,7 @@ type Theme = "light"|"dark"|"system";
 const THEME_KEY="fluidform.theme";
 const THEMES: {id:Theme;label:string;icon:IconName}[] = [{id:"light",label:"浅色",icon:"sun"},{id:"dark",label:"深色",icon:"moon"},{id:"system",label:"跟随系统",icon:"monitor"}];
 function savedTheme():Theme{try{const t=localStorage.getItem(THEME_KEY);return t==="dark"||t==="system"?t:"light"}catch{return "light"}}
-function applyTheme(theme:Theme){document.documentElement.style.colorScheme=theme==="system"?"light dark":theme}
+function applyTheme(theme:Theme){const root=document.documentElement;root.style.colorScheme=theme==="system"?"light dark":theme;root.setAttribute("data-theme",theme)}
 
 /** 设置 at the foot of the sidebar: the theme, and the common failures page. */
 function SettingsMenu({active,onProblems,onMemory}:{active:boolean;onProblems:()=>void;onMemory:()=>void}) {

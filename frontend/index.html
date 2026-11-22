@@ -9,7 +9,7 @@
       // What the page kept as Super Partner, under FluidForm's names; then the saved theme, before
       // first paint so the page never flashes the wrong one.
       try { for (var i = localStorage.length - 1; i >= 0; i--) { var k = localStorage.key(i); if (k && k.indexOf("super-partner.") === 0) { var n = "fluidform." + k.slice(14); if (localStorage.getItem(n) === null) localStorage.setItem(n, localStorage.getItem(k)); } } } catch (e) {}
-      try { var t = localStorage.getItem("fluidform.theme"); document.documentElement.style.colorScheme = t === "dark" ? "dark" : t === "system" ? "light dark" : "light"; } catch (e) {}
+      try { var t = localStorage.getItem("fluidform.theme"); var root = document.documentElement; root.style.colorScheme = t === "dark" ? "dark" : t === "system" ? "light dark" : "light"; root.setAttribute("data-theme", t === "dark" || t === "system" ? t : "light"); } catch (e) {}
     </script>
   </head>
   <body>
