@@ -397,7 +397,7 @@ export class SourceRepairs implements PlatformRepairs {
     }
     const output = readFileSync(captured).toString("utf8");
     rmSync(captured, { force: true });
-    return { returncode: code ?? 1, output: output.slice(-8000) };
+    return { returncode: code ?? 1, output: code ? failureOutput(output) : output.slice(-8000) };
   }
 
   async launch(job: RepairJob): Promise<void> {
@@ -441,3 +441,17 @@ function isCharDevice(path: string): boolean {
 }
 
 export type { FileState };
+
+/** What a failed check said, in what fits: the tests that failed (node's "not ok" and what follows
+ *  each), since a suite's end shows only those that ran last, then the end. */
+export function failureOutput(output: string, room = 8000): string {
+  if (output.length <= room) return output;
+  const lines = output.split("\n");
+  const found: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (/^\s*not ok /.test(lines[index])) found.push(lines.slice(index, index + 24).join("\n"));
+  }
+  if (!found.length) return output.slice(-room);
+  const failed = found.join("\n").slice(0, Math.floor(room * 0.75));
+  return `${failed}\n[...]\n${output.slice(-(room - failed.length - 7))}`;
+}

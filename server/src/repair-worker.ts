@@ -11,13 +11,17 @@ import { backup, DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 // What a repair may read and change: the source, never live tasks, secrets, dependencies or git.
-export const SOURCE_DIRS = new Set(["server", "frontend", "scripts", "docs", "skills"]);
+export const SOURCE_DIRS = new Set(["server", "frontend", "scripts", "docs", "skills", "evals"]);
 export const ROOT_FILES = new Set(["README.md", "AGENTS.md", "CLAUDE.md", "Dockerfile", "compose.yaml", ".gitignore", ".dockerignore", "start.sh", "stop.sh"]);
 export const SKIP = new Set([".git", ".agents", ".aws", ".claude", ".codex", ".fluidform", ".super-partner", "workspaces", ".venv", "node_modules", "dist", "build",
   "coverage", "__pycache__"]);
 export const SUFFIXES = new Set([".py", ".ts", ".tsx", ".js", ".mjs", ".css", ".html", ".json", ".sh", ".md", ".svg", ".png", ".webp"]);
 export const PRIVATE = new Set(["credentials.json", "secrets.json", ".env"]);
-export const MAX_FILE_BYTES = 5_000_000;
+// The largest is a recorded test fixture (server/tests/golden, 5.3 MB); tests/platform-repair.test.ts
+// keeps this checkout within it.
+export const MAX_FILE_BYTES = 16_000_000;
+// Built from frontend/, never source: rebuilt when a repair is applied.
+export const BUILT_DIRS = new Set(["server/packages/web/site"]);
 export const MAX_SOURCE_FILES = 5000;
 export const HEALTH_SECONDS = 60;
 export const BUILD_SECONDS = 600;
@@ -61,7 +65,8 @@ export function sourceFiles(root: string): Record<string, FileState> {
   const walk = (folder: string, parts: string[]) => {
     const entries = readdirSync(folder, { withFileTypes: true });
     const isFolder = (entry: (typeof entries)[number]) => entry.isDirectory() || (entry.isSymbolicLink() && safeIsDir(join(folder, entry.name)));
-    const folders = entries.filter((entry) => isFolder(entry) && !SKIP.has(entry.name) && (parts.length > 0 || SOURCE_DIRS.has(entry.name)));
+    const folders = entries.filter((entry) => isFolder(entry) && !SKIP.has(entry.name) && (parts.length > 0 || SOURCE_DIRS.has(entry.name))
+      && !BUILT_DIRS.has([...parts, entry.name].join("/")));
     for (const entry of folders) if (entry.isSymbolicLink()) throw new RepairError(`源码目录不能是符号链接：${[...parts, entry.name].join("/")}`);
     for (const entry of entries.filter((item) => !isFolder(item))) {
       const name = entry.name;
@@ -159,9 +164,14 @@ function isLink(path: string): boolean {
   }
 }
 
-/** The server's compiled code from its source, which a restart runs. */
+/** The server's compiled code and the web console's page from their source, which a restart runs. */
 export function build(job: Job): void {
   if (existsSync(join(job.root, "server", "package.json"))) deps.run(["npm", "run", "build"], { cwd: join(job.root, "server"), timeout: BUILD_SECONDS });
+  // The page is a package FluidForm serves: a repair of frontend/ shows only once that is built again.
+  const frontend = join(job.root, "frontend");
+  if (job.files.some((name) => name.startsWith("frontend/")) && existsSync(join(frontend, "node_modules"))) {
+    deps.run(["npm", "run", "package"], { cwd: frontend, timeout: BUILD_SECONDS });
+  }
 }
 
 export async function activate(jobPath: string): Promise<void> {

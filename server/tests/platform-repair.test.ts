@@ -369,3 +369,29 @@ test("a diff shows what the copy changed", async () => {
   assert.ok(diff.includes("-export const VALUE = 'broken';") && diff.includes("+export const VALUE = 'fixed';"));
   assert.ok(diff.includes("+++ b/server/tests/new-regression.test.ts") && diff.includes("+// the regression"));
 });
+
+test("this very checkout fits a repair's snapshot, without the page built from it", () => {
+  const files = worker.sourceFiles(fileURLToPath(new URL("../../", import.meta.url)));
+  assert.ok("server/tests/golden/routing.json" in files && "server/packages/planning/src/index.ts" in files);
+  assert.ok("evals/basic.json" in files); // the checks run the suite that reads it
+  assert.ok(!Object.keys(files).some((name) => name.startsWith("server/packages/web/site/")));
+});
+
+test("applying a repair of the page builds the page again", () => {
+  mkdirSync(join(checkout, "frontend", "node_modules"), { recursive: true });
+  const ran: string[] = [];
+  worker.deps.run = (args: string[]) => {
+    ran.push(args.join(" "));
+  };
+  worker.build({ id: "j", folder: "", status: "", root: checkout, files: ["frontend/src.tsx"] });
+  assert.deepEqual(ran, ["npm run build", "npm run package"]);
+  ran.length = 0;
+  worker.build({ id: "j", folder: "", status: "", root: checkout, files: ["server/src/api.ts"] });
+  assert.deepEqual(ran, ["npm run build"]);
+});
+
+test("a failed check says which test failed, however much ran after it", () => {
+  const output = `not ok 2 - the one that failed\n  error: 'boom'\n${"ok 3 - fine\n".repeat(3000)}# fail 1\n`;
+  const said = platform.failureOutput(output);
+  assert.ok(said.length <= 8000 && said.includes("the one that failed") && said.endsWith("# fail 1\n"));
+});
