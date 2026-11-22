@@ -1,1 +1,2 @@
-lark-channel-sdk>=1.4,<2
+lark-channel-sdk==1.4.0
+pycryptodome==4.5.0

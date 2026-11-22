@@ -47,10 +47,13 @@ OUTBOX = "outbox"
 MAX_FILES = 10
 # The kinds of message answered.
 TYPES = {"text", "post", "image", "file"}
-# People send one thought as several messages: wait this long after someone's last one before
-# passing them on, together (Gather). The SDK's own batching merges a whole chat, every sender
-# together, so it is off and this keeps each person's messages apart.
-GATHER_SECONDS = 4.0
+# One thought sent as several messages: this short a wait puts them together (Gather). One that
+# comes later is put together by FluidForm, which takes a question along with the next while nobody
+# has seen anything of its answer. The SDK's own batching merges a whole chat, every sender together,
+# so it is off and this keeps each person's messages apart.
+GATHER_SECONDS = 0.8
+# A conversation's commands, passed on at once (FluidForm knows them; server/src/capability-runner.ts).
+COMMAND = re.compile(r"^(/stop|停止|停下|/new|/reset|新对话|/status)$", re.I)
 # Where a picture or a file sits in a message's text (the SDK's rendering), taken out: the
 # picture or file itself goes along as an attachment.
 MEDIA_MARK = re.compile(r"!\[image\]\([^)]*\)|<(?:file|audio|video|media|sticker|folder)\b[^>]*/>|\[(?:image|file)\]")
@@ -138,10 +141,54 @@ class Gather:
         loop = asyncio.get_running_loop()
         self.waiting[key] = ([*pieces, piece], loop.call_later(self.seconds, self._done, key))
 
+    def drop(self, key) -> list:
+        """What waits of this person, not to be passed on any more (/stop, /new came)."""
+        pieces, timer = self.waiting.pop(key, ([], None))
+        if timer:
+            timer.cancel()
+        return pieces
+
     def _done(self, key) -> None:
         pieces, _ = self.waiting.pop(key, ([], None))
         if pieces:
             asyncio.ensure_future(self.ready(key, pieces))
+
+
+class InOrder:
+    """What one chat says reaches FluidForm in the order it was said, however long each message took
+    to prepare (a picture to download, the group's names to read)."""
+
+    def __init__(self):
+        self.last: dict = {}
+
+    def take(self, chat: str):
+        """A message's place, taken as it arrives: what to wait for, and what to set once it is sent."""
+        before, mine = self.last.get(chat), asyncio.Event()
+        self.last[chat] = mine
+        return before, mine
+
+    def left(self, chat: str, mine) -> None:
+        mine.set()
+        if self.last.get(chat) is mine:
+            del self.last[chat]
+
+
+class Typing:
+    """Feishu's "typing" reaction, put on a message as it arrives and taken off once it is done with."""
+
+    def __init__(self, channel):
+        self.channel = channel
+        self.put: dict = {}
+
+    def start(self, message_id: str) -> None:
+        self.put[message_id] = asyncio.ensure_future(self.channel.add_typing_reaction(message_id))
+
+    async def stop(self, message_ids) -> None:
+        for message_id in message_ids:
+            putting = self.put.pop(message_id, None)
+            reaction = await putting if putting else None
+            if reaction:
+                await self.channel.remove_typing_reaction(message_id, reaction)
 
 
 class Aliases:
@@ -194,8 +241,9 @@ class Host:
         self.send({"op": "status", "text": text})
 
     async def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
-                  heard=None, addressed: bool = True, sender: str = "", people=()) -> tuple[Optional[str], list]:
-        """FluidForm's answer, and the files to send with it (paths in the data folder); ``heard``
+                  heard=None, addressed: bool = True, sender: str = "", people=()) -> tuple[Optional[str], list, bool]:
+        """FluidForm's answer, the files to send with it (paths in the data folder), and whether the
+        message was taken along by a later one instead (then nothing is said under it); ``heard``
         hears the answer as it is being written; ``people``: the names of the group's people, so
         the answer can @ them."""
         loop = asyncio.get_running_loop()
@@ -214,7 +262,7 @@ class Host:
         try:
             return await asyncio.wait_for(answered, REPLY_WAIT)
         except asyncio.TimeoutError:
-            return None, []
+            return None, [], False
         finally:
             self.pending.pop(request, None)
 
@@ -228,7 +276,7 @@ class Host:
             if "re" in payload and payload["re"] in self.pending:
                 loop, answered, _ = self.pending[payload["re"]]
                 files = [str(item) for item in payload.get("files") or [] if isinstance(item, str)]
-                result = (payload.get("reply"), files)
+                result = (payload.get("reply"), files, bool(payload.get("superseded")))
                 loop.call_soon_threadsafe(lambda: answered.done() or answered.set_result(result))
             elif "progress" in payload and payload["progress"] in self.pending:
                 loop, _, heard = self.pending[payload["progress"]]
@@ -270,7 +318,15 @@ class Reply:
 
     async def _stream(self) -> None:
         async def producer(stream) -> None:
-            while (text := await self.queue.get()) is not None:
+            ended = False
+            while not ended and (text := await self.queue.get()) is not None:
+                # What piled up while the card was being made: only the newest is worth showing.
+                while not self.queue.empty():
+                    newer = self.queue.get_nowait()
+                    if newer is None:
+                        ended = True
+                        break
+                    text = newer
                 await stream.set_content(card_mentions(self.mark(cut(text))))
                 self.sent = self.sent or stream.message_id
         await self.channel.stream(self.chat_id, {"markdown": producer}, {"reply_to": self.message_id})
@@ -366,9 +422,16 @@ def main() -> None:
         (data / relative).write_bytes(body)
         return relative
 
-    async def answer(chat_id: str, chat_type: str, sender: str, piece: Piece) -> None:
+    async def answer(chat_id: str, chat_type: str, sender: str, piece: Piece, place) -> None:
+        before, mine = place
+        try:
+            await answering(chat_id, chat_type, sender, piece, before, mine)
+        finally:
+            order.left(chat_id, mine)
+
+    async def answering(chat_id: str, chat_type: str, sender: str, piece: Piece, before, mine) -> None:
         group = chat_type == "group"
-        known = await people(chat_id) if group else {}
+        known = await people(chat_id) if group and not COMMAND.match(piece.text) else {}
         mark = marker(known)
         names = [item for item in await asyncio.gather(*[download(piece.message_id, kind, key, name)
                                                          for kind, key, name in piece.resources]) if item]
@@ -377,31 +440,38 @@ def main() -> None:
             return
         if not piece.addressed and not piece.text and not names:
             return
-        # Being answered: Feishu's "typing" reaction on the message; not before FluidForm decides
-        # that one said in a group without @ it is meant for it.
-        typing = await channel.add_typing_reaction(piece.message_id) if piece.addressed else None
-        try:
-            reply = Reply(channel, chat_id, piece.message_id, mark)
-            origin = {"message_id": piece.message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
-            result, files = await host.ask(chat_id, piece.text, origin, tuple(names), reply.heard, piece.addressed, sender,
-                                           sorted(name for name in known if name not in EVERYONE and not re.fullmatch(r"成员\d+", name)))
-            if result and not await reply.finish(result):
-                await send_text(chat_id, piece.message_id, result, mark)
-            elif not result and piece.addressed and not await reply.finish("（没有回答）"):
-                await send_text(chat_id, piece.message_id, "（没有回答）")
-            elif not result and reply.task:
-                await reply.finish("（没有回答）")
-            await send_files(chat_id, piece.message_id, files)
-        finally:
-            if typing:
-                await channel.remove_typing_reaction(piece.message_id, typing)
+        if before:
+            await before.wait()
+        reply = Reply(channel, chat_id, piece.message_id, mark)
+        origin = {"message_id": piece.message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
+        asking = asyncio.ensure_future(host.ask(chat_id, piece.text, origin, tuple(names), reply.heard, piece.addressed, sender,
+                                                sorted(name for name in known if name not in EVERYONE and not re.fullmatch(r"成员\d+", name))))
+        await asyncio.sleep(0)  # it is sent
+        order.left(chat_id, mine)
+        result, files, superseded = await asking
+        if superseded and not reply.task:
+            return
+        if result and not await reply.finish(result):
+            await send_text(chat_id, piece.message_id, result, mark)
+        elif not result and piece.addressed and not await reply.finish("（没有回答）"):
+            await send_text(chat_id, piece.message_id, "（没有回答）")
+        elif not result and reply.task:
+            await reply.finish("（没有回答）")
+        await send_files(chat_id, piece.message_id, files)
 
     async def gathered(key, pieces) -> None:
         chat_id, chat_type, open_id, name = key
-        sender = (name or aliases.name_of(chat_id, open_id)) if chat_type == "group" and open_id else ""
-        await answer(chat_id, chat_type, sender, merged(pieces))
+        place = order.take(chat_id)
+        try:
+            sender = (name or aliases.name_of(chat_id, open_id)) if chat_type == "group" and open_id else ""
+            await answer(chat_id, chat_type, sender, merged(pieces), place)
+        finally:
+            order.left(chat_id, place[1])
+            await typing.stop([piece.message_id for piece in pieces])
 
     gather = Gather(gathered)
+    order = InOrder()
+    typing = Typing(channel)
 
     async def on_message(msg) -> None:
         if msg.sender_is_bot or msg.raw_content_type not in TYPES or msg.chat_type not in ("p2p", "group"):
@@ -415,8 +485,17 @@ def main() -> None:
                      for item in msg.resources or [] if item.type in ("image", "file") and item.file_key][:MAX_FILES]
         if not text and not resources and not (addressed and msg.raw_content_type in ("text", "post")):
             return  # only @ it, nothing else: still asked (FluidForm answers what came before)
-        gather.add((msg.chat_id, msg.chat_type, msg.sender_id or "", msg.sender_name or ""),
-                   Piece(msg.message_id, text, resources, addressed))
+        key = (msg.chat_id, msg.chat_type, msg.sender_id or "", msg.sender_name or "")
+        piece = Piece(msg.message_id, text, resources, addressed)
+        if addressed and not resources and COMMAND.match(text):
+            if text.lower() != "/status":
+                # What still waited is stopped with it: never asked.
+                asyncio.ensure_future(typing.stop([waited.message_id for waited in gather.drop(key)]))
+            asyncio.ensure_future(gathered(key, [piece]))
+            return
+        if addressed:
+            typing.start(msg.message_id)  # at once: people see it was received
+        gather.add(key, piece)
 
     def task_ended(payload: dict) -> None:
         """From the thread reading FluidForm: replied on the SDK's loop (channel.schedule)."""
@@ -501,9 +580,9 @@ def check() -> None:
         reply = Reply(channel, "oc_1", "om_q", lambda text: text)
         reply.heard("WAL")
         return await reply.finish("WAL 是预写日志。"), channel.calls
-    assert asyncio.run(replying(False)) == (True, [("card", "WAL"), ("card", "WAL 是预写日志。")])
+    assert asyncio.run(replying(False)) == (True, [("card", "WAL 是预写日志。")])
     # A card that is in the chat is the answer, even if its last update failed: never sent twice.
-    assert asyncio.run(replying(True)) == (True, [("card", "WAL"), ("card", "WAL 是预写日志。")])
+    assert asyncio.run(replying(True)) == (True, [("card", "WAL 是预写日志。")])
 
     # FluidForm's answer and what is heard of it come back on the loop that asked, from its thread.
     async def asking():
@@ -515,9 +594,27 @@ def check() -> None:
     def answer_from_fluidform(host, request):
         loop, answered, heard = host.pending[request]
         loop.call_soon_threadsafe(heard, "你")
-        loop.call_soon_threadsafe(lambda: answered.set_result(("你好！", ["outbox/a.png"])))
+        loop.call_soon_threadsafe(lambda: answered.set_result(("你好！", ["outbox/a.png"], False)))
     result, heard, loop = asyncio.run(asking())
-    assert result == ("你好！", ["outbox/a.png"]) and heard == [("你", loop)]
+    assert result == ("你好！", ["outbox/a.png"], False) and heard == [("你", loop)]
+    # Commands are passed on at once, and only as the whole message.
+    assert COMMAND.match("/stop") and COMMAND.match("新对话") and COMMAND.match("/STATUS")
+    assert not COMMAND.match("停止服务怎么做") and not COMMAND.match("/stop 一下")
+
+    # A chat's messages are passed on in the order they were said.
+    async def in_order() -> list:
+        order, said = InOrder(), []
+
+        async def saying(word, seconds, place):
+            before, mine = place
+            await asyncio.sleep(seconds)
+            if before:
+                await before.wait()
+            said.append(word)
+            order.left("oc_1", mine)
+        await asyncio.gather(saying("图", 0.05, order.take("oc_1")), saying("这是什么", 0, order.take("oc_1")))
+        return said
+    assert asyncio.run(in_order()) == ["图", "这是什么"]
     # Files: their own names, pictures known by their bytes, names made safe.
     assert sent_name("0a1b2c3d-猫.png") == "猫.png" and sent_name("cat.png") == "cat.png"
     assert picture(b"\x89PNG\r\n\x1a\n" + b"\0" * 8) and not picture(b"%PDF-1.7")
