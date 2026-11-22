@@ -1,14 +1,14 @@
 // Interface packages (docs/design/capability-packages.md): a web page FluidForm serves itself, at
 // /<its id>/, from the package's site folder; nothing of it runs on this machine. The web console is
 // one (server/packages/web), shipped and enabled like the chat and pricing packages; without any,
-// FluidForm is its API and the command line (super-partner).
+// FluidForm is its API and the command line (fluidform).
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { extname, join, sep } from "node:path";
 import * as capabilities from "./capabilities.js";
 import type { Capability } from "./models.js";
 
 export const NO_INTERFACE = "FluidForm 在运行，但没有启用网页界面。\n"
-  + "用命令行：super-partner --help；或启用网页界面：super-partner capabilities enable web\n";
+  + "用命令行：fluidform --help；或启用网页界面：fluidform capabilities enable web\n";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",

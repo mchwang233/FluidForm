@@ -1,0 +1,12 @@
+{
+  "id": "learning",
+  "name": "经验",
+  "kind": "extension",
+  "provides": [
+    "learning",
+    "preflight",
+    "skills"
+  ],
+  "version": "1.0.0",
+  "summary": "任务后复盘和积累经验、开工前检查环境、给步骤附上相关技能。停用后都不做，网页上不显示复盘；记录仍然留着，启用后照常可看。"
+}

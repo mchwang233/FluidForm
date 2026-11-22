@@ -1,5 +1,5 @@
 // Which configured models a task may use: membership CLIs or not, only CLIs, or only the models it
-// names (super-partner plan --no-use-cli / --only-cli / --model).
+// names (fluidform plan --no-use-cli / --only-cli / --model).
 export const configuredFor = (configured: Set<string>, useCli: boolean) =>
   useCli ? configured : new Set([...configured].filter((modelId) => !modelId.startsWith("cli:")));
 

@@ -1,5 +1,5 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { canChat, useProvided } from "./provided";
+import { canChat, has, useProvided } from "./provided";
 import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type Attachment } from "./attachments";
@@ -140,7 +140,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
         : <span className="lead-who"><span className="dx-avatar" aria-hidden="true">负</span><b>负责人</b><span className="lead-model">{model(run.supervisor?.model_id)}</span></span>}
       {jobs.length > 0 && <span className="lead-who engineer" title="平台工程师在这个对话里"><span className="dx-avatar engineer-avatar" aria-hidden="true"><Icon name="wrench" size={14} /></span><b>平台工程师</b></span>}
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
-      {!joining && <button type="button" className="ghost lead-invite" onClick={() => setJoining(true)}>拉平台工程师进来</button>}
+      {!joining && has(provided, "engineer") && <button type="button" className="ghost lead-invite" onClick={() => setJoining(true)}>拉平台工程师进来</button>}
     </div>
     <div className="dx-thread">
       {joining && <JoinEngineer runId={run.id} act={act} onDone={() => setJoining(false)} />}
@@ -153,6 +153,8 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
       {thinking && <ThinkingMessage thinking={thinking} step={thinking.node_id ? title(thinking.node_id) : undefined} />}
       {!waiting && (chat && !canChat(provided)
         ? <p className="chat-off" role="note">聊天能力已停用，这段对话只能查看。在 平台 → 能力 里启用「聊天」后可以接着聊。</p>
+        : !chat && !has(provided, "lead")
+        ? <p className="chat-off" role="note">负责人能力已停用，这里只能查看。在 平台 → 能力 里可以启用。</p>
         : <AskBox disabled={answering} onAsk={send} engineer={jobs.length > 0} chat={!!chat} />)}
       <div ref={end} className="dx-end" aria-hidden="true" />
     </div>

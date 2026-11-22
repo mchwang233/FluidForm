@@ -891,13 +891,10 @@ export class Executor extends Preflighting {
         // The lead judges the findings before any work is sent back (leading.ts).
         if (this.canLead()) node.status = "running";
         else this.sendBack(run, node, verdict);
-      } else if (uses.diagnosis()) {
-        // Every failed attempt is diagnosed first; repairDone then retries or pauses.
+      } else if (uses.diagnosis() || (this.canLead() && uses.decisions())) {
+        // Every failed attempt goes to the lead or is diagnosed first; repairDone then retries or pauses.
         node.status = "running";
-      } else if (outcome === "unable") {
-        // Without a diagnosis to change the environment, another attempt meets the same limit.
-        this.markUnable(run, node, verdict.unable);
-      } else await this.retryOrFail(run, node, verdict, outcome);
+      } else await this.recover(run, node, verdict, outcome);
       if (run.actual_cost_usd > run.budget_usd && run.status === "running") {
         run.status = "paused";
         this.emit(runId, "approval.required", { reason: "budget_exceeded", actual_cost_usd: run.actual_cost_usd });
@@ -905,7 +902,7 @@ export class Executor extends Preflighting {
       // A verification out of rework rounds is a failure too.
       const diagnose = uses.diagnosis() && !limited && (node.status === "running" || (outcome === "verify_failed" && node.status === "failed"));
       // A failed attempt held for recovery goes to the task's lead (leading.ts).
-      const lead = node.status === "running" && this.canLead() && (uses.diagnosis() || limited || outcome === "verify_failed");
+      const lead = node.status === "running" && this.canLead() && (uses.decisions() || limited || outcome === "verify_failed");
       this.save(run);
       this.releaseLog(runId, nodeId);
       return [lead ? "lead" : diagnose ? "diagnose" : null, outcome];

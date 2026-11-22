@@ -2962,3 +2962,23 @@ test("an interface package says it is a page FluidForm serves, opens it, and how
   await click(button("启用", board));
   assert.match(board.querySelector('[aria-label="确认启用"]').textContent, /在 \/board\/ 提供它.*能用 FluidForm 的全部接口/s);
 });
+
+test("without the task capabilities the page does not offer what needs them", async t => {
+  const off = { chat: "chat", pricing: "pricing", planning: null, team: null, lead: null, review: null, diagnosis: null, engineer: null, learning: null, preflight: null, skills: null };
+  const run = mission("plain-task", "succeeded");
+  run.supervisor = { model_id: "test:lead" };
+  const { document, act, click, button } = await setup(t, [run], [], { openComposer: false, provided: off });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  await settle();
+  const labels = selector => [...document.querySelectorAll(selector)].map(node => node.textContent);
+  assert.ok(!labels(".task-tabs button").includes("员工"));
+  assert.equal(document.querySelector(".engineer-bubble"), null);
+  assert.ok(!labels("button").some(text => text.includes("请平台工程师")));
+  await click(button("对话", document.querySelector(".task-tabs")));
+  await settle();
+  assert.match(document.querySelector(".lead-panel .chat-off").textContent, /负责人能力已停用/);
+  assert.equal(document.querySelector(".lead-invite"), null);
+  await click(button("结果", document.querySelector(".task-tabs")));
+  await settle();
+  assert.ok(!labels(".result-tabs button").includes("复盘与改进"));
+});

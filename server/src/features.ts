@@ -14,8 +14,14 @@ export const uses = {
   lead: () => settings.lead_decisions && available("lead"),
   /** Another model checks each step's result. */
   review: () => settings.acceptance && available("review"),
+  /** Without the lead capability a failed step is retried by fixed rules (not merely its setting off). */
+  fixedRetries: () => !available("lead"),
+  /** Without the platform engineer's diagnosis a stuck task waits for the user, saying why. */
+  stuckWaits: () => !available("diagnosis"),
   /** A stuck step is diagnosed. */
   diagnosis: () => settings.auto_diagnose && available("diagnosis"),
+  /** Failed attempts are held for the lead's decision: it needs no platform engineer for that. */
+  decisions: () => settings.auto_diagnose,
   /** The platform engineer repairs and adds to FluidForm. */
   engineer: () => available("engineer"),
   /** Finished tasks are looked back on and lessons kept. */

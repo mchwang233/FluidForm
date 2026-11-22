@@ -674,7 +674,7 @@ export function buildApp(api: Api): FastifyInstance {
 
   // A finished task's look back: each step's estimate against its cost and turns, and its problems.
   app.get<{ Params: { run_id: string } }>("/api/tasks/:run_id/retrospective", async (request) => {
-    const body = db.retrospective(request.params.run_id) ?? retrospect.record(db, request.params.run_id);
+    const body = db.retrospective(request.params.run_id) ?? (uses.learning() ? retrospect.record(db, request.params.run_id) : null);
     if (!body) throw new HttpError(404, "Task not found or not finished");
     return body;
   });
@@ -713,7 +713,7 @@ export function buildApp(api: Api): FastifyInstance {
     return {
       review: db.learningReview(runId), automatic_eligible: retrospect.AUTOMATIC.has(run.status),
       automatic_skip_reason: run.status === "cancelled" ? "任务已手动取消，不自动复盘。" : null,
-      retrospective: db.retrospective(runId) ?? (retrospect.AUTOMATIC.has(run.status) ? retrospect.record(db, runId) : null),
+      retrospective: db.retrospective(runId) ?? (uses.learning() && retrospect.AUTOMATIC.has(run.status) ? retrospect.record(db, runId) : null),
       improvements: db.improvements(runId).map(improvementView),
       applied: run.improvement_uses.map((use: Json) => ({ id: use.id, title: use.title, node_ids: use.node_ids ?? [], planning: use.planning ?? false,
         source_run_id: use.run_id })),
@@ -892,7 +892,11 @@ export function buildApp(api: Api): FastifyInstance {
   });
 
   // Ask a strong model (a membership CLI when possible) why the task is stuck.
+  const diagnosisRequired = () => {
+    if (uses.stuckWaits()) throw new HttpError(409, "没有启用平台工程师能力：不能诊断。");
+  };
   app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/diagnose", async (request) => {
+    diagnosisRequired();
     const runId = request.params.run_id;
     const [run, diagnosisId] = await executor().locked(runId, () => {
       if (executor().platformPending) throw new HttpError(409, "平台修复正在自动生效，请稍候再请平台工程师。");
@@ -1070,6 +1074,7 @@ export function buildApp(api: Api): FastifyInstance {
         return [latest, null] as const;
       }
       const focus = previous.node_id ?? latest.plan.nodes.find((node) => node.status === "failed")?.id ?? null;
+      diagnosisRequired();
       const next = executor().beginDiagnosis(latest, "manual", focus);
       latest.diagnoses.at(-1)!.reply_to = diagnosisId;
       if (!next && latest.waiting_diagnosis_id === diagnosisId) latest.waiting_diagnosis_id = null;
@@ -1155,7 +1160,7 @@ export function buildApp(api: Api): FastifyInstance {
     const runs = item.kind === "automation" && item.source === "upload";
     if (body.enabled && item.source === "upload") {
       // An interface runs nothing here: a web page FluidForm serves.
-      if (item.kind !== "interface") packagesAllowed();
+      if (item.kind !== "interface" && item.kind !== "extension") packagesAllowed();
       if (!body.confirmed) throw new HttpError(409, "启用上传的能力要先确认它能访问的域名和拿到的密钥。");
       const lacking = Object.entries(await packages.secretsSet(item)).filter(([, stored]) => !stored).map(([name]) => name);
       if (lacking.length) throw new HttpError(409, `先填好：${lacking.join("、")}`);
@@ -1175,7 +1180,7 @@ export function buildApp(api: Api): FastifyInstance {
     return item;
   });
 
-  // Who provides each capability FluidForm itself uses: a package's id, "builtin", or nobody.
+  // Who provides each capability FluidForm itself uses: a package's id, or nobody.
   app.get("/api/capabilities/provided", async () => services.providers());
 
   // Remove it; a package is uninstalled with its data, state and secrets.
@@ -1183,6 +1188,7 @@ export function buildApp(api: Api): FastifyInstance {
     const item = capability(request.params.capability_id);
     const problem = item.status === "active" ? services.disableProblem(item) : null;
     if (problem) throw new HttpError(409, problem);
+    if (item.kind === "extension") throw new HttpError(409, "随 FluidForm 提供的扩展不能卸载，只能停用。");
     if (item.source === "upload") {
       await runner().stop(item.id);
       runner().forget(item.id);

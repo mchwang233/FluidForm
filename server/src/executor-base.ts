@@ -146,7 +146,7 @@ export abstract class ExecutorBase {
         }
       }
       // The task has ended: look back on it while its records are fresh.
-      retrospect.record(this.db, runId);
+      if (uses.learning()) retrospect.record(this.db, runId);
       this.nameProblems(runId);
       this.finishLearning(runId);
     }
@@ -435,6 +435,12 @@ export abstract class ExecutorBase {
     // Retry with the problems spelled out, on the strongest model that can take the step; one that
     // failed it twice in a row makes way for another, a CLI included.
     node.feedback = quality.retryFeedback(node.feedback, problem);
+    // Without a lead (fixed rules) the same model has one more try before a stronger one takes over.
+    if (uses.fixedRetries() && node.failed_attempts === 1 && node.model_id && this.configured(run).has(node.model_id)) {
+      node.status = "pending";
+      this.emit(run.id, "node.retry", { node_id: node.id, reason: verdict.reason, model_id: node.model_id, attempt: node.failed_attempts + 1 });
+      return;
+    }
     const stronger = await retryModel(node, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
     if (stronger && stronger.id !== node.model_id) {
       node.model_id = stronger.id;
@@ -459,6 +465,18 @@ export abstract class ExecutorBase {
   /** A failed verification reopens the verified steps (or the ``targets`` among them) with its findings
    *  and ``note``, and everything that already used their results, including the verifier itself.
    *  Without the lead deciding (``limited``), max_rework_rounds caps it. */
+  /** A failed attempt nobody diagnoses: retried, or, when it cannot be done here, the step says so
+   *  and, without a platform engineer, the task waits for the user. */
+  async recover(run: ExecutionRun, node: TaskNode, verdict: quality.Verdict, outcome: string): Promise<void> {
+    // Without a diagnosis to change the environment, another attempt meets the same limit.
+    if (outcome === "unable") this.markUnable(run, node, verdict.unable);
+    else await this.retryOrFail(run, node, verdict, outcome);
+    if (node.status !== "unable" || !uses.stuckWaits() || run.status !== "running") return;
+    run.status = "paused";
+    run.error = `步骤「${node.title}」卡住了，没有启用平台工程师，等你处理：${node.unable_reason}`;
+    this.emit(run.id, "approval.required", { reason: "unable", node_id: node.id });
+  }
+
   sendBack(run: ExecutionRun, verifier: TaskNode, verdict: quality.Verdict, targets: Set<string> | null = null, note: string | null = null, limited = true): void {
     if (limited && run.rework_rounds >= settings.max_rework_rounds) {
       verifier.status = "failed";

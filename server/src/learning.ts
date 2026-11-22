@@ -304,6 +304,10 @@ export function finishLearning(host: LearningHost, runId: string): void {
 }
 
 export function startLearning(host: LearningHost, runId: string, { manual = false, start = true }: { manual?: boolean; start?: boolean } = {}): LearningReview | null {
+  if (!uses.learning()) {
+    if (manual) throw new LearningProblem("没有启用经验能力：不能复盘。");
+    return null;
+  }
   const run = host.db.getRun(runId);
   if (!run || !retrospect.FINISHED.has(run.status)) throw new LearningProblem("只能复盘已结束的任务。");
   if (!manual && !retrospect.AUTOMATIC.has(run.status)) {

@@ -1,6 +1,7 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments } from "./attachments";
+import { has, useProvided } from "./provided";
 import { ENGINEER_STATUS, type EngineerJob } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, kindOf, shortTitle, useEngineerJobs } from "./lead-engineer";
 
@@ -13,6 +14,7 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
   apiBase: string; runs: RunRef[]; tick: string; onOpenPage: (jobId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const on = has(useProvided(), "engineer");
   // Closed, it looks again whenever the app reloads its tasks (``tick``), for the badge.
   const { jobs } = useEngineerJobs(apiBase, null, `${open}|${tick}`, false);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
@@ -22,6 +24,7 @@ export function EngineerBubble({ apiBase, runs, tick, onOpenPage }: {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [open]);
+  if (!on) return null;
   return <>
     <button type="button" className={`engineer-bubble${open ? " open" : ""}`} aria-expanded={open} aria-label="平台工程师"
       title="和平台工程师聊：修复平台自身，或给它添加组件" onClick={() => setOpen(value => !value)}>

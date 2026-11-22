@@ -7,8 +7,8 @@
 // stderr goes to its log.
 //
 // ``provides`` names what a service gives ("chat", "pricing"); ``requires``, in any package, what must
-// be there before it is enabled. Until a capability's package is written, FluidForm itself provides it
-// (``builtIn``).
+// be there before it is enabled. The parts of how a task is done are not services but extensions
+// (extensions.ts), switched on and off the same way.
 import type { ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import * as capabilities from "./capabilities.js";
@@ -33,8 +33,8 @@ export class ServiceError extends Error {
   override name = "ServiceError";
 }
 
-export { available, builtIn, current, packageFor } from "./provided.js";
-import { available, builtIn, current, packageFor } from "./provided.js";
+export { available, current, packageFor } from "./provided.js";
+import { available, current, packageFor, providerOf } from "./provided.js";
 
 const label = (name: string) => LABELS[name] ?? name;
 
@@ -53,7 +53,8 @@ export function enableProblem(capability: Capability, library: Capability[] = cu
 /** Why ``capability`` cannot be switched off or removed now, or null: an active package needs what
  *  only it provides. */
 export function disableProblem(capability: Capability, library: Capability[] = current()): string | null {
-  const after = library.filter((item) => item.id !== capability.id);
+  // Switched off rather than gone: an extension without a record is on.
+  const after = library.map((item) => (item.id === capability.id ? { ...item, status: "disabled" as const } : item));
   for (const name of capability.provides) {
     if (available(name, after)) continue;
     const needing = library.filter((item) => item.id !== capability.id && item.status === "active" && item.requires.includes(name));
@@ -62,9 +63,9 @@ export function disableProblem(capability: Capability, library: Capability[] = c
   return null;
 }
 
-/** Each capability FluidForm knows of: who provides it now (a package's id, "builtin", or null). */
+/** Each capability FluidForm knows of: who provides it now (a package's id, or null). */
 export function providers(library: Capability[] = current()): Record<string, string | null> {
-  return Object.fromEntries([...PROVIDABLE].map((name) => [name, packageFor(name, library)?.id ?? (builtIn.has(name) ? "builtin" : null)]));
+  return Object.fromEntries([...PROVIDABLE].map((name) => [name, providerOf(name, library)]));
 }
 
 type Handler = (params: Json, service: Capability) => unknown;

@@ -14,14 +14,12 @@ import { zipOf } from "./helpers/zip-writer.js";
 
 const { folder } = conftest();
 const ORIGIN = { origin: "http://localhost:5173" };
-const saved = { sandbox: { ...sandbox.deps }, limits: { ...runners.limits }, builtIn: new Set(services.builtIn), runWorker: secrets.deps.runWorker };
+const saved = { sandbox: { ...sandbox.deps }, limits: { ...runners.limits }, runWorker: secrets.deps.runWorker };
 const hosts: { stopAll(): Promise<void> }[] = [];
 afterEach(async () => {
   for (const host of hosts.splice(0)) await host.stopAll();
   Object.assign(sandbox.deps, saved.sandbox);
   Object.assign(runners.limits, saved.limits);
-  services.builtIn.clear();
-  for (const name of saved.builtIn) services.builtIn.add(name);
   secrets.deps.runWorker = saved.runWorker;
 });
 
@@ -101,14 +99,13 @@ test("what a package requires must be there, and what others need keeps its prov
   const { client } = withPackages();
   // FluidForm still provides chat itself: a package needing it is enabled.
   assert.equal((await upload(client, pkg("bot", { kind: "automation", requires: ["chat"], entry: "sleep 60" }))).status_code, 201);
-  services.builtIn.delete("chat");
   const refused = await enable(client, "bot");
   assert.ok(refused.status_code === 409 && refused.json().detail.includes("需要先启用聊天能力"), refused.text);
   // A package providing chat, enabled: now it can be.
   await upload(client, pkg("chat-a", { provides: ["chat"] }));
   assert.equal((await enable(client, "chat-a")).status_code, 200);
   const provided = (await client.get("/api/capabilities/provided")).json();
-  assert.deepEqual([provided.chat, provided.pricing, provided.planning], ["chat-a", null, "builtin"]);
+  assert.deepEqual([provided.chat, provided.pricing, provided.planning], ["chat-a", null, "planning"]);
   assert.equal((await enable(client, "bot")).status_code, 200);
   // Another provider of chat waits until the first is off.
   await upload(client, pkg("chat-b", { provides: ["chat"] }));

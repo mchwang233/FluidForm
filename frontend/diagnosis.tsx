@@ -1,6 +1,7 @@
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachments, type Attachment } from "./attachments";
 import { Markdown, MarkdownView } from "./markdown";
+import { has, useProvided } from "./provided";
 
 const FILES_ONLY = "（见附件）";
 export type DiagnosisMessage = { text: string; choice?: string | null; created_at?: string; attachments?: Attachment[] };
@@ -162,7 +163,7 @@ export function Composer({ item, waiting, disabled, onReply, sendLabel = "发送
 
 /** Diagnoses as a conversation: the model's findings, your replies, and a reply box on the latest. */
 export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models: ModelLike[]; onReply: SendReply }) {
-  const groups = conversations(run.diagnoses ?? []);
+  const groups = conversations(run.diagnoses ?? []), provided = useProvided();
   const [index, setIndex] = useState(groups.length - 1), [open, setOpen] = useState(true);
   const lastId = run.diagnoses?.[run.diagnoses.length - 1]?.id;
   // A new diagnosis or reply brings the newest conversation back into view.
@@ -190,8 +191,9 @@ export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models:
         <AssistantMessage item={item} model={name(item)} node={nodeTitle(item)} run={run} />
         {(item.messages ?? []).map((message, i) => <UserMessage key={i} message={message} />)}
       </React.Fragment>)}
-      {latest && last.status !== "running" &&
-        <Composer key={last.id} item={last} waiting={waiting} disabled={busy} onReply={onReply} />}
+      {latest && last.status !== "running" && (has(provided, "diagnosis")
+        ? <Composer key={last.id} item={last} waiting={waiting} disabled={busy} onReply={onReply} />
+        : <p className="chat-off" role="note">平台工程师能力已停用，这里只能查看。在 平台 → 能力 里可以启用。</p>)}
     </div>}
   </section>;
 }

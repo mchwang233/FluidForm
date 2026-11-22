@@ -232,7 +232,7 @@ export async function switchModel(modelId: string, enabled: boolean, out: Out = 
   out.echo(`${data.id} ${data.enabled ? "已启用" : "已停用"}`);
 }
 
-const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务", interface: "界面" };
+const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务", interface: "界面", extension: "扩展" };
 
 /** The capabilities: what each is, whether it is on, and what it provides and needs. */
 export async function capabilityList(out: Out = console_): Promise<void> {
@@ -257,7 +257,7 @@ export async function capabilitySwitch(id: string, enabled: boolean, { yes = fal
   if (enabled) {
     const item = ((await checked(await call("GET", "/api/capabilities"))) as unknown as Json[]).find((entry) => entry.id === id);
     if (!item) throw new Error(`没有这个能力：${id}`);
-    if (item.source === "upload") {
+    if (item.source === "upload" && item.kind !== "extension") {
       out.echo(`「${item.name}」是上传的代码，会在沙箱里运行：能访问 ${item.domains?.length ? item.domains.join("、") : "（不联网）"}；`
         + `拿到 ${item.secrets?.length ? item.secrets.join("、") : "（没有密钥）"}${item.kind === "interface" ? "；它的网页能用 FluidForm 的全部接口" : ""}。`);
       if (!yes && !(await deps.confirm("启用？"))) throw new Exit(1);

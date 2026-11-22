@@ -14,7 +14,7 @@ import { type Capability, type CapabilityCard, CapabilityCardFields, type Capabi
   CapabilitySchema, type ExecutionRun, folderId } from "./models.js";
 import { head, isObject, pyRegex, pyStr, sortedBy, tail } from "./py.js";
 
-export const KINDS = new Set(["tool", "automation", "service", "interface"]);
+export const KINDS = new Set(["tool", "automation", "service", "interface", "extension"]);
 // Addresses FluidForm serves itself: an interface package is served at /<its id>/, so none may be these.
 export const RESERVED_PATHS = new Set(["api", "health", "assets", "static"]);
 export const MAX_PROPOSALS = 3;
@@ -74,7 +74,7 @@ export function readCards(given: string | null | undefined): CapabilityProposal[
     if (!files.length) continue;
     const kind = pyStr(item.kind || "tool").split("|")[0].trim();
     cards.push(CapabilityProposalSchema.parse({
-      name: head(pyStr(item.name).trim(), 60), kind: KINDS.has(kind) && kind !== "service" && kind !== "interface" ? kind : "tool",
+      name: head(pyStr(item.name).trim(), 60), kind: KINDS.has(kind) && kind !== "service" && kind !== "interface" && kind !== "extension" ? kind : "tool",
       summary: head(text(item.summary), 500), usage: head(text(item.usage), 2000), guide: head(text(item.guide), MAX_GUIDE),
       files: files.slice(0, 50), check: head(text(item.check), 500),
       secrets: list(item.secrets).map((name) => head(pyStr(name).trim(), 80)).filter(Boolean).slice(0, 10),

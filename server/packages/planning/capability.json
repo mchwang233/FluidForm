@@ -1,0 +1,11 @@
+{
+  "id": "planning",
+  "name": "规划",
+  "kind": "extension",
+  "provides": [
+    "planning",
+    "team"
+  ],
+  "version": "1.0.0",
+  "summary": "把需求拆成多步、排计划、中途改计划；把步骤分派给员工。停用后整个需求作为一步，交给一个模型做。"
+}

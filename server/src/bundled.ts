@@ -1,6 +1,7 @@
 // Packages shipped with FluidForm (server/packages): installed and enabled the first time FluidForm
 // starts (one that runs a process, with capability packages allowed and a sandbox to run them; an
-// interface, a web page FluidForm serves, always), and brought up to date when what ships changes.
+// interface, a web page FluidForm serves, and an extension, always), and brought up to date when what
+// ships changes.
 // One the user uninstalled stays uninstalled (what was offered is kept in bundled.json).
 // docs/design/chat-and-pricing-packages.md.
 import { createHash } from "node:crypto";
@@ -11,6 +12,7 @@ import * as capabilities from "./capabilities.js";
 import * as packages from "./capability-packages.js";
 import * as sandbox from "./capability-sandbox.js";
 import { settings } from "./config.js";
+import * as extensions from "./extensions.js";
 import { log } from "./log.js";
 import type { Capability } from "./models.js";
 
@@ -43,10 +45,12 @@ export async function offer(): Promise<Capability[]> {
     const source = join(deps.folder(), entry.name);
     let version = "";
     let id = entry.name;
+    let extension = false;
     try {
       const manifest = JSON.parse(readFileSync(join(source, packages.MANIFEST), "utf8"));
       [id, version] = [String(manifest.id), `${manifest.version ?? ""}#${digest(source)}`];
-      if (manifest.kind !== "interface" && !running) continue;
+      extension = manifest.kind === extensions.KIND;
+      if (manifest.kind !== "interface" && !extension && !running) continue;
     } catch {
       continue;
     }
@@ -54,13 +58,18 @@ export async function offer(): Promise<Capability[]> {
     const fresh = !(id in given);
     // Uninstalled after it was offered: the user's choice stands. A task's own capability of that
     // name is left alone.
-    if ((!fresh && !installed) || (installed && installed.source !== "upload")) continue;
+    // An extension cannot be uninstalled, only switched off; another package with its id is left alone.
+    if ((!fresh && !installed && !extension) || (installed && installed.source !== "upload")) continue;
+    if (extension && installed && installed.kind !== extensions.KIND) {
+      log.error(`could not install the shipped extension ${id}: another package has that id`);
+      continue;
+    }
     if (!fresh && installed && given[id] === version) continue;
     try {
       const capability = await packages.installFolder(source);
       if (fresh) carryOver(capability);
       // New: on, as features are. Updated: as it was.
-      if (capability.status !== "failed" && (fresh || installed?.status === "active")) {
+      if (capability.status !== "failed" && (fresh || !installed || installed.status === "active")) {
         capability.status = "active";
         capabilities.save(capability);
       }

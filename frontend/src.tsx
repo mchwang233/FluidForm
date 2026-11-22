@@ -1,5 +1,5 @@
 import { PlanChoices } from "./plan-choices";
-import { canChat, useProvided } from "./provided";
+import { canChat, has, useProvided } from "./provided";
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ModelProfiles, type Model } from "./model-profiles";
@@ -333,7 +333,7 @@ export function greeting(mode:"auto"|"task"|"chat",hour=new Date().getHours()):s
 
 function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{loading?:boolean;onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string,attachments?:string[])=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
   const [budget,setBudget]=useState(run?.budget_usd??2),[error,setError]=useState(""),[busy,setBusy]=useState(false);
-  const chatOn=canChat(useProvided());
+  const provided=useProvided(),chatOn=canChat(provided);
   // The task's conversation: its lead, and diagnoses no lead ran or asked for.
   const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id));
   const hasChat=!!run&&(hasLead(run)||diagnoses.length>0);
@@ -375,7 +375,7 @@ function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deleting
         {(run.status==="succeeded"||run.status==="incomplete")&&tab!=="result"&&<button type="button" className="primary" onClick={()=>pick("result")}>查看结果</button>}
         {canPause&&<button type="button" className="ghost" disabled={busy} onClick={()=>act(onPause)} title="不再启动新步骤；正在运行的步骤会跑完">暂停</button>}
         <MoreMenu>
-          {canDiagnose&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="查原因并修好，在预算内继续"><Icon name="wrench"/>{diagnosing?"平台工程师在查…":"请平台工程师"}</button>}
+          {canDiagnose&&has(provided,"diagnosis")&&<button type="button" className="ghost" disabled={busy||diagnosing||!!run.maintenance_id} onClick={()=>{pick("chat");void act(onDiagnose)}} title="查原因并修好，在预算内继续"><Icon name="wrench"/>{diagnosing?"平台工程师在查…":"请平台工程师"}</button>}
           {canCancelRun(run)&&<button type="button" className="danger" disabled={cancellingId!==null} onClick={()=>onCancel(run)}>{cancellingId===run.id?"取消中…":"取消任务"}</button>}
           <DeleteMissionButton mission={run} deletingId={deletingId} onDelete={onDelete}/>
         </MoreMenu>
@@ -406,7 +406,7 @@ function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deleting
     {error&&<div className="error" role="alert">{error}</div>}
     {run.error&&run.status!=="succeeded"&&<div className="error">{run.error}</div>}
     {waiting&&tab!=="chat"&&<div className="chat-alert" role="status"><span>{waiting}</span><button type="button" className="primary" onClick={()=>pick("chat")}>去回复</button></div>}
-    <div ref={tabsTop} className="task-tabs-anchor" aria-hidden="true"/><nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],["team","员工"],["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
+    <div ref={tabsTop} className="task-tabs-anchor" aria-hidden="true"/><nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],...(has(provided,"team")||run.plan.employees?.length?[["team","员工"]]:[]),["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
     {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={((text,files)=>onAsk(run,text,files)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}
     {/* Diagnoses that run when no lead decides, or that the lead sends to repair something. */}
     {tab==="chat"&&<DiagnosisPanel run={{...run,diagnoses}} models={models} onReply={(id,body)=>onReply(run,id,body)}/>}

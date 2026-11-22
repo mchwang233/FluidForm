@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { capabilitiesChanged } from "./provided";
 import { Markdown as MarkdownView } from "./markdown";
 
 /** Capabilities: what finished tasks left the platform able to do (docs/design/capabilities.md).
@@ -27,9 +28,10 @@ type Runtime = {
 };
 type Runtimes = { available: boolean; missing: string; capabilities: Record<string, Runtime> };
 
-const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务", interface: "界面" };
+const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务", interface: "界面", extension: "扩展" };
 // The capabilities FluidForm itself uses, as the page names them (server: service-names.ts).
-const PROVIDED: Record<string, string> = { chat: "聊天", pricing: "计价" };
+const PROVIDED: Record<string, string> = { chat: "聊天", pricing: "计价", planning: "规划", team: "员工", lead: "负责人", review: "验收",
+  diagnosis: "诊断", engineer: "平台工程师", learning: "复盘与经验", preflight: "执行前检查", skills: "技能" };
 const named = (names: string[] = []) => names.map(name => PROVIDED[name] ?? name).join("、");
 const STATUS: Record<Capability["status"], string> = { active: "可用", disabled: "已停用", failed: "检查未通过" };
 const RUNNING: Record<string, { label: string; tone: string }> = {
@@ -63,7 +65,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
   useEffect(() => { if (!packaged) return; const timer = setInterval(loadRuntime, 3000); return () => clearInterval(timer); }, [apiBase, packaged]);
   async function act(promise: Promise<unknown>) {
     setError("");
-    try { await promise; await load(); return true; } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); return false; }
+    try { await promise; capabilitiesChanged(); await load(); return true; } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); return false; }
   }
   async function upload(file: File | undefined) {
     if (!file) return;
@@ -87,21 +89,21 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
     {error && <p className="error" role="alert">{error}</p>}
     {items && !items.length && <p className="empty">还没有能力。任务完成后，负责人会提议它做出的可复用工具，你在结果页一键固化；也可以上传能力包。</p>}
     <ul className="capability-list">{(items ?? []).map(item => {
-      const uploaded = item.source === "upload", state = runtime?.capabilities[item.id];
+      const uploaded = item.source === "upload" && item.kind !== "extension", state = runtime?.capabilities[item.id];
       const lacking = item.secrets.filter(name => uploaded && state && !state.secrets[name]);
       const enable = () => uploaded && item.status !== "active" ? setConfirming(item.id)
-        : act(call(one(item.id), sendJson("PATCH", { enabled: item.status !== "active" })));
+        : act(call(one(item.id), sendJson("PATCH", { enabled: item.status !== "active", ...(item.kind === "extension" && { confirmed: true }) })));
       return <li key={item.id} className={`capability ${item.status}`}>
         <div className="capability-head">
           <Icon name={item.kind === "automation" ? "activity" : item.kind === "service" ? "cpu" : item.kind === "interface" ? "monitor" : "wrench"} size={15} />
           <b>{item.name}</b>
-          <span className="capability-kind">{KIND[item.kind] ?? item.kind}{uploaded && ` · 能力包${item.version ? ` v${item.version}` : ""}`}</span>
+          <span className="capability-kind">{KIND[item.kind] ?? item.kind}{(uploaded || item.kind === "extension") && ` · 能力包${item.version ? ` v${item.version}` : ""}`}</span>
           <span className={`capability-status ${item.status}`}>{STATUS[item.status]}</span>
           <span className="capability-actions">
             {item.status !== "failed" && <button type="button" className="ghost" onClick={() => void enable()}>{item.status === "active" ? "停用" : "启用"}</button>}
-            {removing === item.id
+            {item.kind !== "extension" && (removing === item.id
               ? <button type="button" className="danger" onClick={() => { setRemoving(null); void act(call(one(item.id), { method: "DELETE" })); }}>{uploaded ? "确认卸载" : "确认删除"}</button>
-              : <button type="button" className="ghost" onClick={() => setRemoving(item.id)}>{uploaded ? "卸载" : "删除"}</button>}
+              : <button type="button" className="ghost" onClick={() => setRemoving(item.id)}>{uploaded ? "卸载" : "删除"}</button>)}
           </span>
         </div>
         {item.summary && <p>{item.summary}</p>}

@@ -1,13 +1,12 @@
 // For a test of FluidForm without some of its capabilities: they are taken away for the calling
-// test only (provided.builtIn; none of them comes from a package in tests).
+// test only (provided.deps), whatever is switched on.
 import * as provided from "../../src/provided.js";
 
 export function without(...names: string[]): () => void {
-  const before = new Set(provided.builtIn);
-  for (const name of names) provided.builtIn.delete(name);
+  const before = provided.deps.extensionOn;
+  provided.deps.extensionOn = (extension, library, name) => !names.includes(name) && before(extension, library, name);
   return () => {
-    provided.builtIn.clear();
-    for (const name of before) provided.builtIn.add(name);
+    provided.deps.extensionOn = before;
   };
 }
 

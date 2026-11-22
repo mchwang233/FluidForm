@@ -5,6 +5,7 @@ import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachm
 import { when } from "./diagnosis";
 import { ENGINEER_STATUS, type EngineerJob, type EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, kindOf, useEngineerJobs } from "./lead-engineer";
+import { has, useProvided } from "./provided";
 import type { Capability } from "./capabilities";
 
 /** The 平台 page's home: one conversation with the platform engineer, what waits for your nod
@@ -102,6 +103,7 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   visit?: number;
 }) {
   const { jobs, act, available } = useEngineerJobs(apiBase, null, "", true);
+  const engineerOn = has(useProvided(), "engineer");
   const [capabilities, setCapabilities] = useState<Capability[]>([]), [skills, setSkills] = useState<Skill[]>([]);
   useEffect(() => {
     fetch(`${apiBase}/api/capabilities`).then(r => r.ok ? r.json() : []).then(list => Array.isArray(list) && setCapabilities(list)).catch(() => {});
@@ -120,14 +122,16 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
     <section className="platform-main">
       {open ? <>
         <button type="button" className="platform-back" onClick={() => setOpenId(null)}>← 平台</button>
-        <ThreadView thread={open} title={threadTitle(open)} act={act} available={available} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
+        <ThreadView engineerOn={engineerOn} thread={open} title={threadTitle(open)} act={act} available={available} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
       </> : <div className="platform-home">
         <div className="platform-greeting"><span className="platform-greeting-mark" aria-hidden="true"><Icon name="wrench" size={26} /></span>
-          <h2>要平台加什么能力、修什么问题？</h2></div>
+          <h2>{engineerOn ? "要平台加什么能力、修什么问题？" : "平台"}</h2></div>
+        {!engineerOn ? <p className="chat-off" role="note">平台工程师能力已停用。在右侧「能力」里可以启用。</p> : <>
         {!available && <p className="error">平台工程师不可用：平台自修复没有启用，或这里没有可编辑的平台源码。</p>}
         <PlatformComposer act={act} disabled={!available} />
         <p className="platform-hint">平台工程师先在副本里改，测试通过、你点头才生效。</p>
         {waiting.map(job => <Pending key={job.id} job={job} act={act} onRevise={() => setOpenId(threadOf(job))} />)}
+        </>}
       </div>}
     </section>
     <aside className="platform-side" aria-label="平台现在能做的">
@@ -220,8 +224,8 @@ function Pending({ job, act, onRevise }: { job: EngineerJob; act: (path: string,
 
 /** One conversation: everything said in it, each piece of work followed by what came of it, and
  * the box to go on — a reply to what waits for you, or new work in this conversation. */
-function ThreadView({ thread, title, act, available, runs, onOpenRun, onRecords }: {
-  thread: Thread; title: string; act: (path: string, body?: unknown) => Promise<string | null>; available: boolean;
+function ThreadView({ engineerOn, thread, title, act, available, runs, onOpenRun, onRecords }: {
+  engineerOn: boolean; thread: Thread; title: string; act: (path: string, body?: unknown) => Promise<string | null>; available: boolean;
   runs: RunRef[]; onOpenRun: (id: string) => void; onRecords: (jobId?: string) => void;
 }) {
   const end = useRef<HTMLDivElement>(null);
@@ -244,11 +248,12 @@ function ThreadView({ thread, title, act, available, runs, onOpenRun, onRecords 
         })}
         {DONE.has(job.status) && <Result job={job} onRecords={onRecords} />}
         {WORKING[job.status] && <p className="platform-working"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{headlineOf(job)} · {WORKING[job.status]}</p>}
-        {ENGINEER_WAITING.has(job.status) && <Pending job={job} act={act} onRevise={() => document.querySelector<HTMLTextAreaElement>(".platform-composer textarea")?.focus()} />}
+        {engineerOn && ENGINEER_WAITING.has(job.status) && <Pending job={job} act={act} onRevise={() => document.querySelector<HTMLTextAreaElement>(".platform-composer textarea")?.focus()} />}
       </React.Fragment>)}
       <div ref={end} />
     </div>
-    <PlatformComposer act={act} disabled={!available} replyTo={waiting} threadId={thread.id} />
+    {engineerOn ? <PlatformComposer act={act} disabled={!available} replyTo={waiting} threadId={thread.id} />
+      : <p className="chat-off" role="note">平台工程师能力已停用，这段对话只能查看。</p>}
   </>;
 }
 

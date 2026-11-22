@@ -37,7 +37,7 @@ test("an enabled interface is served at its address; FluidForm's own address lea
   const { client } = taskApi(folder());
   settings.capability_packages = true;
   // Without one, FluidForm's address says how to use it without a page.
-  assert.match((await client.get("/")).text, /没有启用网页界面.*super-partner --help/s);
+  assert.match((await client.get("/")).text, /没有启用网页界面.*fluidform --help/s);
   for (const id of ["board", "web"]) assert.equal((await client.post("/api/capabilities/upload", { content: page(id) })).status_code, 201);
   assert.equal((await client.get("/board/")).status_code, 404); // installed switched off
   // Enabling an interface needs no sandbox: it runs nothing here.

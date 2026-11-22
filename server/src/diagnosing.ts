@@ -1,5 +1,6 @@
 // Diagnosing failed or stuck steps and acting on the diagnosis (recovery.afterDiagnosis
 // decides what it means).
+import { uses } from "./features.js";
 import * as agentTools from "./agent.js";
 import { BudgetExceeded } from "./budget.js";
 import { settings } from "./config.js";
@@ -36,6 +37,16 @@ export abstract class Diagnosing extends Leading {
    *  Its status decides the rest (repairDone). Runs inside the step's task, so the run waits for it. */
   async repair(runId: string, nodeId: string, verdict: quality.Verdict, outcome: string,
     { diagnosisId = null, brief = "", decisionId = null }: { diagnosisId?: string | null; brief?: string; decisionId?: string | null } = {}): Promise<void> {
+    if (uses.stuckWaits()) {
+      await this.locked(runId, async () => {
+        const found = this.db.getRun(runId);
+        const step = found?.plan.nodes.find((item) => item.id === nodeId);
+        if (!found || !step || found.status === "cancelled" || step.status !== "running") return;
+        await this.recover(found, step, verdict, outcome);
+        this.save(found);
+      });
+      return;
+    }
     let run!: ExecutionRun;
     let node!: TaskNode;
     let diagnosis!: Diagnosis;

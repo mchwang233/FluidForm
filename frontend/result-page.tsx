@@ -6,6 +6,7 @@ import { isMarkdownFile, MarkdownView } from "./markdown";
 import { statusLabel, detailText } from "./mission-history";
 import { RetrospectivePanel } from "./retrospective";
 import { CallInsights } from "./call-insights";
+import { has, useProvided } from "./provided";
 
 type ResultRun = {
   id: string; status: string; prompt?: string; created_at?: string; project_dir?: string | null; budget_usd?: number;
@@ -70,6 +71,7 @@ function ChangePanel({ run, onSubmit, onClose }: { run: ResultRun; onSubmit: Cha
 
 /** A full page for a task's output: final result, files, each step's output, save and publish. */
 export function ResultPage({ apiBase, run, onBack, onChange, embedded = false }: { apiBase: string; run: ResultRun; onBack?: () => void; onChange?: ChangeRequest; embedded?: boolean }) {
+  const provided = useProvided();
   const [changing, setChanging] = useState(false);
   useEffect(() => setChanging(false), [run.id]);
   const [listing, setListing] = useState<Listing | null>(null), [listError, setListError] = useState("");
@@ -133,11 +135,11 @@ export function ResultPage({ apiBase, run, onBack, onChange, embedded = false }:
     {githubUrl && <p className="result-published">已上传到 <a href={githubUrl} target="_blank" rel="noreferrer">{githubUrl}</a></p>}
     <p className="result-location">输出位置：<code>{listing?.root ?? "…"}</code>{listing?.in_project && "（只列出任务改动过的文件）"}</p>
     <nav className="result-tabs" aria-label="结果内容">
-      {([["result", "最终结果"], ["files", `文件（${files.length}）`], ["steps", `各步骤输出（${run.plan.nodes.length}）`], ["learning", "复盘与改进"], ["calls", "模型调用"]] as const).map(([id, label]) =>
+      {([["result", "最终结果"], ["files", `文件（${files.length}）`], ["steps", `各步骤输出（${run.plan.nodes.length}）`], ...(has(provided, "learning") ? [["learning", "复盘与改进"]] as const : []), ["calls", "模型调用"]] as const).map(([id, label]) =>
         <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}
     </nav>
     {tab === "result" && (run.final_result ? <MarkdownView className="result-text" text={run.final_result} onLink={openLinked} /> : <p className="empty">任务还没有最终结果。</p>)}
-    {tab === "learning" && <RetrospectivePanel key={run.id} apiBase={apiBase} runId={run.id} />}
+    {tab === "learning" && has(provided, "learning") && <RetrospectivePanel key={run.id} apiBase={apiBase} runId={run.id} />}
     {tab === "calls" && <CallInsights key={run.id} apiBase={apiBase} runId={run.id} />}
     {tab === "files" && <div className="result-files">
       {listError ? <p className="error">{listError}</p> : !files.length ? <p className="empty">{listing ? "没有输出文件。" : "正在读取文件…"}</p> : <>

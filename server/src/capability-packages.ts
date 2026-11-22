@@ -10,6 +10,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as capabilities from "./capabilities.js";
+import * as extensions from "./extensions.js";
 import { PROVIDABLE } from "./service-names.js";
 import { root } from "./capabilities.js";
 import * as sandbox from "./capability-sandbox.js";
@@ -114,8 +115,13 @@ function manifest(raw: Buffer, files: string[]): Capability {
   const requires = [...new Set(list(given.requires))];
   const unknown = [...provides, ...requires].filter((name) => !PROVIDABLE.has(name));
   if (unknown.length) throw new PackageError(`没有这种能力：${unknown.join("、")}（可以写的是 ${[...PROVIDABLE].join("、")}）。`);
+  if (kind === "service") {
+    const own = provides.filter((name) => extensions.providing(name));
+    if (own.length) throw new PackageError(`${own.join("、")} 只由随 FluidForm 提供的扩展提供，别的包不能替换。`);
+  }
+  if (kind === extensions.KIND && !provides.length) throw new PackageError("扩展要写 provides：它提供哪种能力。");
   if (kind === "service" && !provides.length) throw new PackageError("服务要写 provides：它提供哪种能力。");
-  if (kind !== "service" && provides.length) throw new PackageError("只有服务（kind: service）能写 provides。");
+  if (kind !== "service" && kind !== extensions.KIND && provides.length) throw new PackageError("只有服务（kind: service）能写 provides。");
   if (provides.some((name) => requires.includes(name))) throw new PackageError("一个包不能需要它自己提供的能力。");
   const secrets = list(given.secrets);
   const bad = secrets.filter((item) => !VARIABLE.test(item) || RESERVED.has(item) || item.startsWith("SP_") || item.startsWith("LD_") || item.toUpperCase().includes("PROXY"));
@@ -143,7 +149,11 @@ function open(data: Buffer): ZipFile {
 export function read(data: Buffer): Capability {
   const archive = open(data);
   const [prefix, found] = members(archive);
-  return manifest(archive.read(prefix + MANIFEST), [...new Set(found.map(([, parts]) => parts[0]))].sort());
+  const given = manifest(archive.read(prefix + MANIFEST), [...new Set(found.map(([, parts]) => parts[0]))].sort());
+  // An extension runs inside FluidForm, without a sandbox: never from an upload.
+  if (given.kind === extensions.KIND) throw new PackageError("扩展在 FluidForm 进程里运行，只能随 FluidForm 提供，不能上传。");
+  if (extensions.byId(given.id)) throw new PackageError(`id 不能用 ${given.id}：它是随 FluidForm 提供的扩展。`);
+  return given;
 }
 
 /** Unpack ``data`` as a capability, replacing an older version (its secrets, data and state stay),

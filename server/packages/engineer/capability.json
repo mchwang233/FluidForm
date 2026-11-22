@@ -1,0 +1,11 @@
+{
+  "id": "engineer",
+  "name": "平台工程师",
+  "kind": "extension",
+  "provides": [
+    "diagnosis",
+    "engineer"
+  ],
+  "version": "1.0.0",
+  "summary": "卡住时查原因、修环境、修 FluidForm 自身、加新组件。停用后不诊断也不修，卡住的任务写明原因等你处理。"
+}
