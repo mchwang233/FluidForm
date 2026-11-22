@@ -79,7 +79,19 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 （`diagnosing.ts`）、工作记录和预算（`engineer.ts`）、复制源码、检查、应用、提交和重启（`platform-repair.ts`、
 `self-repair.ts`）。没有平台工程师时，开工前检查不通过也不再请它修，直接暂停。
 
-第 5 步还没做：经验的代码仍在 `server/src`，包里只有清单。
+第 5 步已完成（2026-11-22）：复盘怎么分析和验证、给问题起名、开工前检查、找和写技能都在
+`server/packages/learning/src`，本体通过 `experience.ts` 动态加载。
+
+留在本体的（和原表不同的地方）：
+
+- 按记录算出的复盘和相似问题（`retrospect.ts`）、经验记录的读写（`learning.ts`）、读技能库（`skills.ts`）：
+  别的能力和页面要同步读它们。是否使用仍由 `features.ts` 决定，停用时不复盘、不给技能。
+- 产物约定（`contracts.ts`）、员工和委派的记录（`team.ts`）：执行时要用。
+- 会话和对话的管道（`supervisor.ts`、`leading.ts`）：和聊天共用。
+
+随附扩展用得到本体的模块（同一个进程、同一份实例）；反过来本体只经过 `planning.ts`、`lead.ts`、
+`engineering.ts`、`experience.ts` 动态加载它们，`server/tests/extension-boundary.test.ts` 保证没有直接引用。
+停用后代码不再被调用；已经加载过的要到重启才离开内存。
 
 ## 风险
 

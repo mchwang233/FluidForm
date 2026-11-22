@@ -194,7 +194,7 @@ export class SourceRepairs implements PlatformRepairs {
     if (!this.enabled) return "Platform self-repair is disabled in the application configuration.";
     if (!this.root) return "No editable FluidForm source checkout was found in this installation.";
     return `FluidForm source checkout (read-only during investigation): ${this.root}\n`
-      + "Its code is under server/src and frontend; regression tests are under server/tests and frontend/tests. "
+      + "Its code is under server/src, server/packages (the capabilities shipped with it) and frontend; regression tests are under server/tests and frontend/tests. "
       + "The repair controller will provide an isolated copy, run independent checks, preserve local data, and activate validated fixes "
       + "for all projects. Never modify live source, credentials, task records or Git history.\n"
       + `Only if FluidForm itself is at fault: find its code with ${this.root}/${REPAIR_GUIDES[1]} and diagnose as ${this.root}/${REPAIR_GUIDES[0]} says. `

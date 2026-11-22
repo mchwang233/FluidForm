@@ -11,6 +11,7 @@ import { repairPrompt } from "../packages/engineer/src/prompts.js";
 import { CapabilityScoreSchema, DiagnosisSchema, EventSchema, ExecutionRunSchema, type ExecutionRun, type ModelProfile, TaskNodeSchema,
   type TaskNode } from "../src/models.js";
 import * as retrospect from "../src/retrospect.js";
+import * as retrospectPackage from "../packages/learning/src/naming.js";
 // @ts-expect-error: the pricing package is plain JavaScript
 import { calibration } from "../packages/pricing/pricing.mjs";
 import * as pricing from "../src/pricing.js";
@@ -64,6 +65,8 @@ test("a repair names the area it touched", () => {
   // Since the switch to TS: the same module names, so a problem's repairs before and after count together.
   assert.deepEqual(retrospect.repairedAreas(["server/src/agent.ts", "server/src/cli-channels.ts", "server/tests/agent.test.ts"]),
     [["platform", "agent"], ["platform", "cli_channels"]]);
+  // A module keeps its name in an extension's folder too.
+  assert.deepEqual(retrospect.repairedAreas(["server/packages/planning/src/team-planning.ts"]), [["platform", "team_planning"]]);
 });
 
 test("recurring problems makes no retrospectives for cancelled tasks", () => {
@@ -134,7 +137,7 @@ test("one cause under two names is counted as one", async () => {
   db.saveRun(finished("second", [platformStep()], 1));
   retrospect.record(db, "first");
   db.saveRetrospective("second", retrospect.review(db.getRun("second")!, [], [{ id: "j", files: ["backend/super_partner/agent.py"], report: "步骤沙箱加载 .edarc", node_id: "p" }]));
-  for (const runId of ["first", "second"]) await retrospect.nameProblems(db, name, models, configured, runId);
+  for (const runId of ["first", "second"]) await retrospectPackage.nameProblems(db, name, models, configured, runId);
   assert.ok(name.prompts[1][1].includes("新思 EDA 环境未加载")); // the names given so far are offered again
   const [eda] = retrospect.topics(db).filter((group) => group.topic === "新思 EDA 环境未加载");
   assert.deepEqual(eda.runs, ["first", "second"]);
@@ -156,7 +159,7 @@ test("a bad naming reply leaves the retrospective as it was", async () => {
     db.saveRun(finished("r", [vcsStep()]));
     const before = retrospect.record(db, "r")!;
     assert.ok(before.problems.length > 1);
-    await retrospect.nameProblems(db, namer(reply), models, configured, "r");
+    await retrospectPackage.nameProblems(db, namer(reply), models, configured, "r");
     assert.deepEqual(db.retrospective("r"), JSON.parse(JSON.stringify(before)));
     assert.deepEqual(retrospect.topics(db), []);
   }

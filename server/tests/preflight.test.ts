@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { settings } from "../src/config.js";
 import { ExecutionRunSchema, PreflightCheckSchema, TaskNodeSchema } from "../src/models.js";
-import * as preflight from "../src/preflight.js";
+import * as preflight from "../packages/learning/src/preflight.js";
 import * as skills from "../src/skills.js";
 
 const saved = { ...settings };

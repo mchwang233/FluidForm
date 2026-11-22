@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { settings } from "../src/config.js";
-import * as discovery from "../src/skill-discovery.js";
+import * as discovery from "../packages/learning/src/skill-discovery.js";
 import * as skills from "../src/skills.js";
 
 const TEXT = "---\nname: demo-tool\ndescription: Use demo-tool\n---\n# Usage\nRun `demo-tool --check`.\n";

@@ -4,6 +4,7 @@ A local web app that plans a task into steps, runs each step on a chosen model (
 or API models with sandboxed tools), reviews the results, and diagnoses and repairs failures.
 
 - Backend: `server` (TypeScript, Node 22+, Fastify). Frontend: `frontend` (React, Vite).
+- How a task is done (planning, lead, engineer, learning) lives in `server/packages/<id>/src`; `server/src` never imports it.
 - Where things are: `docs/ARCHITECTURE.md`. Read it before searching the code.
 - Fixing a defect in FluidForm itself: follow `skills/platform-repair/SKILL.md`.
 - Adding a component to FluidForm itself: follow `skills/platform-engineer/SKILL.md`.

@@ -4,8 +4,8 @@
 // Repository search works without a GitHub token; code search does not. Search by tool name, inspect
 // a few matching trees, then read immutable Markdown blobs. A miss or rate limit is advisory. The
 // caller owns the task's network permission and persists a successful general reference.
-import { pyRegex } from "./py.js";
-import * as skills from "./skills.js";
+import { pyRegex } from "../../../src/py.js";
+import * as skills from "../../../src/skills.js";
 
 export const limits = { SEARCH_TIMEOUT: 30 };
 export const MAX_REPOSITORIES = 3;

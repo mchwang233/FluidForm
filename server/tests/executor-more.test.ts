@@ -18,7 +18,7 @@ import { Executor } from "../src/executor.js";
 import { CapabilityScoreFields, EngineerJobSchema, type ExecutionRun, ExecutionRunSchema, type ModelProfile, ModelProfileSchema, NodeAttemptSchema,
   PreflightCheckSchema, type SupervisorSession, SupervisorSessionSchema, type TaskNode, TaskNodeSchema } from "../src/models.js";
 import { autonomousPlan } from "../packages/planning/src/planner.js";
-import * as preflight from "../src/preflight.js";
+import * as preflight from "../packages/learning/src/preflight.js";
 import * as progress from "../src/progress.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as quality from "../src/quality.js";

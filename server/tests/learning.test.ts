@@ -8,6 +8,7 @@ import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { Executor } from "../src/executor.js";
 import * as learning from "../src/learning.js";
+import * as learningPackage from "../packages/learning/src/learning.js";
 import { CapabilityScoreFields, EngineerJobSchema, type ExecutionRun, ExecutionRunSchema, type Improvement, ImprovementSchema, LearningReviewSchema,
   type ModelProfile, ModelProfileSchema, TaskNodeSchema } from "../src/models.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
@@ -16,9 +17,9 @@ import * as skills from "../src/skills.js";
 import { conftest } from "./helpers/conftest.js";
 
 const { folder } = conftest();
-const originalCheck = learning.checks.skill;
+const originalCheck = learningPackage.checks.skill;
 afterEach(() => {
-  learning.checks.skill = originalCheck;
+  learningPackage.checks.skill = originalCheck;
 });
 
 const model = (id: string, coding: number, channel = "api", fields: Partial<ModelProfile> = {}) => ModelProfileSchema.parse({ id, provider: id.split(":")[0], display_name: id, channel,
@@ -195,7 +196,7 @@ test("a skill needs a real check and an independent review", async () => {
     models.items = [proposal("skill", { content, check: "fakecompiler fixture" })];
     models.approved = approved;
     const checked: string[] = [];
-    learning.checks.skill = async (item: Improvement) => {
+    learningPackage.checks.skill = async (item: Improvement) => {
       checked.push(item.check!);
       return { passed: true, output: "fixture passed", command: item.check };
     };
@@ -220,7 +221,7 @@ test("a skill needs a real check and an independent review", async () => {
 test("a skill whose check fails is never published", async () => {
   finished(db);
   models.items = [proposal("skill", { content: "---\nname: c\ntools: [fakecompiler]\n---\nCompile a fixture.", check: "false" })];
-  learning.checks.skill = async () => ({ passed: false, output: "bad command" });
+  learningPackage.checks.skill = async () => ({ passed: false, output: "bad command" });
   const [, [item]] = await learn();
   assert.ok(item.status === "failed");
   assert.deepEqual(learning.selected(db, "fakecompiler"), []);
@@ -230,7 +231,7 @@ test("a skill whose check fails is never published", async () => {
 test("invented evidence and unbounded scope are rejected", () => {
   const run = finished(db);
   for (const change of [{ source_nodes: ["invented"] }, { tools: [], capability: null }, { problem_key: "invented" }, { tools: ["../unsafe"] }]) {
-    assert.throws(() => learning.parseAnalysis(JSON.stringify({ conclusion: "c", improvements: [proposal("rule", change)] }), run), JSON.stringify(change));
+    assert.throws(() => learningPackage.parseAnalysis(JSON.stringify({ conclusion: "c", improvements: [proposal("rule", change)] }), run), JSON.stringify(change));
   }
 });
 
@@ -255,7 +256,7 @@ test("running out of budget is recorded without reopening finished work", async 
 
 test("a restart resumes the validation without making the items again", async () => {
   const run = finished(db);
-  const [conclusion, [item]] = learning.parseAnalysis(JSON.stringify({ conclusion: "c", improvements: [proposal()] }), run);
+  const [conclusion, [item]] = learningPackage.parseAnalysis(JSON.stringify({ conclusion: "c", improvements: [proposal()] }), run);
   item.status = "validating";
   db.saveImprovement(item);
   db.saveLearningReview(LearningReviewSchema.parse({ run_id: run.id, revision: learning.revision(run), status: "validating", conclusion, model_id: "x:writer" }));
@@ -324,9 +325,9 @@ test("a skill's validation really runs in an empty sandbox", { skip: !agent.sand
   const run = finished(db);
   const item = ImprovementSchema.parse({ run_id: run.id, revision: learning.revision(run),
     ...proposal("skill", { check: "printf 'sample' > fixture; test \"$(cat fixture)\" = sample; printf 'checked'" }) });
-  assert.equal((await learning.checkSkill(item)).passed, true);
+  assert.equal((await learningPackage.checkSkill(item)).passed, true);
   item.check = "exit 7";
-  assert.equal((await learning.checkSkill(item)).passed, false);
+  assert.equal((await learningPackage.checkSkill(item)).passed, false);
 });
 
 test("learning turned off costs no model calls", () => {

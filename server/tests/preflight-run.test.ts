@@ -9,7 +9,7 @@ import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { Executor } from "../src/executor.js";
 import { type ExecutionRun, ExecutionRunSchema, TaskNodeSchema } from "../src/models.js";
-import * as preflight from "../src/preflight.js";
+import * as preflight from "../packages/learning/src/preflight.js";
 import { ProviderResult } from "../src/providers.js";
 import { ModelUnavailable } from "../src/quota.js";
 import { allowRealClis, conftest } from "./helpers/conftest.js";

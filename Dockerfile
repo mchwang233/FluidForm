@@ -11,7 +11,7 @@ FROM node:22-slim
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./server/
 RUN npm ci --prefix server
-COPY server/tsconfig.json ./server/
+COPY server/tsconfig.json server/entry.mjs ./server/
 COPY server/src ./server/src
 COPY server/packages ./server/packages
 COPY --from=web /app/server/packages/web/site ./server/packages/web/site

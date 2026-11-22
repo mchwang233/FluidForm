@@ -19,15 +19,15 @@
 import { statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { performance } from "node:perf_hooks";
-import * as agent from "./agent.js";
-import type { CliChannelRegistry } from "./cli-channels.js";
-import { codexHome } from "./cli-channels.js";
-import { settings } from "./config.js";
-import * as environment from "./environment.js";
-import { type ExecutionRun, type PreflightCheck, PreflightCheckSchema } from "./models.js";
-import { head, pyDumps, pyRegex, pySplit, shlexQuote, splitlines } from "./py.js";
-import { program } from "./retrospect.js";
-import * as skills from "./skills.js";
+import * as agent from "../../../src/agent.js";
+import type { CliChannelRegistry } from "../../../src/cli-channels.js";
+import { codexHome } from "../../../src/cli-channels.js";
+import { settings } from "../../../src/config.js";
+import * as environment from "../../../src/environment.js";
+import { type ExecutionRun, type PreflightCheck, PreflightCheckSchema } from "../../../src/models.js";
+import { head, pyDumps, pyRegex, pySplit, shlexQuote, splitlines } from "../../../src/py.js";
+import { program } from "../../../src/retrospect.js";
+import * as skills from "../../../src/skills.js";
 
 // The sandbox check: every line must come back, in order, with the exit code.
 export const SANDBOX_COMMAND = "echo sp-out; echo sp-err >&2; printf x > .sp-preflight && rm .sp-preflight && echo sp-write; "

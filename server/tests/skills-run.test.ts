@@ -10,7 +10,7 @@ import * as environment from "../src/environment.js";
 import { Executor } from "../src/executor.js";
 import { ExecutionRunSchema } from "../src/models.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
-import * as skillDiscovery from "../src/skill-discovery.js";
+import * as skillDiscovery from "../packages/learning/src/skill-discovery.js";
 import * as skills from "../src/skills.js";
 import { conftest } from "./helpers/conftest.js";
 import { model } from "./helpers/lead-run.js";
