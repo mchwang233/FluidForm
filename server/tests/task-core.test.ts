@@ -2,6 +2,7 @@
 // still done, as one step on one model, retried by fixed rules; what needs them says so.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as agent from "../src/agent.js";
 import * as bundled from "../src/bundled.js";
 import * as packages from "../src/capability-packages.js";
 import { Executor } from "../src/executor.js";
@@ -144,4 +145,27 @@ test("the user switches the shipped extensions off and on; they cannot be remove
   assert.throws(upload({ id: "evil", kind: "extension", provides: ["planning"] }), /不能上传/);
   assert.throws(upload({ id: "other", kind: "service", entry: "node s.mjs", provides: ["planning"] }), /不能替换/);
   assert.throws(upload({ id: "lead", kind: "tool" }), /随 FluidForm 提供的扩展/);
+});
+
+test("without the review capability a step's own check is the acceptance: it runs, and failing it fails the step", async () => {
+  const restore = without(...TASK_CAPABILITIES);
+  const before = agent.Workspace.prototype.run;
+  const ran: string[] = [];
+  agent.Workspace.prototype.run = async function (_name: string, args: any) {
+    ran.push(args.command);
+    return ["1 failing", false];
+  } as typeof before;
+  try {
+    const db = leadDatabase(folder());
+    const current = db.getRun("r")!;
+    current.plan.nodes[0].check = "npm test";
+    db.saveRun(current);
+    const [, run] = await runTask(db, new Team([], 0));
+    assert.equal(run.status, "failed");
+    assert.deepEqual(ran, ["npm test", "npm test", "npm test"]);
+    assert.ok(run.error!.includes("声明的验收命令失败"));
+  } finally {
+    agent.Workspace.prototype.run = before;
+    restore();
+  }
 });

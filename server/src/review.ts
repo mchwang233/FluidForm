@@ -60,7 +60,8 @@ export async function check(host: ReviewHost, run: ExecutionRun, node: TaskNode,
   let text = given;
   const blocked = quality.blockedClaim(text);
   if (blocked) return quality.verdict({ passed: false, reason: blocked, blocked });
-  if (!uses.review()) {
+  const ownCheck = uses.ownCheckOnly();
+  if (!uses.review() && !(ownCheck && (node.artifact_contract || (node.check && workspace)))) {
     // Nothing is accepted or rejected: a step that finished has passed, unless it says itself that part
     // of its work cannot be done here.
     const claim = quality.unableClaim(text);
@@ -88,7 +89,13 @@ export async function check(host: ReviewHost, run: ExecutionRun, node: TaskNode,
     if (!ok) return quality.verdict({ passed: false, reason: `声明的验收命令失败：${node.check}\n${output}`, verified: false });
     text += `\n\nPlatform acceptance evidence: ${node.check}\n${output}`;
   }
-  const result = await reviewResult(host, run, node, text, changed, workspace, evidence);
+  let result: quality.Verdict;
+  if (ownCheck) {
+    // Without the review capability its own check, passed above, is all of the acceptance.
+    const claim = quality.unableClaim(given);
+    result = claim ? quality.verdict({ passed: false, reason: `无法完成：${claim}`, fix: claim, unable: claim })
+      : quality.verdict({ passed: true, reason: "步骤自带的检查通过。" });
+  } else result = await reviewResult(host, run, node, text, changed, workspace, evidence);
   if (evidence) {
     evidence.accepted = result.passed;
     result.artifact_evidence = evidence;

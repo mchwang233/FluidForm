@@ -20,6 +20,8 @@ export const uses = {
   fixedRetries: () => !available("lead"),
   /** Without the platform engineer's diagnosis a stuck task waits for the user, saying why. */
   stuckWaits: () => !available("diagnosis"),
+  /** Without the review capability (not merely its setting off) a step's own check is its acceptance. */
+  ownCheckOnly: () => !available("review"),
   /** A stuck step is diagnosed. */
   diagnosis: () => settings.auto_diagnose && available("diagnosis"),
   /** Failed attempts are held for the lead's decision: it needs no platform engineer for that. */
