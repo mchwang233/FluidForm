@@ -130,3 +130,32 @@ test("a chat's tool call runs, shown as it goes", async () => {
   assert.ok(answer.text.includes("我去排计划。") && answer.text.includes("TASK:"));
   assert.equal(sent.length, 2);
 });
+
+test("small talk is answered with little thinking, work with more", async () => {
+  const light = await asked([], "hello");
+  const work = await asked([], "帮我写一段快速排序的代码");
+  assert.equal(light.sent[0].reasoning_effort, "low");
+  assert.equal(work.sent[0].reasoning_effort, "high");
+});
+
+test("stopping a chat's answer stops the command it runs", async () => {
+  process.env.DEEPSEEK_API_KEY = "test";
+  Object.assign(settings, { chat_tools: true, workspace_root: join(folder(), "workspaces") });
+  const call = { id: "c1", type: "function", function: { name: "Bash", arguments: JSON.stringify({ command: "sleep 20" }) } };
+  const sent: any[] = [];
+  const registry = registryWith([deepseek({ content: "", tool_calls: [call] }, "tool_calls")], sent);
+  const model = ModelProfileSchema.parse({ id: ID, provider: "deepseek", display_name: "Flash", context_window: 128000,
+    scores: { coding: 80, planning: 80, reliability: 80 } });
+  Object.assign(registry.models, { [ID]: model });
+  const db = new Database(join(folder(), "stop.db"));
+  db.saveRun(ExecutionRunSchema.parse({ id: "c", prompt: "等等", kind: "chat", status: "draft", budget_usd: 1, origin: { capability: "bot" },
+    supervisor: { model_id: ID, cwd: join(folder(), "lead") }, plan: { summary: "聊天", nodes: [] } }));
+  const executor = new Executor(db, registry as any, { [ID]: model });
+  executor.startLeadChat("c", "等等");
+  for (let tries = 0; !sent.length && tries < 500; tries += 1) await new Promise((done) => setTimeout(done, 10));
+  await new Promise((done) => setTimeout(done, 500));
+  const at = performance.now();
+  executor.leadTasks.get("c")!.cancel();
+  await executor.leadTasks.get("c")!.settled();
+  assert.ok(performance.now() - at < 3000, "it waited for the command");
+});

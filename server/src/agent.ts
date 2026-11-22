@@ -674,12 +674,12 @@ export class Workspace {
 
   /** Run one tool: its output, and whether it went through. Failures come back as text so the model
    *  can correct itself. */
-  async run(name: string, args: Record<string, unknown>): Promise<[string, boolean]> {
+  async run(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<[string, boolean]> {
     try {
       if (this.readOnly && !REVIEW_TOOLS.has(name)) this.requireWrite();
       if (!args || typeof args !== "object" || Array.isArray(args) || "__invalid__" in args) throw new ToolError("arguments must be a JSON object");
       const acting = !this.readOnly && !this.host;
-      if (name === "Bash") return await this.bash(args.command, args.timeout);
+      if (name === "Bash") return await this.bash(args.command, args.timeout, signal);
       if (chatActions.has(name) && acting) return await chatActions.run(name, args);
       if (name.startsWith(mcp.PREFIX) && acting) return await mcp.call(this, name, args);
       const handlers: Record<string, (args: Record<string, unknown>) => string> = { Read: (a) => this.read(a), Write: (a) => this.write(a),
@@ -1092,6 +1092,7 @@ export class Workspace {
             }, seconds * 1000);
             const aborted = () => kill();
             signal?.addEventListener("abort", aborted, { once: true });
+            if (signal?.aborted) kill();
             child.on("error", (error) => {
               clearTimeout(timer);
               fail(error);

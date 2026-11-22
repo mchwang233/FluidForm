@@ -10,7 +10,9 @@
 //   folder, which FluidForm takes (copies into its attachments, then removes); with ``"addressed": false``
 //   when it was not called on (a group message without @ it), and ``"sender"`` naming who said it, and
 //   ``"people"`` the names of the group's people (so an answer can @ them: the package turns "@name"
-//   into its app's mention);
+//   into its app's mention); a person's messages are turns (chat-turns.ts): one answered by taking the
+//   next along gets ``{"re": id, "reply": null, "superseded": true}``; /stop, /new and /status are the
+//   conversation's commands;
 // - it reads ``{"re": id, "reply": ..., "files": [...]}``, the answer and the files to send with it
 //   (paths in its data folder, which it may remove once sent), and ``{"event": "task_ended", "origin":
 //   {...}, "text": ...}`` when a task it asked for ends. While a chat's answer is being written (an API
@@ -25,6 +27,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync,
 import { basename, dirname, isAbsolute, join } from "node:path";
 import type { Readable } from "node:stream";
 import * as files from "./attachments.js";
+import { type Turn, Turns } from "./chat-turns.js";
 import * as capabilities from "./capabilities.js";
 import * as packages from "./capability-packages.js";
 import * as sandbox from "./capability-sandbox.js";
@@ -47,7 +50,13 @@ export const CALLED_ONLY = "（只 @ 了你，没有别的话）";
 // picture: in a chat app the picture and the words about it are often sent apart, the picture a little
 // later. A picture sent this recently is the one such a question means: no waiting then.
 export const RECENT_PICTURE_SECONDS = 120.0;
-export const PICTURE_WORDS = /图片|照片|截图|这张|这幅|这个图|这图|图里|图中|图上|看图|picture|photo|image|screenshot/i;
+export const PICTURE_WORDS = new RegExp("这张(?![表卡票纸单桌床])|这幅|这个图|这图|图里|图中|图上|看图|看看.{0,2}(图|截图)|这(个|些)?(照片|截图)|"
+  + "我.{0,2}发(你|给你)?(一?张|个)?(图|截图|照片)|\\b(this|the) (picture|photo|image|screenshot)\\b", "i");
+// A conversation's commands: said alone, and only where the automation is called on.
+export const STOP_COMMAND = /^(\/stop|停止|停下)$/i;
+export const NEW_COMMAND = /^(\/new|\/reset|新对话)$/i;
+export const STATUS_COMMAND = /^\/status$/i;
+export const STOPPED_NOTE = "（已停下）";
 // How long a line from an automation may be.
 export const LINE_LIMIT = 1 << 20;
 // What is kept of a group's talk the automation was not called on, per conversation (keepHeard).
@@ -85,6 +94,10 @@ export type Asked = {
   sender: string;
   // In a group: its people's names, the ones an answer may @ (the package marks them).
   people: string[];
+  // Aborted when it is stopped, or taken along by the next message (chat-turns.ts).
+  signal?: AbortSignal;
+  // Called once the answer is there, so the next message need not wait for what follows it.
+  answered?: () => void;
 };
 
 export function asked(fields: Partial<Asked> & Pick<Asked, "conversation" | "text">): Asked {
@@ -264,6 +277,8 @@ export class Runner {
   readonly automations = new Map<string, Automation>();
   // Questions about a picture waiting for it, by automation, conversation and sender.
   readonly waitingPictures = new Map<string, (attached: Attachment[]) => void>();
+  /** Each person's messages in each conversation (chat-turns.ts). */
+  readonly turns = new Turns();
   // When each automation, conversation and sender last sent a picture or file.
   readonly lastPicture = new Map<string, number>();
 
@@ -429,7 +444,7 @@ export class Runner {
   async ask(item: Automation, capability: Capability, payload: Record<string, unknown>): Promise<void> {
     const request = payload.id ?? null;
     const text = [...String(payload.text || "").trim()].slice(0, MAX_TEXT).join("");
-    let attached = deps.takeFiles(item, capability.id, payload.attachments);
+    const attached = deps.takeFiles(item, capability.id, payload.attachments);
     const addressed = payload.addressed !== false;
     if (!text && !attached.length && !addressed) {
       await this.send(item, { re: request, reply: null });
@@ -442,42 +457,95 @@ export class Runner {
     if (attached.length && !text && waiting) {
       // The picture a question just before was about: it goes with that question.
       waiting(attached);
-      await this.send(item, { re: request, reply: null });
+      await this.send(item, { re: request, reply: null, superseded: true });
       return;
     }
-    if (text && !attached.length && !sentBefore && PICTURE_WORDS.test(text) && !this.waitingPictures.has(key)) {
-      let timer: NodeJS.Timeout | undefined;
-      try {
-        attached = await new Promise<Attachment[]>((done) => {
-          this.waitingPictures.set(key, (given) => done(given));
-          // None came: the question is about a picture sent before, if any.
-          timer = setTimeout(() => done([]), limits.PICTURE_WAIT_SECONDS * 1000);
-        });
-      } finally {
-        clearTimeout(timer);
-        this.waitingPictures.delete(key);
-      }
+    const conversation = [...String(payload.conversation || "")].slice(0, 200).join("");
+    const sender = [...String(payload.sender || "")].slice(0, 40).join("");
+    if (addressed && conversation && !attached.length && (STOP_COMMAND.test(text) || STATUS_COMMAND.test(text))) {
+      await this.send(item, { re: request, reply: this.command(item, capability, conversation, sender, text) });
+      return;
     }
-    const question = asked({ conversation: [...String(payload.conversation || "")].slice(0, 200).join(""), text: text || (attached.length ? FILES_ONLY : CALLED_ONLY),
-      origin: payload.origin && typeof payload.origin === "object" && !Array.isArray(payload.origin) ? payload.origin as Record<string, unknown> : {},
-      attachments: attached, on_text: Runner.progress(item, request), addressed, sender: [...String(payload.sender || "")].slice(0, 40).join(""),
-      people: groupPeople(payload.people) });
+    const renewing = addressed && !attached.length && NEW_COMMAND.test(text);
+    if (renewing) for (const turn of this.turns.of(capability.id, conversation, sender)) turn.stop("stopped");
+    // Without a conversation there is nothing to take along or wait for: a place of its own.
+    const turn = this.turns.begin(capability.id, conversation || `\0${String(request)}`, sender,
+      { text: text || (attached.length ? FILES_ONLY : CALLED_ONLY), attachments: attached, addressed }, new Set([FILES_ONLY, CALLED_ONLY]));
     let sent: string[] = [];
-    let reply: string | null;
-    let cost: number;
+    let reply: string | null = null;
+    let cost = 0;
     try {
+      if (text && !attached.length && !sentBefore && PICTURE_WORDS.test(text)) turn.said.attachments.push(...(await this.pictureFor(key, turn)));
+      await turn.wait();
+      turn.signal.throwIfAborted();
+      const progress = Runner.progress(item, request);
+      const question = asked({ conversation, text: turn.said.text,
+        origin: payload.origin && typeof payload.origin === "object" && !Array.isArray(payload.origin) ? payload.origin as Record<string, unknown> : {},
+        attachments: [...turn.said.attachments], addressed: turn.said.addressed, sender, people: groupPeople(payload.people),
+        signal: turn.signal, answered: () => turn.end(),
+        on_text: (shown) => {
+          if (turn.stopped) return;
+          // Seen, or a tool at work: from here on the next message waits.
+          turn.seen = true;
+          turn.written = shown;
+          progress(shown);
+        } });
       const answer = await this.handle(capability, question, item);
       [reply, cost] = answer;
       sent = answer.length > 2 ? [...(answer[2] as string[])] : [];
     } catch (error) {
-      log.error(`a message to ${capability.id} failed: ${(error as Error)?.stack ?? error}`);
-      reply = `这条没能处理：${[...String((error as Error)?.message ?? error)].slice(0, 200).join("")}`;
-      cost = 0;
+      if (!turn.stopped) {
+        log.error(`a message to ${capability.id} failed: ${(error as Error)?.stack ?? error}`);
+        reply = `这条没能处理：${[...String((error as Error)?.message ?? error)].slice(0, 200).join("")}`;
+      }
+    } finally {
+      turn.end();
     }
     item.spend(cost);
+    if (turn.stopped && reply === null) {
+      // What was already shown ends where it was; what was not is simply not answered.
+      const shown = /^（正在[^\n]*）$/.test(turn.written.trim()) ? "" : turn.written.trim();
+      await this.send(item, turn.stopped === "stopped" && turn.seen
+        ? { re: request, reply: [shown, STOPPED_NOTE].filter(Boolean).join("\n\n") } : { re: request, reply: null, superseded: true });
+      item.save();
+      return;
+    }
     item.state.handled = Math.trunc(Number(item.state.handled ?? 0)) + 1;
     item.save();
     await this.send(item, { re: request, reply, ...(sent.length ? { files: sent } : {}) });
+  }
+
+  /** The picture a question points at, waited for a little; none if it is stopped or sent on first. */
+  private async pictureFor(key: string, turn: Turn): Promise<Attachment[]> {
+    let timer: NodeJS.Timeout | undefined;
+    let give!: (given: Attachment[]) => void;
+    const none = () => give([]);
+    try {
+      return await new Promise<Attachment[]>((done) => {
+        give = done;
+        this.waitingPictures.set(key, give);
+        turn.signal.addEventListener("abort", none, { once: true });
+        if (turn.signal.aborted) none();
+        // None came: the question is about a picture sent before, if any.
+        timer = setTimeout(none, limits.PICTURE_WAIT_SECONDS * 1000);
+      });
+    } finally {
+      clearTimeout(timer);
+      turn.signal.removeEventListener("abort", none);
+      if (this.waitingPictures.get(key) === give) this.waitingPictures.delete(key);
+    }
+  }
+
+  /** /stop and /status, answered at once, without a model. */
+  private command(item: Automation, capability: Capability, conversation: string, sender: string, text: string): string {
+    const under = this.turns.of(capability.id, conversation, sender);
+    if (STOP_COMMAND.test(text)) {
+      for (const turn of under) turn.stop("stopped");
+      return under.length ? "停下了。" : "现在没有在回答的。";
+    }
+    return [under.length ? `正在回答你的消息（${under.length} 条）。` : "在线，现在没有在回答的。",
+      `回答用的模型：${item.state.model_id ?? "自动选择"}`,
+      "/stop 停下正在回答的；/new 开新对话（闲置 2 小时、每天 4 点也会自动开新的）。"].join("\n");
   }
 
   /** Passes an answer being written on to the automation, at most every PROGRESS_SECONDS. Written

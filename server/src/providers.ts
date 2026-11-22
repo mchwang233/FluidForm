@@ -196,7 +196,7 @@ export type Fetch = typeof fetch;
 
 /** A conversation so far, as the model is sent it: its system prompt (instead of an agent's
  *  instructions) and the turns before the prompt. */
-export type Dialogue = { system: string; messages: { role: "user" | "assistant"; content: string }[] };
+export type Dialogue = { system: string; messages: { role: "user" | "assistant"; content: string }[]; effort?: string | null };
 
 export type CompleteOptions = {
   dialogue?: Dialogue | null;
@@ -273,7 +273,7 @@ export class ProviderRegistry {
   converse(session: SupervisorSession, text: string, { timeout = null, spend_ok = null, attachments = [], tools = null, dialogue = null, signal }:
     { dialogue?: Dialogue | null; timeout?: number | null; spend_ok?: SpendOk | null; attachments?: Attachment[]; tools?: ChatTools | null; signal?: AbortSignal } = {}): Promise<ProviderResult> {
     const modelId = session.model_id as string;
-    const effort = session.reasoning_effort || settings.lead_reasoning_effort;
+    const effort = session.reasoning_effort || dialogue?.effort || settings.lead_reasoning_effort;
     return callRecords.observed(this, "converse", modelId, { spend_ok }, async () => {
       const record = callRecords.row();
       if (record) record.requested_effort = effort;
@@ -706,6 +706,7 @@ export class ProviderRegistry {
         const work = agent;
         // A turn's calls together: its reads and searches run at the same time.
         const execute = async ([callId, name, args]: Call) => {
+          signal?.throwIfAborted(); // stopped: nothing more is done
           if (spendOk?.beginTool) {
             try {
               await spendOk.beginTool(); // reserve durably, before any tool side effects
@@ -720,7 +721,7 @@ export class ProviderRegistry {
           // Someone shows the work as it happens (a chat's quick job, supervisor.ChatActivity).
           const shown = work.log as any;
           if (typeof shown?.starting === "function") shown.starting(name, agentTools.describeCall(name, args));
-          const [output, ok] = name === "RecallHistory" && conversation ? memory.recall(conversation, args) : await work.run(name, args);
+          const [output, ok] = name === "RecallHistory" && conversation ? memory.recall(conversation, args) : await work.run(name, args, signal);
           results.push([callId, name, output]);
           conversation?.save(); // each completion survives a later interrupted sibling
           seen.push({ turn, tool: name, detail: agentTools.describeCall(name, args), ok, output: head(output, LOGGED_OUTPUT) });

@@ -16,7 +16,7 @@ import { type Capability, type ExecutionRun, folderId, LeadMessageSchema, type M
 import { briefWriter } from "./routing.js";
 import * as streaming from "./streaming.js";
 import * as supervisor from "./supervisor.js";
-import { Mutex } from "./tasks.js";
+import { Mutex, type Task } from "./tasks.js";
 
 type Json = Record<string, any>;
 
@@ -77,6 +77,7 @@ export class CapabilityAutomations {
   async message(capability: Capability, asked: Asked, automation: Automation): Promise<Handled> {
     const { api } = this;
     const { db, executor } = api;
+    const { signal } = asked;
     // Without the chat capability nothing answers; the owner sees why in the automation's log.
     if (!chats.enabled()) {
       automation.note(chats.NOT_ENABLED);
@@ -133,6 +134,7 @@ export class CapabilityAutomations {
       automation.note("开了新对话");
       return [String(alone.reply), judged];
     }
+    signal?.throwIfAborted();
     if (earlier.length) delete heard[asked.conversation];
     if (asked.conversation) delete notesByConversation[asked.conversation];
     if (filesBefore.length) {
@@ -142,6 +144,15 @@ export class CapabilityAutomations {
       delete heardFiles[asked.conversation];
     }
     const spent = judged;
+    // Stopped before it was answered: what it took is the conversation's again.
+    const putBack = () => {
+      if (!asked.conversation) return;
+      if (earlier.length) heard[asked.conversation] = keepHeard([...earlier, ...(heard[asked.conversation] ?? [])]);
+      if (filesBefore.length) {
+        heardFiles[asked.conversation] = [...new Set([...filesBefore.map((item) => item.id), ...(heardFiles[asked.conversation] ?? [])])].slice(-MAX_HEARD_FILES);
+      }
+      if (notes.length) notesByConversation[asked.conversation] = [...notes, ...(notesByConversation[asked.conversation] ?? [])].slice(-5);
+    };
     const origin = { ...asked.origin, capability: capability.id };
     // Where a chat is remembered by: kept on the chat (not on the tasks it asks for, which have their own).
     const chatOrigin = { ...origin, ...(asked.conversation ? { conversation: asked.conversation } : {}) };
@@ -159,7 +170,10 @@ export class CapabilityAutomations {
     let pick!: ModelProfile;
     let before = 0;
     let extra = 0;
+    let answering: Task<void> | undefined;
+    let replyId = "";
     await this.opening.get(opening)!.run(async () => {
+      if (signal?.aborted) return;
       // A conversation left for hours, or since yesterday, begins a new chat; the old one stays to be read.
       const held = asked.conversation ? state.chats[asked.conversation] : null;
       const last = held ? db.getRun(held)?.lead_messages.filter((item) => item.role === "user").at(-1)?.created_at : null;
@@ -171,6 +185,7 @@ export class CapabilityAutomations {
         }
       }
       for (;;) {
+        if (signal?.aborted) return;
         const known = asked.conversation ? state.chats[asked.conversation] : null;
         const existing = known ? db.getRun(known) : null;
         if (!existing || existing.kind !== "chat") {
@@ -182,13 +197,14 @@ export class CapabilityAutomations {
           run = await streaming.listener.run(asked.on_text, () => api.startChat(said, settings.default_budget_usd, true, null,
             chosen.id, attached, { autoRouted: true, spent, shown, origin: chatOrigin, title }));
           if (asked.conversation) state.chats[asked.conversation] = run.id;
+          [answering, replyId] = [executor.leadTasks.get(run.id), api.getTask(run.id).lead_messages.at(-1)!.id];
           break;
         }
         run = existing;
         const chat = existing;
         const active = executor.leadTasks.get(chat.id);
         if (active && !active.done) {
-          await active.settled();
+          await settledOrStopped(active, signal);
           continue;
         }
         const started = await executor.locked(chat.id, async () => {
@@ -220,14 +236,32 @@ export class CapabilityAutomations {
           });
           return true;
         });
-        if (started) break;
+        if (started) {
+          [answering, replyId] = [executor.leadTasks.get(chat.id), api.getTask(chat.id).lead_messages.at(-1)!.id];
+          break;
+        }
       }
     });
+    if (!answering) {
+      putBack();
+      throw signal?.reason ?? new Error("这条没能开始回答");
+    }
     // Remember the preference actually used for this turn, not a later change saved mid-reply.
     state.chat_preferences[run.id] = requested!;
     automation.save();
-    const replyId = api.getTask(run.id).lead_messages.at(-1)!.id;
-    await executor.leadTasks.get(run.id)?.settled();
+    const stop = () => answering!.cancel();
+    signal?.addEventListener("abort", stop, { once: true });
+    if (signal?.aborted) stop();
+    await answering.settled();
+    signal?.removeEventListener("abort", stop);
+    if (signal?.aborted) {
+      const superseded = (signal.reason as Error)?.message === "superseded";
+      if (superseded) putBack();
+      await this.withdraw(run.id, replyId, superseded);
+      automation.save();
+      return [null, round6(api.getTask(run.id).actual_cost_usd - before + extra)];
+    }
+    asked.answered?.();
     const latest = api.getTask(run.id);
     const answer = latest.lead_messages.find((item) => item.id === replyId) ?? null;
     let text: string | null = answer ? answer.text : null;
@@ -259,6 +293,19 @@ export class CapabilityAutomations {
       }
     }
     return [text, cost, sent];
+  }
+
+  /** A stopped turn in its chat's records: one the next message took along leaves them (that message
+   *  says it all); one the person stopped says so, and is no question still to answer. */
+  private async withdraw(chatId: string, replyId: string, superseded: boolean): Promise<void> {
+    await this.api.executor.locked(chatId, () => {
+      const chat = this.api.db.getRun(chatId);
+      const at = chat?.lead_messages.findIndex((item) => item.id === replyId) ?? -1;
+      if (!chat || at < 0) return;
+      if (superseded) chat.lead_messages.splice(Math.max(at - 1, 0), at > 0 ? 2 : 1);
+      else Object.assign(chat.lead_messages[at], { text: "（已按要求停下，这条没有答完。）", status: "done" });
+      this.api.db.saveRun(chat);
+    });
   }
 
   /** An answer without its REMEMBER and FORGET lines, which update what is kept about this
@@ -361,6 +408,17 @@ export class CapabilityAutomations {
     }
     this.runner.notify(run.origin.capability, { event: "task_ended", origin: run.origin, outcome: kind, title: taskName(run), text });
   }
+}
+
+/** Waits for ``task``, or until ``signal`` is aborted. */
+async function settledOrStopped(task: Task<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) return task.settled();
+  if (signal.aborted) return;
+  let stop!: () => void;
+  const stopped = new Promise<void>((done) => (stop = done));
+  signal.addEventListener("abort", stop, { once: true });
+  await Promise.race([task.settled(), stopped]);
+  signal.removeEventListener("abort", stop);
 }
 
 function missingReason(error: unknown): string {

@@ -847,3 +847,123 @@ test("idle two hours, a conversation goes on in a new chat", async () => {
   assert.notEqual(runner.get("fake-bot").state.chats.c1, first);
   assert.ok(!sent.at(-1)![2].includes("看看这个日志。"));
 });
+
+/** Messages as they arrive from the app, and what is sent back for each; a model that answers when let. */
+async function live() {
+  const given = withPackages();
+  triaging(given.api, '{"reply": true}');
+  await upload(given.client, pkg());
+  const sent: Record<string, any> = {};
+  given.runner.send = async (_item, payload: any) => {
+    if (payload.re) sent[payload.re] = payload;
+  };
+  const prompts: string[] = [];
+  const held: { write(text: string): void; finish(text: string): void }[] = [];
+  given.api.providers.converse = async (session: SupervisorSession, prompt: string, options: any = {}) => {
+    prompts.push([...(options.dialogue?.messages ?? []).map((item: any) => item.content), prompt].join("\n"));
+    const hear = streaming.listener.get();
+    const answer = await new Promise<string>((finish, fail) => {
+      held.push({ write: (text) => hear?.(text), finish });
+      const stop = () => fail(options.signal.reason);
+      if (options.signal?.aborted) stop();
+      options.signal?.addEventListener("abort", stop, { once: true });
+    });
+    session.calls += 1;
+    return new ProviderResult(answer, 10, 10);
+  };
+  const item = given.runner.get("fake-bot");
+  const say = (id: string, text: string, fields: Record<string, unknown> = {}) =>
+    given.runner.ask(item, capabilities.load("fake-bot")!, { id, conversation: "c1", text, ...fields });
+  const asking = (count: number) => eventually(() => held.length >= count && held);
+  return { ...given, sent, prompts, held, say, asking, item };
+}
+
+test("sent again before anything was written, the first is stopped and both are answered as one", async () => {
+  const { api, sent, prompts, held, say, asking, item } = await live();
+  const first = say("a", "北京明天");
+  await asking(1);
+  const second = say("b", "会下雨吗");
+  await asking(2);
+  held[1].finish("不会。");
+  await Promise.all([first, second]);
+  assert.ok(sent.a.superseded && sent.a.reply === null);
+  assert.equal(sent.b.reply, "不会。");
+  assert.equal(prompts[1].split("北京明天").length, 2); // once
+  const chat = api.db.getRun(item.state.chats.c1)!;
+  assert.deepEqual(chat.lead_messages.map((m) => [m.role, m.status, m.text]), [["user", "done", "北京明天\n会下雨吗"], ["lead", "done", "不会。"]]);
+});
+
+test("sent again while it writes, the next waits its turn, and what waits is taken together", async () => {
+  const { sent, held, say, asking, prompts } = await live();
+  const first = say("a", "讲讲北京");
+  await asking(1);
+  held[0].write("北京是");
+  const second = say("b", "再讲上海");
+  const third = say("c", "还有广州");
+  held[0].finish("北京是首都。");
+  await asking(2);
+  held[1].finish("都讲了。");
+  await Promise.all([first, second, third]);
+  assert.equal(sent.a.reply, "北京是首都。");
+  assert.ok(sent.b.superseded && sent.c.reply === "都讲了。");
+  assert.ok(prompts[1].includes("再讲上海\n还有广州"));
+});
+
+test("/stop ends what is being answered where it is, and the next message is answered", async () => {
+  const { api, sent, held, say, asking, item } = await live();
+  const first = say("a", "写个长的");
+  await asking(1);
+  held[0].write("第一段");
+  await say("s", "/stop");
+  await first;
+  assert.ok(sent.a.reply.startsWith("第一段") && sent.a.reply.includes("已停下") && sent.s.reply);
+  const next = say("b", "你好");
+  await asking(2);
+  held[1].finish("在的。");
+  await next;
+  assert.equal(sent.b.reply, "在的。");
+  const chat = api.db.getRun(item.state.chats.c1)!;
+  assert.ok(chat.lead_messages.every((m) => m.status !== "pending") && chat.lead_messages[1].text.includes("停下"));
+});
+
+test("/new stops what is being answered; /status and an idle /stop ask no model", async () => {
+  const { sent, say, asking, prompts } = await live();
+  await say("s", "/stop");
+  await say("i", "/status");
+  assert.ok(sent.s.reply && sent.i.reply.includes("/new") && !sent.i.reply.includes("$") && prompts.length === 0);
+  const first = say("a", "讲个故事");
+  await asking(1);
+  await say("n", "/new");
+  await first;
+  assert.ok(sent.n.reply.includes("开了新对话") && sent.a.superseded);
+});
+
+test("one person's message does not stop another's in a group", async () => {
+  const { sent, held, say, asking } = await live();
+  const first = say("a", "甲的问题", { sender: "甲" });
+  await asking(1);
+  const second = say("b", "乙的问题", { sender: "乙" });
+  held[0].finish("答甲。");
+  await asking(2);
+  held[1].finish("答乙。");
+  await Promise.all([first, second]);
+  assert.deepEqual([sent.a.reply, sent.b.reply], ["答甲。", "答乙。"]);
+});
+
+test("what the group said before is still told when the question is sent on before its answer", async () => {
+  const { held, say, asking, prompts, item } = await live();
+  item.state.heard = { c1: ["成员1：三点开会"] };
+  const first = say("a", "几点", { sender: "成员2" });
+  await asking(1);
+  const second = say("b", "开会", { sender: "成员2" });
+  await asking(2);
+  held[1].finish("三点。");
+  await Promise.all([first, second]);
+  assert.ok(prompts[1].includes("三点开会"));
+  assert.ok(!item.state.heard.c1?.length);
+});
+
+test("only words that point at a picture wait for one", () => {
+  for (const text of ["这张图是什么", "这张是谁", "图里是什么猫", "看看截图", "我发你张截图", "what is in this picture"]) assert.ok(runners.PICTURE_WORDS.test(text), text);
+  for (const text of ["帮我生成一张图片", "怎么截图", "这张表怎么算", "照片怎么压缩", "apec全家福照片发我一下"]) assert.ok(!runners.PICTURE_WORDS.test(text), text);
+});

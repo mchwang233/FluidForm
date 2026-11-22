@@ -17,6 +17,7 @@ import * as files from "./attachments.js";
 import type { ChatTools, Dialogue, ProviderResult, SpendOk } from "./providers.js";
 import { head, pyRegex, pyStr, sortedBy } from "./py.js";
 import { ModelUnavailable } from "./quota.js";
+import { currentTask } from "./tasks.js";
 import * as skills from "./skills.js";
 import * as streaming from "./streaming.js";
 import { assignmentPrompt } from "./team.js";
@@ -156,10 +157,11 @@ async function chatBriefing(run: ExecutionRun, model: ModelProfile | null): Prom
 const sentEachTurn = (run: ExecutionRun, model: ModelProfile | null) => run.kind === "chat" && model !== null && model.channel !== "cli";
 
 /** What an API model is sent of a chat for this turn, by the chat package (docs/design/chat-context.md). */
-async function chatDialogue(run: ExecutionRun, model: ModelProfile, tools: ChatTools | null): Promise<Dialogue & { now: string }> {
+async function chatDialogue(run: ExecutionRun, model: ModelProfile, tools: ChatTools | null, asked: string, sent: number): Promise<Dialogue & { now: string }> {
   const paths = tools ? files.copiesIn(tools.folder, run.attachments) : {};
   const ctx = chat.context(run, model, tools);
   ctx.chat.history = chat.history(run, paths);
+  ctx.chat.asked = { text: asked, files: sent };
   return (await chat.ask("chat.dialogue", { ctx, ...chat.clock() })) as Dialogue & { now: string };
 }
 
@@ -193,13 +195,15 @@ const briefing = (run: ExecutionRun, model: ModelProfile | null) => (run.kind ==
 /** Bills a call to the task: runs ``call`` with the budget it may spend. */
 export type Charged = (modelId: string, call: (budget: SpendOk) => Promise<ProviderResult>) => Promise<ProviderResult>;
 export type Conversing = { converse(session: SupervisorSession, text: string, options: { spend_ok?: SpendOk | null; attachments?: Attachment[];
-  tools?: ChatTools | null; dialogue?: Dialogue | null }): Promise<ProviderResult> };
+  tools?: ChatTools | null; dialogue?: Dialogue | null; signal?: AbortSignal }): Promise<ProviderResult> };
 
 /** Send ``prompt`` to ``session``'s lead through ``charged``, which bills the call to the task: the
  *  reply and the session, now continued. ``tools``: a chat's quick jobs (chatTools). */
 export async function converse(providers: Conversing, session: SupervisorSession, prompt: string, charged: Charged, attachments: Attachment[] = [],
   tools: ChatTools | null = null, dialogue: Dialogue | null = null): Promise<[string, SupervisorSession]> {
-  const result = await charged(session.model_id!, (budget) => providers.converse(session, prompt, { spend_ok: budget,
+  // A chat's answer can be stopped (/stop, a message sent on): its task's signal reaches the model and the tools.
+  const signal = currentTask()?.signal;
+  const result = await charged(session.model_id!, (budget) => providers.converse(session, prompt, { spend_ok: budget, ...(signal ? { signal } : {}),
     ...(attachments.length ? { attachments } : {}), ...(tools ? { tools } : {}), ...(dialogue ? { dialogue } : {}) }));
   if (!dialogue && session.history.length) trim(session);
   return [result.text, session];
@@ -235,8 +239,8 @@ export async function ask(providers: Conversing, models: ModelProfile[], configu
         let asked = message + (tools ? toolSkills(message) : "");
         let dialogue: Dialogue | null = null;
         if (sentEachTurn(run, model)) {
-          const turn = await chatDialogue({ ...run, supervisor: session }, model!, tools);
-          dialogue = { system: turn.system, messages: turn.messages };
+          const turn = await chatDialogue({ ...run, supervisor: session }, model!, tools, message, attachments.length);
+          dialogue = { system: turn.system, messages: turn.messages, effort: turn.effort };
           asked = `${turn.now}\n\n${asked}`;
         } else if (run.kind === "chat" && model && session === run.supervisor && !session.calls) {
           // A membership CLI keeps its own conversation: its first message carries the rules.
