@@ -229,6 +229,8 @@ export abstract class Preflighting extends Engineering {
 
   /** One environment repair for the failed checks, by the diagnosers; whether it ran. */
   async preflightRepair(runId: string, failed: PreflightCheck[], workspace: string): Promise<boolean> {
+    // Without the platform engineer what is missing waits for the user, saying why.
+    if (uses.stuckWaits()) return false;
     let run = this.db.getRun(runId)!;
     const diagnosisId = this.beginDiagnosis(run, "preflight");
     if (diagnosisId === null) return false;

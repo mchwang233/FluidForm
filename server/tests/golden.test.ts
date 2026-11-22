@@ -27,6 +27,7 @@ import { applyAaScores } from "../src/scoring.js";
 import { inputBound, retryAfter } from "../src/call-control.js";
 import { settings } from "../src/config.js";
 import * as diagnosis from "../src/diagnosis.js";
+import * as diagnosisPackage from "../packages/engineer/src/prompts.js";
 import { ExecutionRunSchema } from "../src/models.js";
 import * as progress from "../src/progress.js";
 import * as recovery from "../src/recovery.js";
@@ -380,11 +381,11 @@ const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] } |
   "diagnosis.parse": (c) => ({ result: diagnosis.parse(c.args[0]), after: c.args }),
   "diagnosis.user_action": (c) => ({ result: diagnosis.userAction(c.args[0]), after: c.args }),
   "diagnosis.interaction": (c) => ({ result: diagnosis.interaction(c.args[0]), after: c.args }),
-  "diagnosis.prompt": (c) => ({ result: diagnosis.prompt(ExecutionRunSchema.parse(c.args[0]), c.args[1], c.args[2], c.args[3], c.args[4]), after: [] }),
+  "diagnosis.prompt": (c) => ({ result: diagnosisPackage.prompt(ExecutionRunSchema.parse(c.args[0]), c.args[1], c.args[2], c.args[3], c.args[4]), after: [] }),
   "diagnosis.repair_prompt": (c) => {
     const run = ExecutionRunSchema.parse(c.args[0]);
     const node = run.plan.nodes.find((item) => item.id === c.args[1])!;
-    return { result: diagnosis.repairPrompt(run, node, c.args[2], c.args[3], c.args[4], c.args[5], c.args[6], c.args[7], c.args[8], c.args[9]), after: [] };
+    return { result: diagnosisPackage.repairPrompt(run, node, c.args[2], c.args[3], c.args[4], c.args[5], c.args[6], c.args[7], c.args[8], c.args[9]), after: [] };
   },
   "triage.read_kind": (c) => ({ result: readKind(c.args[0]), after: [] }),
   "call_control.retry_after": (c) => ({ result: retryAfter(c.args[0], c.args[1]), after: [] }),

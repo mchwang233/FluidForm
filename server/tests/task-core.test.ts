@@ -173,3 +173,20 @@ test("without the review capability a step's own check is the acceptance: it run
     restore();
   }
 });
+
+test("without an engineer a failed check before the start waits for the user, with no diagnosis", async () => {
+  const restore = without("diagnosis", "engineer");
+  try {
+    const db = leadDatabase(folder());
+    const executor = new Executor(db, new Team([]), MODELS);
+    let asked = 0;
+    executor.beginDiagnosis = () => {
+      asked += 1;
+      return null;
+    };
+    assert.equal(await (executor as any).preflightRepair("r", [], folder()), false);
+    assert.equal(asked, 0);
+  } finally {
+    restore();
+  }
+});

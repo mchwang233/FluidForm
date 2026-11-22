@@ -10,6 +10,7 @@ import { settings } from "../src/config.js";
 import * as contracts from "../src/contracts.js";
 import { ArtifactSchema, EmployeeSchema, ExecutionRunSchema, ModelProfileSchema, NodeAttemptSchema, TaskNodeSchema, TaskPlanSchema } from "../src/models.js";
 import * as diagnosis from "../src/diagnosis.js";
+import * as diagnosisPackage from "../packages/engineer/src/prompts.js";
 import * as progress from "../src/progress.js";
 import * as quality from "../src/quality.js";
 import { NoEligibleModelError } from "../src/routing.js";
@@ -58,7 +59,7 @@ test("unknown and incomplete tools are not reported as failures or old answers",
     { turn: 0, tool: "command", detail: "unfinished check", status: "incomplete" }] });
   const node = TaskNodeSchema.parse({ id: "n", title: "t", instructions: "i", capability: "coding", result: "old answer", attempts: [old, latest] });
   const run = ExecutionRunSchema.parse({ id: "r", prompt: "p", status: "failed", budget_usd: 1, plan: { summary: "s", nodes: [node] } });
-  const history = diagnosis.history(run, []).join("\n");
+  const history = diagnosisPackage.history(run, []).join("\n");
   assert.ok(!history.includes("Last result:") && history.includes("attempt 1 result") && history.includes("attempt 2 result: unknown"));
   const summary = diagnosis.toolSummary(run.plan.nodes[0].attempts[1], true);
   assert.ok(!summary.includes("failed") && summary.includes("unknown") && summary.includes("incomplete"));

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { settings } from "../src/config.js";
 import * as diagnosis from "../src/diagnosis.js";
+import * as diagnosisPackage from "../packages/engineer/src/prompts.js";
 import { DiagnosisMessageSchema, ExecutionRunSchema, ModelProfileSchema, NodeAttemptSchema, type TaskNode, TaskNodeSchema } from "../src/models.js";
 import * as progress from "../src/progress.js";
 import * as recovery from "../src/recovery.js";
@@ -66,10 +67,10 @@ test("a diagnosis is told when a step keeps failing", async () => {
   const run = ExecutionRunSchema.parse({ id: "r", prompt: "p", status: "running", budget_usd: 1,
     plan: { summary: "s", nodes: [step(["x:flash", "rejected"], ["x:flash", "rejected"])] } });
   const node = run.plan.nodes[0];
-  const text = diagnosis.repairPrompt(run, node, "/w", "/tools", [], []);
+  const text = diagnosisPackage.repairPrompt(run, node, "/w", "/tools", [], []);
   assert.ok(text.includes("failed 2 times in a row") && text.includes("STATUS: UNABLE"));
   node.attempts = node.attempts.slice(0, 1);
-  assert.ok(!diagnosis.repairPrompt(run, node, "/w", "/tools", [], []).includes("times in a row"));
+  assert.ok(!diagnosisPackage.repairPrompt(run, node, "/w", "/tools", [], []).includes("times in a row"));
 });
 
 test("the progress checker must explicitly permit continuation", async () => {
@@ -123,7 +124,7 @@ test("a reply to an older report is still in the next prompt", async () => {
     nodes: [{ id: "n", title: "Check", instructions: "run node --check", capability: "coding", model_id: "x:api" }] },
     diagnoses: Array.from({ length: 8 }, (_, index) => ({ id: String(index), trigger: "manual", status: "done" })) });
   run.diagnoses[0].messages = [DiagnosisMessageSchema.parse({ text: "纠正最早的判断：保留旧接口。" })];
-  assert.ok(diagnosis.repairPrompt(run, run.plan.nodes[0], "workspace", "tools", [], []).includes("纠正最早的判断：保留旧接口。"));
+  assert.ok(diagnosisPackage.repairPrompt(run, run.plan.nodes[0], "workspace", "tools", [], []).includes("纠正最早的判断：保留旧接口。"));
 });
 
 test("a repair is given the skills of the tools its failure is about", async () => {
@@ -131,10 +132,10 @@ test("a repair is given the skills of the tools its failure is about", async () 
   const node = TaskNodeSchema.parse({ id: "n", title: "仿真", instructions: "运行 vcs 回归", capability: "coding",
     attempts: [NodeAttemptSchema.parse({ model_id: "x", outcome: "error", reason: "Failed to obtain license: FlexNet Licensing error:-15" })] });
   const run = ExecutionRunSchema.parse({ id: "r", prompt: "p", status: "running", budget_usd: 1, plan: { summary: "s", nodes: [node] } });
-  const prompt = diagnosis.repairPrompt(run, node, "/w", "/tools", [], []);
+  const prompt = diagnosisPackage.repairPrompt(run, node, "/w", "/tools", [], []);
   assert.ok(prompt.includes("### Skill: flexlm-license") && prompt.includes("VENDOR snpslmd PORT=27021"));
   assert.ok(prompt.includes("### Skill: synopsys-vcs"));
   assert.ok(!prompt.includes("tracing `lmutil lmstat`"));
   const quiet = TaskNodeSchema.parse({ ...node, instructions: "写一个网页", attempts: [] });
-  assert.ok(!diagnosis.repairPrompt({ ...run, plan: { ...run.plan, nodes: [quiet] } }, quiet, "/w", "/tools", [], []).includes("### Skill:"));
+  assert.ok(!diagnosisPackage.repairPrompt({ ...run, plan: { ...run.plan, nodes: [quiet] } }, quiet, "/w", "/tools", [], []).includes("### Skill:"));
 });

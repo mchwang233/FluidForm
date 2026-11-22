@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { builtinModels } from "../src/catalog.js";
 import { Database } from "../src/db.js";
-import { repairPrompt } from "../src/diagnosis.js";
+import { repairPrompt } from "../packages/engineer/src/prompts.js";
 import { CapabilityScoreSchema, DiagnosisSchema, EventSchema, ExecutionRunSchema, type ExecutionRun, type ModelProfile, TaskNodeSchema,
   type TaskNode } from "../src/models.js";
 import * as retrospect from "../src/retrospect.js";

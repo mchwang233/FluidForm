@@ -74,7 +74,12 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 共用的会话和对话管道（`supervisor.ts`、`leading.ts`）、改任务的动作（`leading.ts`），以及不需要负责人的检查
 （步骤自带的检查命令、卡住检查，`review.ts`）。
 
-第 4–5 步还没做：平台工程师和经验的代码仍在 `server/src`，包里只有清单。
+第 4 步已完成（2026-11-22）：怎么查、怎么修环境、怎么修和扩展 FluidForm 自身（提示词和各轮流程）都在
+`server/packages/engineer/src`，本体通过 `engineering.ts` 动态加载。留在本体的是按诊断结论改任务
+（`diagnosing.ts`）、工作记录和预算（`engineer.ts`）、复制源码、检查、应用、提交和重启（`platform-repair.ts`、
+`self-repair.ts`）。没有平台工程师时，开工前检查不通过也不再请它修，直接暂停。
+
+第 5 步还没做：经验的代码仍在 `server/src`，包里只有清单。
 
 ## 风险
 

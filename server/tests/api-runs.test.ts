@@ -8,7 +8,8 @@ import { test } from "node:test";
 import { BudgetExceeded } from "../src/budget.js";
 import { settings } from "../src/config.js";
 import type { Database } from "../src/db.js";
-import { NETWORK_CHOICE, repairPrompt } from "../src/diagnosis.js";
+import { NETWORK_CHOICE } from "../src/diagnosis.js";
+import { repairPrompt } from "../packages/engineer/src/prompts.js";
 import { Executor } from "../src/executor.js";
 import {
   CapabilityScoreSchema, DiagnosisSchema, EventSchema, type ExecutionRun, ExecutionRunSchema, folderId, ModelProfileSchema, NodeAttemptSchema,
