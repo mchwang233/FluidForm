@@ -140,7 +140,7 @@ export async function askCodex(home: string | null = null, timeout = ASK_TIMEOUT
   const executable = deps.which(CLI_SPECS["cli:codex"].executable);
   if (!executable) return null;
   const env = { ...process.env, ...(home ? { CODEX_HOME: home } : {}) };
-  const messages = [{ jsonrpc: "2.0", id: 1, method: "initialize", params: { clientInfo: { name: "super-partner", version: "1" } } },
+  const messages = [{ jsonrpc: "2.0", id: 1, method: "initialize", params: { clientInfo: { name: "fluidform", version: "1" } } },
     { jsonrpc: "2.0", method: "initialized" }, { jsonrpc: "2.0", id: 2, method: "account/rateLimits/read" }];
   const child = spawn(executable, ["app-server"], { stdio: ["pipe", "pipe", "ignore"], env });
   const timer = setTimeout(() => child.kill("SIGKILL"), timeout * 1000);

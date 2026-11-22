@@ -86,3 +86,8 @@ export function partPath(plan: TaskPlan, partId: string | null): PlanPart[] {
 export function folderId(run: ExecutionRun): string {
   return run.workspace_id || run.folder_name || run.id;
 }
+
+// A diagnosis or repair that changed FluidForm itself: "fluidform", or "fluidform" in records made
+// before it was renamed.
+export const PLATFORM_SCOPE = "fluidform";
+export const isPlatformScope = (scope: unknown) => scope === PLATFORM_SCOPE || scope === "super_partner";

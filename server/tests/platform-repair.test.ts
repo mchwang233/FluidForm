@@ -45,7 +45,7 @@ async function candidate() {
 test("the source copy and its checks keep data and the user's edits apart", async () => {
   const [repairs, job] = await candidate();
   const copied = join(job.folder, "source");
-  for (const name of [".env", "workspaces", ".super-partner"]) assert.ok(!existsSync(join(copied, name)), name);
+  for (const name of [".env", "workspaces", ".fluidform"]) assert.ok(!existsSync(join(copied, name)), name);
   assert.ok(readFileSync(join(checkout, API), "utf8").includes("broken"));
   assert.ok(readFileSync(join(copied, API), "utf8").includes("unrelated user edit"));
   assert.equal(job.checks.length, 4);
@@ -113,15 +113,15 @@ test("checks follow the task's network and proxy rules, without provider keys", 
       assert.equal(env.HTTPS_PROXY, allowNetwork ? "http://127.0.0.1:3180" : undefined, label);
       assert.equal(env.NO_PROXY, allowNetwork ? "example.test" : undefined, label);
       assert.ok(!("OPENAI_API_KEY" in env));
-      assert.equal(env.SUPER_PARTNER_VALIDATION_ALLOW_NETWORK, String(allowNetwork));
-      assert.equal(env.SUPER_PARTNER_DATA_DIR, join(source, ".validation", "data"));
+      assert.equal(env.FLUIDFORM_VALIDATION_ALLOW_NETWORK, String(allowNetwork));
+      assert.equal(env.FLUIDFORM_DATA_DIR, join(source, ".validation", "data"));
     }
   }
 });
 
 test("the real check sandbox obeys the network permission and keeps data private", { skip: !agent.sandboxAvailable() && "bubblewrap is not installed" }, async (t) => {
   for (const allowNetwork of [false, true]) {
-    if (allowNetwork && (!agent.networkAvailable() || process.env.SUPER_PARTNER_VALIDATION_ALLOW_NETWORK === "false")) {
+    if (allowNetwork && (!agent.networkAvailable() || process.env.FLUIDFORM_VALIDATION_ALLOW_NETWORK === "false")) {
       t.diagnostic("pasta is not installed, or the network is not allowed here: only the offline case ran");
       continue;
     }
@@ -195,7 +195,7 @@ test("applying installs, builds and restarts, or rolls back, without touching ta
     // Each time: the server is built from the source in place, then the service restarted.
     const once = [["npm", "run", "build"], ["systemctl", "--user", "restart", job.unit]];
     assert.deepEqual(commands, healthy ? once : [...once, ...once]);
-    assert.equal(readFileSync(join(checkout, ".super-partner/super-partner.db"), "utf8"), "keep task data");
+    assert.equal(readFileSync(join(checkout, ".fluidform/fluidform.db"), "utf8"), "keep task data");
     assert.equal(readFileSync(join(checkout, "workspaces/kept/file.txt"), "utf8"), "keep project");
     assert.equal(existsSync(join(checkout, "server/tests/new-regression.test.ts")), healthy);
     // Undo the applied fix for the next case.
@@ -243,10 +243,10 @@ test("a platform diagnosis edits a copy, and only then schedules applying it", a
     const db = new Database(join(folder(), `test-${networkBefore}-${networkAfter}.db`));
     const { ProviderError } = await import("../src/budget.js");
     const platformProvider = { configuredModels: (ids: Iterable<string>) => new Set(ids), async complete(modelId: string, prompt: string, options: CompleteOptions = {}) {
-      if (prompt.startsWith("[[super-partner:platform-repair]]")) {
+      if (prompt.startsWith("[[fluidform:platform-repair]]")) {
         assert.equal(options.repair, false);
         // Every model that repairs gets the skill and the map, and its copy has them too.
-        assert.ok(prompt.includes("# Repairing Super Partner") && prompt.includes("architecture map") && !prompt.includes("name: platform-repair"));
+        assert.ok(prompt.includes("# Repairing FluidForm") && prompt.includes("architecture map") && !prompt.includes("name: platform-repair"));
         const workspace = options.workspace!;
         assert.ok(existsSync(join(workspace, "AGENTS.md")) && existsSync(join(workspace, "skills/platform-repair/SKILL.md")) && workspace !== checkout);
         assert.equal(JSON.parse(readFileSync(join(dirname(workspace), "job.json"), "utf8")).allow_network, networkBefore);
@@ -259,8 +259,8 @@ test("a platform diagnosis edits a copy, and only then schedules applying it", a
       if (options.repair) {
         assert.ok(prompt.includes(checkout) && prompt.includes("LOCATION:") && prompt.includes(`${checkout}/skills/platform-repair/SKILL.md`));
         // Only the paths: a task diagnosis must not take the platform guide for the task's.
-        assert.ok(!prompt.includes("# Repairing Super Partner"));
-        return new ProviderResult("Super Partner 调度器没有正确处理步骤状态。\nSTATUS: PLATFORM_REPAIR", 0, 0, modelId);
+        assert.ok(!prompt.includes("# Repairing FluidForm"));
+        return new ProviderResult("FluidForm 调度器没有正确处理步骤状态。\nSTATUS: PLATFORM_REPAIR", 0, 0, modelId);
       }
       throw new ProviderError("scheduler defect");
     } };
@@ -284,7 +284,7 @@ test("a platform diagnosis edits a copy, and only then schedules applying it", a
     assert.equal(run.status, "paused");
     assert.equal(run.maintenance_id, executor.platformPending!.id);
     assert.equal(run.plan.nodes[0].status, "pending");
-    assert.equal(run.diagnoses.at(-1)!.scope, "super_partner");
+    assert.equal(run.diagnoses.at(-1)!.scope, "fluidform");
     assert.equal(run.diagnoses.at(-1)!.verdict, "platform_pending");
     assert.equal(executor.platformPending!.allow_network, networkAfter);
     // The database's records are checked too: five checks.
@@ -312,7 +312,7 @@ test("a restart resumes only the held runs with budget left", () => {
   assert.equal(db.getRun("user-paused")!.status, "paused");
   assert.equal(db.getRun("cancelled")!.status, "cancelled");
   assert.equal(db.getRun("over-budget")!.status, "paused");
-  assert.equal((db.sharedRepairs()[0] as Record<string, unknown>).scope, "super_partner");
+  assert.equal((db.sharedRepairs()[0] as Record<string, unknown>).scope, "fluidform");
 });
 
 test("links in the source cannot take a repair outside it", () => {
@@ -323,7 +323,7 @@ test("links in the source cannot take a repair outside it", () => {
 });
 
 test("every platform change is given the platform's rules", () => {
-  // Repairs and components alike get the limits on changing Super Partner: no facts about one machine
+  // Repairs and components alike get the limits on changing FluidForm: no facts about one machine
   // in its source, the sandbox closed by default, no git in the copy.
   const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
   for (const names of [platform.REPAIR_GUIDES, platform.COMPONENT_GUIDES]) {

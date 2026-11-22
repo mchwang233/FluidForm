@@ -95,7 +95,9 @@ export function TaskAttachments({ apiBase, attachments }: { apiBase: string; att
 }
 
 /** Where the API is (as in src.tsx), for the boxes that do not get it passed down. */
-export const API_BASE: string = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+// The API: where the page came from when FluidForm serves it (the web console package, /web/), the
+// local service while developing with Vite, or what VITE_API_URL says.
+export const API_BASE: string = import.meta.env.VITE_API_URL || (import.meta.env.DEV || typeof window === "undefined" ? "http://127.0.0.1:8000" : window.location.origin);
 export type Files = ReturnType<typeof useAttachments>;
 
 /** Every box that takes text takes files too: pasted (a screenshot, files copied in the file

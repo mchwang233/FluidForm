@@ -4,10 +4,13 @@ import { Api } from "./api.js";
 import { buildApp } from "./app.js";
 import { settings } from "./config.js";
 import { log } from "./log.js";
+import { migrate } from "./rename.js";
 import { hydrateProviderKeys } from "./secrets.js";
 
 const { values } = parseArgs({ options: { host: { type: "string", default: "127.0.0.1" }, port: { type: "string", default: "8000" } } });
 
+// What it kept as FluidForm, moved to FluidForm's names first.
+migrate();
 settings.prepare();
 settings.loadSavedProfile();
 await hydrateProviderKeys();

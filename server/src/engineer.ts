@@ -1,9 +1,10 @@
-// The platform engineer: changes to Super Partner itself, as jobs (EngineerJob,
+// The platform engineer: changes to FluidForm itself, as jobs (EngineerJob,
 // docs/design/platform-engineer.md). The user asks for a repair or a component; a task's lead may ask
 // for a component. A component is planned first and the user approves the plan; every change is made in
 // an isolated copy and checked (platform-repair.ts), and applied by a restart (self-repair.ts), a
 // component only once the user approves it. Repairs a task's diagnosis makes stay in that task
 // (SelfRepair.fixPlatform) and are only recorded here.
+import { uses } from "./features.js";
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
@@ -12,8 +13,7 @@ import { BudgetExceeded, RequestBudget } from "./budget.js";
 import { settings } from "./config.js";
 import { interaction, OPTIONS_LINES, QUESTION_LINES } from "./diagnosis.js";
 import { nowIso } from "./lax.js";
-import { type Attachment, type Diagnosis, ENGINEER_DONE, ENGINEER_WAITING, type EngineerJob, EngineerJobSchema, EngineerMessageSchema, type ExecutionRun,
-  type TaskNode } from "./models.js";
+import { type Attachment, type Diagnosis, ENGINEER_DONE, ENGINEER_WAITING, type EngineerJob, EngineerJobSchema, EngineerMessageSchema, type ExecutionRun, type TaskNode, isPlatformScope } from "./models.js";
 import { COMPONENT_GUIDES, RepairError, type RepairJob, REPAIR_GUIDES, repairGuide } from "./platform-repair.js";
 import type { ProviderResult, SpendOk } from "./providers.js";
 import { AsyncEvent, fixed, head, pyRegex, pyRound, splitlines, tail } from "./py.js";
@@ -90,7 +90,7 @@ const conversation = (job: EngineerJob) => job.messages.slice(-20).map((item) =>
 
 export function planPrompt(job: EngineerJob, guide: string): string {
   const asker = job.origin === "lead" ? "The lead of a running task asks for it" : "The user asks for it";
-  return "[[super-partner:platform-engineer:plan]]\n" + ROLE
+  return "[[fluidform:platform-engineer:plan]]\n" + ROLE
     + "The working directory is an isolated copy of FluidForm's source. Read it to plan the "
     + "change below; do not edit anything yet. Read docs/ARCHITECTURE.md first, then only the code "
     + `you need.\n${asker}:\n${job.request}\n\nConversation so far:\n${conversation(job)}\n`
@@ -113,7 +113,7 @@ export function editPrompt(job: EngineerJob, guide: string, feedback = ""): stri
   const what = job.kind === "component" ? `Add this component as the approved plan says.\nRequest:\n${job.request}\n\nApproved plan:\n${job.plan}\n`
     : `Repair this defect in FluidForm:\n${job.request}\n`;
   const after = job.kind === "component" ? ", shows the user the change, and applies it once they approve" : ", and applies a passing change";
-  return "[[super-partner:platform-engineer:edit]]\n" + ROLE
+  return "[[fluidform:platform-engineer:edit]]\n" + ROLE
     + "The working directory is an isolated copy of FluidForm's source; make the change there "
     + "with your file tools. Preserve unrelated existing changes. Add tests that prove the change (for "
     + "a repair, a regression test that fails without it); never weaken or delete existing tests. Do "
@@ -161,7 +161,7 @@ export abstract class Engineering extends SelfRepair {
   // --- what the user and the API see ------------------------------------------------------------
 
   engineerAvailable(): boolean {
-    return Boolean(this.platform.enabled && this.platform.root);
+    return uses.engineer() && Boolean(this.platform.enabled && this.platform.root);
   }
 
   engineerOverview(limit = 30, runId: string | null = null): Json {
@@ -180,7 +180,7 @@ export abstract class Engineering extends SelfRepair {
     for (const run of this.db.listRuns()) {
       const titles = new Map(run.plan.nodes.map((node) => [node.id, node.title]));
       for (const item of run.diagnoses) {
-        if (!(item.trigger in ENGINEER_CALLERS) || item.status === "running" || item.scope === "super_partner") continue;
+        if (!(item.trigger in ENGINEER_CALLERS) || item.status === "running" || isPlatformScope(item.scope)) continue;
         found.push({ id: item.id, run_id: run.id, task: run.plan.title || head(run.plan.summary, 40), step: titles.get(item.node_id || "") ?? "",
           trigger: item.trigger, status: item.status, verdict: item.verdict, model_id: item.model_id, summary: head(item.report || item.error || "", 300),
           user_action: item.user_action, created_at: item.created_at });
@@ -204,6 +204,7 @@ export abstract class Engineering extends SelfRepair {
    *  ``threadId`` it goes on with that conversation, told what came of it before. */
   engineerRequest(given: string, kind = "component", origin = "user", { runId = null, nodeId = null, decisionId = null, budgetUsd = null, improvementId = null,
     threadId = null, attachments = [] }: EngineerRequestOptions = {}): EngineerJob {
+    if (!uses.engineer()) throw new EngineerError("没有启用平台工程师能力。");
     if (!this.engineerAvailable()) throw new EngineerError("平台工程师不可用：平台自修复未启用，或当前安装没有可编辑的 FluidForm 源码。");
     const request = (given || "").trim();
     if (!request) throw new EngineerError("请写明要修复什么，或要添加什么组件。");

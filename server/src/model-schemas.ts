@@ -537,6 +537,8 @@ export const CapabilityFields = {
   // needs to be there first.
   provides: z.array(z.string()).default(() => []),
   requires: z.array(z.string()).default(() => []),
+  // An interface package: the folder of its web page (index.html and what it loads), served by FluidForm.
+  site: z.string().default(() => ("" as const)),
 };
 export const CapabilitySchema = model("Capability", CapabilityFields);
 export type Capability = z.output<typeof CapabilitySchema>;
@@ -552,6 +554,10 @@ export const ExecutionRunFields = {
   capability_proposals: z.array(CapabilityProposalSchema).default(() => []),
   budget_usd: lax.number(),
   use_cli: lax.bool().default(() => (true)),
+  // The models its steps and its lead may use, as asked for (the command line's --model); empty: any.
+  only_models: z.array(z.string()).default(() => []),
+  // Only membership CLIs (--only-cli); use_cli false is only API models.
+  cli_only: lax.bool().default(() => (false)),
   allow_network: lax.bool().default(() => (false)),
   project_dir: z.string().nullable().default(() => (null)),
   attachments: z.array(AttachmentSchema).default(() => []),

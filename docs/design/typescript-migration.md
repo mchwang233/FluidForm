@@ -34,7 +34,7 @@
 | 加密 | cryptography | `node:crypto`（内置） | |
 | Excel | openpyxl | 自己读（`xlsx.ts`，在 `zip.ts` 上） | 只有 benchmarks 用；安装包本来就要读 zip，读 xlsx 只多一百多行，省掉 exceljs 和它带来的一百多个包 |
 | HTTP 客户端 | httpx | 内置 fetch | |
-| 命令行 | typer | 内置 `util.parseArgs` | `super-partner` 命令保留 |
+| 命令行 | typer | 内置 `util.parseArgs` | `fluidform` 命令保留 |
 | 测试 | pytest | `node:test`（内置，和前端一样） | |
 | 检查 | ruff | `tsc --noEmit`（strict） | |
 | 运行 TS | — | tsx（开发）、tsc 编译（运行） | |
@@ -47,7 +47,7 @@
 
 | 阶段 | 内容 | 主要模块 |
 |---|---|---|
-| 0 基础 | `server/` 骨架、配置（`SUPER_PARTNER_*` 不变）、数据库层、全部数据模型、密钥读写验证、对拍工具 | config, db, models, secrets |
+| 0 基础 | `server/` 骨架、配置（`FLUIDFORM_*` 不变）、数据库层、全部数据模型、密钥读写验证、对拍工具 | config, db, models, secrets |
 | 1 纯逻辑 | 不碰外部的规则和文字 | contracts, quality, supervisor, routing, catalog, team, remembering, triage … |
 | 2 对外调用 | API 模型、会员 CLI、沙箱和工具、环境检查 | providers, cli_channels, agent, environment, preflight, mcp, cli_quota |
 | 3 编排核心 | 计划、执行、负责人、诊断、学习 | planner, task_planning, executor, leading, replan, review, diagnosis, learning, retrospect |
@@ -101,7 +101,7 @@
   平台修复和平台工程师从此改 `server/` 和 `frontend/`，`backend/`、`tests/` 不再改。
 - **数据模型和设置的定义**从此直接在 TS 里改：`models.generated.ts` 改名 `model-schemas.ts`，
   `config.generated.ts` 改名 `config-fields.ts`，`gen_models.py` 和检查它的测试删掉。
-- `super-partner` 命令由 `server/dist/cli.js` 提供（`npm link`）。
+- `fluidform` 命令由 `server/dist/cli.js` 提供（`npm link`）。
 - 复盘按"修了哪个模块"归类时也认 `server/src/` 下的文件，模块名里的 `-` 换成 `_`，和以前的记录算同一类。
 - 对拍又查出两个问题，已修：
   - **数据库被别的进程写着时，TS 立刻报"database is locked"**（node:sqlite 默认不等），Python 的 sqlite3 会等 5 秒。
@@ -243,12 +243,12 @@ Python 里放到线程跑的重活（`quality.file_state`、`contracts.prepare` 
   `src/model-hooks.ts`（0–1 旧分数、旧阈值推难度、旧工具调用的状态、保存的尝试里“进行中”的调用、
   合同不能有空行），方法在 `src/models.ts`。`gen_models.py --check` 在测试里跑：Python 那边改了字段而
   TS 没重新生成，测试就失败。
-- **设置**（`src/config.ts`，字段同样生成）：`SUPER_PARTNER_*` 环境变量和 `.env`，优先级、JSON 列表、
+- **设置**（`src/config.ts`，字段同样生成）：`FLUIDFORM_*` 环境变量和 `.env`，优先级、JSON 列表、
   大小写、旧设置名、档位（careful）与 pydantic-settings 一致。
 - **数据库**（`src/db.ts`，内置 `node:sqlite`）：同一个文件、同样的表和 JSON；排序列的时间照 Python 写成
   `+00:00`。
 - **密钥**（`src/secrets.ts`、`src/keyring-worker.ts`，`@napi-rs/keyring`）：照旧只在可杀掉的子进程里碰
-  密钥库，锁住时不卡服务，日志不带密钥；同一服务名 `super-partner`，与 Python 互相读写。
+  密钥库，锁住时不卡服务，日志不带密钥；同一服务名 `fluidform`，与 Python 互相读写。
 - **服务骨架**（`src/app.ts`、`src/main.ts`，Fastify）：只认本机 Host、别的网站不能改东西、修复应用中
   时改动等待；第一个路由 `GET/PUT /api/settings/profile`。
 - **对拍工具**：`tools/parity-records.ts`（逐条记录比 Python 和 TS 读出的结果）、

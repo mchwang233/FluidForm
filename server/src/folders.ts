@@ -49,7 +49,7 @@ export function taskFolder(label: string | null | undefined, when: Date = new Da
 export function leadRoot(): string {
   if (settings.lead_root) return settings.lead_root;
   const cache = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
-  return join(cache, "super-partner", "leads");
+  return join(cache, "fluidform", "leads");
 }
 
 /** A new folder for one lead conversation: when it started and on which model. */

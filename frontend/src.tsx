@@ -48,12 +48,12 @@ function ProviderCard({provider,onChanged}:{provider:Provider;onChanged:()=>void
   return <article className="provider-card"><div className="provider-head"><span className={`provider ${provider.id}`}>{provider.id.slice(0,2).toUpperCase()}</span><div><b>{provider.name}</b><small className={provider.configured?"ready":"off"} title={provider.keyring_locked?"已保存的 Key 在系统密钥环里，密钥环解锁后会自动加载":undefined}>{provider.configured?"已连接":provider.keyring_locked?"密钥环未解锁":"未配置"}</small></div></div><form className="key-form" onSubmit={save}><input type="password" autoComplete="new-password" value={key} onChange={e=>setKey(e.target.value)} placeholder={provider.configured?"输入新 Key 以替换":"粘贴 API Key"} minLength={8} required/><button disabled={!!busy}>{busy==="save"?"保存中…":"保存"}</button></form><div className="provider-actions"><button type="button" className="ghost" onClick={test} disabled={!provider.configured||!!busy}>{busy==="test"?"测试中…":"测试连接"}</button>{provider.configured&&<button type="button" className="danger" onClick={remove} disabled={!!busy}>{busy==="remove"?"移除中…":"移除"}</button>}</div>{message&&<p className={`provider-message ${message.tone}`} role={message.tone==="bad"?"alert":"status"}>{message.text}</p>}</article>
 }
 
-const PROJECT_KEY="super-partner.project-dir";
-const HISTORY_KEY="super-partner.history";
+const PROJECT_KEY="fluidform.project-dir";
+const HISTORY_KEY="fluidform.history";
 function savedProjectDir(){try{return localStorage.getItem(PROJECT_KEY)||""}catch{return ""}}
 
 type Theme = "light"|"dark"|"system";
-const THEME_KEY="super-partner.theme";
+const THEME_KEY="fluidform.theme";
 const THEMES: {id:Theme;label:string;icon:IconName}[] = [{id:"light",label:"浅色",icon:"sun"},{id:"dark",label:"深色",icon:"moon"},{id:"system",label:"跟随系统",icon:"monitor"}];
 function savedTheme():Theme{try{const t=localStorage.getItem(THEME_KEY);return t==="dark"||t==="system"?t:"light"}catch{return "light"}}
 function applyTheme(theme:Theme){document.documentElement.style.colorScheme=theme==="system"?"light dark":theme}

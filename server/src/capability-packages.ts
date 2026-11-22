@@ -4,7 +4,7 @@
 // A package is a zip of one folder with a ``capability.json`` (its manifest), its code, optionally a
 // ``SKILL.md`` and a ``requirements.txt``. Installing unpacks it into ``<tools_dir>/capabilities/<id>/``,
 // builds its Python environment there and runs its check, both in the capabilities' sandbox
-// (capability-sandbox.ts); uninstalling removes it with its data, state and secrets. Super Partner's
+// (capability-sandbox.ts); uninstalling removes it with its data, state and secrets. FluidForm's
 // source knows nothing of any one package.
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -50,7 +50,7 @@ export function chatGuide(capabilityId: string | null | undefined): string {
   }
 }
 
-/** The only folder a capability writes, kept out of the steps' sight with Super Partner's data. */
+/** The only folder a capability writes, kept out of the steps' sight with FluidForm's data. */
 export function dataFolder(capabilityId: string): string {
   return join(settings.data_dir, "capability-data", capabilityId);
 }
@@ -98,7 +98,13 @@ function manifest(raw: Buffer, files: string[]): Capability {
   const id = text(given.id);
   if (!ID.test(id)) throw new PackageError("id 只能用小写字母、数字和 -，2 到 41 个字符。");
   const kind = text(given.kind) || "tool";
-  if (!capabilities.KINDS.has(kind)) throw new PackageError("kind 只能是 tool、automation 或 service。");
+  if (!capabilities.KINDS.has(kind)) throw new PackageError("kind 只能是 tool、automation、service 或 interface。");
+  // An interface is a web page FluidForm serves (no process): its folder must hold index.html.
+  const site = kind === "interface" ? text(given.site).trim() || "site" : "";
+  if (kind === "interface" && (!/^[A-Za-z0-9._-]+$/.test(site) || site.startsWith(".") || !files.includes(site))) {
+    throw new PackageError(`界面要有网页文件夹 ${site || "site"}（里面有 index.html）。`);
+  }
+  if (capabilities.RESERVED_PATHS.has(text(given.id))) throw new PackageError(`id 不能用 ${text(given.id)}：FluidForm 自己用这个地址。`);
   const entry = text(given.entry).trim();
   if (kind === "automation" && !entry) throw new PackageError("自动化要写 entry：运行它的命令。");
   if (kind === "service" && !entry) throw new PackageError("服务要写 entry：运行它的命令。");
@@ -120,7 +126,7 @@ function manifest(raw: Buffer, files: string[]): Capability {
     id, name: head(text(given.name) || id, 60), kind, summary: head(text(given.summary), 500), usage: head(text(given.usage), 2000),
     guide: head(text(given.guide), capabilities.MAX_GUIDE), check: head(text(given.check), 500), secrets: secrets.slice(0, 20),
     domains: domains.slice(0, 20), files: files.slice(0, 50), entry: head(entry, 500), version: head(text(given.version), 40), source: "upload", status: "disabled",
-    provides, requires,
+    provides, requires, site,
   });
 }
 

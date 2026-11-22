@@ -23,8 +23,6 @@ import { sleep, Task } from "./tasks.js";
 
 type Json = Record<string, any>;
 
-// What FluidForm still does itself, until a package takes it over.
-export const builtIn = new Set<string>();
 // How long FluidForm waits for a service's answer, unless the request says otherwise.
 export const REQUEST_SECONDS = 30;
 // How long a request waits for a service still starting (FluidForm itself just started, say).
@@ -35,23 +33,8 @@ export class ServiceError extends Error {
   override name = "ServiceError";
 }
 
-let kept: { key: string; library: Capability[] } | null = null;
-/** The capabilities on disk, read again only after they change (asked on every model call). */
-function current(): Capability[] {
-  const key = `${capabilities.root()}\0${capabilities.changes}`;
-  if (kept?.key !== key) kept = { key, library: capabilities.library() };
-  return kept.library;
-}
-
-/** The active service package that provides ``name``, or null. */
-export function packageFor(name: string, library: Capability[] = current()): Capability | null {
-  return library.find((item) => item.kind === "service" && item.status === "active" && item.provides.includes(name)) ?? null;
-}
-
-/** Whether ``name`` is there: from an active package, or still from FluidForm itself. */
-export function available(name: string, library: Capability[] = current()): boolean {
-  return Boolean(packageFor(name, library)) || builtIn.has(name);
-}
+export { available, builtIn, current, packageFor } from "./provided.js";
+import { available, builtIn, current, packageFor } from "./provided.js";
 
 const label = (name: string) => LABELS[name] ?? name;
 

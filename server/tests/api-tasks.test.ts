@@ -13,8 +13,10 @@ import {
   DecisionSchema, EngineerJobSchema, EventSchema, type ExecutionRun, ExecutionRunSchema, LeadMessageSchema, NodeAttemptSchema, SupervisorSessionSchema,
   TaskNodeSchema, TaskPlanSchema, ToolCallSchema,
 } from "../src/models.js";
+import { ModelProfileSchema } from "../src/models.js";
 import { Task } from "../src/tasks.js";
 import { Mutex } from "../src/tasks.js";
+import { BEST, triaging, useModels } from "./helpers/chatting.js";
 import { conftest } from "./helpers/conftest.js";
 import { registryWith } from "./helpers/providers.js";
 import { type Client, taskApi } from "./helpers/task-api.js";
@@ -297,4 +299,20 @@ test("an opened task leaves tool output to be read when shown", async () => {
   assert.ok(calls[0].output_size === 5000 && calls[3].detail.length <= 301);
   assert.deepEqual((await client.get("/api/tasks/r/nodes/a/attempts/0/calls/0/output")).json(), { output: "x".repeat(5000) });
   assert.equal((await client.get("/api/tasks/r/nodes/a/attempts/0/calls/99/output")).status_code, 404);
+});
+
+test("a task keeps to the models it was asked for: named ones, or only membership CLIs", async () => {
+  const { api, client } = taskApi(folder());
+  triaging(api, '{"kind": "task"}');
+  const cli = ModelProfileSchema.parse({ ...BEST, id: "cli:codex", provider: "openai", channel: "cli", execution_priority: 0 });
+  useModels(api, { ...api.models, [cli.id]: cli });
+  const plan = async (choice: Record<string, unknown>) => client.post("/api/tasks", { json: { prompt: "给接口加缓存", ...choice }, headers: ORIGIN });
+  const named = (await plan({ only_models: ["x:other"] })).json();
+  assert.deepEqual([named.only_models, named.plan.nodes.map((node: any) => node.model_id)], [["x:other"], ["x:other"]]);
+  // Its later routing keeps to it too.
+  assert.deepEqual([...api.executor.configured(api.db.getRun(named.id)!)], ["x:other"]);
+  const clis = (await plan({ cli_only: true, use_cli: false })).json();
+  assert.deepEqual([clis.cli_only, clis.use_cli, clis.plan.nodes[0].model_id], [true, true, "cli:codex"]);
+  const refused = await plan({ only_models: ["x:nope"] });
+  assert.ok(refused.status_code === 422 && refused.json().detail.includes("x:nope"), refused.text);
 });

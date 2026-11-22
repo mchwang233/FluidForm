@@ -1,5 +1,7 @@
-// What FluidForm keeps in the OS keyring, under the service "super-partner".
-export const SERVICE = "super-partner";
+// What FluidForm keeps in the OS keyring, under the service "fluidform"; what it kept as Super
+// Partner ("super-partner") is copied over when first read (keyring-worker.ts).
+export const SERVICE = "fluidform";
+export const FORMER_SERVICE = "super-partner";
 
 export const PROVIDER_ENV: Record<string, string> = {
   openai: "OPENAI_API_KEY", anthropic: "ANTHROPIC_API_KEY",

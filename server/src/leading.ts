@@ -298,7 +298,7 @@ export abstract class Leading extends Reviewing {
       }
       const call = decision.engineer;
       if (call && !["request_component", "repair_platform", "call_engineer"].includes(does)) {
-        // Something in Super Partner itself the lead found on the way: the engineer takes it in the
+        // Something in FluidForm itself the lead found on the way: the engineer takes it in the
         // background, whatever this decision does with the step.
         const [job] = this.engineerJoin(runId, call, "lead", nodeId, made.id);
         made.engineer_job_id = job ? job.id : null;

@@ -1,17 +1,9 @@
+# One service: the API, which also serves the web console (a capability package) at
+# http://127.0.0.1:8000/. For working on the page itself, run `npm run dev` in frontend/.
 services:
   api:
     build: .
     ports: ["127.0.0.1:8000:8000"]
-    volumes: ["./.super-partner:/app/.super-partner", "./workspaces:/app/workspaces"]
+    volumes: ["./.fluidform:/app/.fluidform", "./workspaces:/app/workspaces"]
     environment:
-      SUPER_PARTNER_WORKSPACE_ROOT: /app/workspaces
-  web:
-    image: node:22-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
-    ports: ["127.0.0.1:5173:5173"]
-    volumes: ["./frontend:/app"]
-    environment:
-      VITE_API_URL: http://localhost:8000
-    depends_on: [api]
-
+      FLUIDFORM_WORKSPACE_ROOT: /app/workspaces

@@ -6,6 +6,8 @@
 // one class. Here they are one line of classes, each in its own file and each extending the one
 // before: ExecutorBase -> Reviewing -> Leading -> Diagnosing -> SelfRepair -> Engineering ->
 // Preflighting -> Executor. What a part calls of a later one is declared here, abstract.
+import { uses } from "./features.js";
+import { chosenFor } from "./model-choice.js";
 import { mkdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { RequestBudget, StepLimitExceeded } from "./budget.js";
@@ -152,7 +154,7 @@ export abstract class ExecutorBase {
 
   /** Name the problems of a task that has just ended by what they are about, in the background. */
   nameProblems(runId: string): void {
-    if (!settings.problem_naming || this.closing) return;
+    if (!settings.problem_naming || !uses.learning() || this.closing) return;
     const run = this.db.getRun(runId);
     const current = this.namingTasks.get(runId);
     if (!run || (current && !current.done)) return;
@@ -166,7 +168,7 @@ export abstract class ExecutorBase {
     if (!this.providers?.configuredModels) return new Set();
     let found = this.providers.configuredModels(Object.keys(this.modelLookup));
     if (run.plan.nodes.some((node) => node.model_id && !node.model_id.startsWith("mock:"))) found = new Set([...found].filter((id) => !id.startsWith("mock:")));
-    return run.use_cli ? found : new Set([...found].filter((id) => !id.startsWith("cli:")));
+    return chosenFor(found, run);
   }
 
   needsVision(run: ExecutionRun): boolean {
@@ -329,7 +331,7 @@ export abstract class ExecutorBase {
   }
 
   canLead(): boolean {
-    return settings.lead_decisions && typeof this.providers.converse === "function";
+    return uses.lead() && typeof this.providers.converse === "function";
   }
 
   /** Shows that the lead is deciding ``event`` (the panel and the timeline) until ``work`` is done. */

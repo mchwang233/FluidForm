@@ -42,7 +42,7 @@ class Engineer {
     this.prompts.push([prompt, options.workspace!]);
     this.options.push(options);
     assert.equal(options.repair, false);
-    if (prompt.startsWith("[[super-partner:platform-engineer:plan]]")) return new ProviderResult(this.plan, 0, 0, modelId);
+    if (prompt.startsWith("[[fluidform:platform-engineer:plan]]")) return new ProviderResult(this.plan, 0, 0, modelId);
     editCandidate({ folder: join(options.workspace!, "..") });
     return new ProviderResult("改了 api.py，加了回归测试。\nSTATUS: FIXED", 0, 0, modelId);
   }
@@ -65,7 +65,7 @@ beforeEach(() => {
   platform.SourceRepairs.prototype.checkCommand = passingCheck;
   const guide = join(root, "skills/platform-engineer/SKILL.md");
   mkdirSync(join(root, "skills/platform-engineer"), { recursive: true });
-  writeFileSync(guide, "---\nname: platform-engineer\n---\n# Adding a component to Super Partner\n");
+  writeFileSync(guide, "---\nname: platform-engineer\n---\n# Adding a component to FluidForm\n");
   activated = [];
 });
 
@@ -92,7 +92,7 @@ test("a component is planned, approved, built, checked, and applied only when ap
   // Planning read a copy, which is gone, and edited nothing.
   const plannedIn = providers.prompts[0][1];
   assert.ok(plannedIn !== root && !existsSync(plannedIn));
-  assert.ok(providers.prompts[0][0].includes("# Adding a component to Super Partner"));
+  assert.ok(providers.prompts[0][0].includes("# Adding a component to FluidForm"));
   assert.ok(readFileSync(join(root, API), "utf8").includes("broken"));
   executor.engineerApprove(job.id);
   await idle(executor);
@@ -191,7 +191,7 @@ test("the lead asks for a component, and decides again when it is done", async (
   const builder = new Engineer();
   class LeadAndEngineer extends Team {
     override async complete(modelId: string, prompt: string, options: CompleteOptions = {}): Promise<ProviderResult> {
-      if (prompt.startsWith("[[super-partner:platform-engineer:")) return builder.complete(modelId, prompt, options);
+      if (prompt.startsWith("[[fluidform:platform-engineer:")) return builder.complete(modelId, prompt, options);
       return super.complete(modelId, prompt, options);
     }
   }
@@ -340,7 +340,7 @@ test("while it works its page shows what it is doing", async () => {
   const going = new Promise<void>((done) => (goOn = done));
   class Showing extends Engineer {
     override async complete(modelId: string, prompt: string, options: CompleteOptions = {}): Promise<ProviderResult> {
-      if (!prompt.startsWith("[[super-partner:platform-engineer:plan]]")) {
+      if (!prompt.startsWith("[[fluidform:platform-engineer:plan]]")) {
         for (const event of [{ type: "item.started", item: { id: "c1", type: "command_execution", command: "npm test -- tests/x.test.ts" } },
           { type: "item.completed", item: { id: "c1", type: "command_execution", command: "npm test -- tests/x.test.ts", exit_code: 0, aggregated_output: "1 passed" } },
           { type: "item.completed", item: { id: "f1", type: "file_change", status: "completed", changes: [{ kind: "update", path: API }] } }]) {
@@ -407,7 +407,7 @@ test("the records list the engineer's repairs of this machine", () => {
     plan: { summary: "仿真回归", title: "仿真回归", nodes: [TaskNodeSchema.parse({ id: "n", title: "跑 VCS", instructions: "i", capability: "coding" })] }, diagnoses: [
       { id: "d1", trigger: "manual", node_id: "n", status: "done", verdict: "fixed", report: "重启了 lmgrd" },
       { id: "d2", trigger: "lead", node_id: "n", status: "done", question: "要联网吗？" }, // a question, not a look
-      { id: "d3", trigger: "auto", node_id: "n", status: "done", scope: "super_partner" }, // a job of its own
+      { id: "d3", trigger: "auto", node_id: "n", status: "done", scope: "fluidform" }, // a job of its own
       { id: "d4", trigger: "preflight", status: "running" }] }));
   const [item, ...more] = executor.engineerOverview().environment;
   assert.equal(more.length, 0);

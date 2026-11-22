@@ -1,4 +1,6 @@
-.super-partner/
+.fluidform/
+# The data folder's former name: a link to .fluidform once moved.
+.super-partner
 workspaces/
 .venv/
 __pycache__/
@@ -36,3 +38,4 @@ secrets.json
 
 # Logs and scratch output from local tool runs
 *.log
+server/packages/web/site/

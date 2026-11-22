@@ -14,14 +14,14 @@ import * as skills from "./skills.js";
 import { context as employeeContext } from "./team.js";
 
 // Marks a review request so the offline demo model can answer it with a verdict.
-export const REVIEW_MARKER = "[[super-partner:review]]";
+export const REVIEW_MARKER = "[[fluidform:review]]";
 export const MAX_LISTED_FILES = 50;
 export const MAX_DIFF_CHARS = 12_000;
 export const MAX_SCANNED_FILES = 20_000;
 export const MAX_INVENTORY_FILES = 200;
 // Relative or absolute paths, or bare file names with an extension, mentioned in a result.
 const PATH_MENTION = String.raw`/?[\w.-]+(?:/[\w.-]+)+|[\w-]+\.[A-Za-z0-9]{1,8}\b`;
-export const SKIP_DIRS = new Set([".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", ".super-partner"]);
+export const SKIP_DIRS = new Set([".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", ".fluidform", ".super-partner"]);
 // Explicitly cited verification logs may live in build or hidden scratch folders. This exception
 // never grants access to credentials, agent state or repository metadata.
 export const PRIVATE_DIRS = new Set([".ssh", ".aws", ".azure", ".config", ".kube", ".docker", ".gnupg",

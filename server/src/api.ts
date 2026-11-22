@@ -1,6 +1,7 @@
 // What FluidForm's HTTP API works with: the database, the model
 // catalog, the providers, the executor and the automations, and what the routes (app.ts) share:
 // planning a task, starting a chat, and the answers the console reads.
+import { uses } from "./features.js";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -38,6 +39,7 @@ import { keepLoadingKeys, setProviderKey } from "./secrets.js";
 import { cutOffSafely } from "./self-repair.js";
 import * as supervisor from "./supervisor.js";
 import * as bundled from "./bundled.js";
+import { chosenFor, configuredFor } from "./model-choice.js";
 import * as chat from "./chat.js";
 import { ServiceHost } from "./services.js";
 import { sleep, Task } from "./tasks.js";
@@ -70,6 +72,9 @@ export const CreateTask = z.object({
   attachments: z.array(z.string()).default(() => []),
   budget_usd: budget(2),
   use_cli: z.boolean().default(true),
+  // Only these models (empty: any), or only membership CLIs: the task keeps the choice.
+  only_models: z.array(z.string().max(200)).max(20).default(() => []),
+  cli_only: z.boolean().default(false),
   project_dir: id(4096).nullish().default(null),
   // Let the task's commands reach the internet (never this machine's local services).
   allow_network: z.boolean().default(false),
@@ -167,8 +172,19 @@ export function etagged(body: string): string {
   return `"${createHash("sha1").update(body).digest("hex").slice(0, 20)}"`;
 }
 
-export const configuredFor = (configured: Set<string>, useCli: boolean) =>
-  useCli ? configured : new Set([...configured].filter((modelId) => !modelId.startsWith("cli:")));
+export { chosenFor, configuredFor } from "./model-choice.js";
+
+/** A task without the planning capability: the whole request as one step, done by one model (the
+ *  strongest that clears the bar, a membership CLI or an API model working through tools), in the
+ *  project when there is one. */
+export function oneStep(request: string, background: string | null, projectDir: string | null): TaskPlan {
+  const asked = background ? `${background}\n\n新需求：\n${request}` : request;
+  const title = [...(request.split(/\r\n|\r|\n/)[0] || request)].slice(0, 40).join("").trim() || "任务";
+  const node = TaskNodeSchema.parse({ id: randomUUID().replaceAll("-", "").slice(0, 8), title, capability: "coding", difficulty: "hard",
+    needs_workspace: Boolean(projectDir), instructions: asked + SOLO_SCOPE, acceptance_criteria: "需求里要的都做到了，结果可以直接交给用户。" });
+  return TaskPlanSchema.parse({ summary: title, title, nodes: [node], planning_note: "没有启用规划能力：整个需求作为一步，交给一个模型做",
+    in_project: Boolean(projectDir) });
+}
 
 export class Api {
   readonly db: Database;
@@ -321,8 +337,8 @@ export class Api {
     // a task that must make pictures is allowed the internet.
     const pictures = plan.nodes.some((node) => node.needs_images) && imageServers().length > 0;
     const run = ExecutionRunSchema.parse({
-      id: randomUUID(), prompt: body.prompt, status: "awaiting_confirmation", plan, budget_usd: body.budget_usd, use_cli: body.use_cli,
-      allow_network: body.allow_network || pictures, project_dir: projectDir, attachments: attached, actual_cost_usd: plan.planning_cost_usd,
+      id: randomUUID(), prompt: body.prompt, status: "awaiting_confirmation", plan, budget_usd: body.budget_usd, use_cli: body.use_cli || body.cli_only,
+      only_models: body.only_models, cli_only: body.cli_only, allow_network: body.allow_network || pictures, project_dir: projectDir, attachments: attached, actual_cost_usd: plan.planning_cost_usd,
       background, parent_run_id: parent?.id ?? null, workspace_id: parent ? folderId(parent) : null,
       supervisor: session.model_id ? session : null, improvement_uses: lessons,
     });
@@ -340,7 +356,11 @@ export class Api {
    *  answers to an earlier plan's open choices. ``context``: the background when there is no parent,
    *  such as the conversation a task grew out of. */
   async makePlan(body: CreateTask, parent: ExecutionRun | null = null, decided = "", context = ""): Promise<Made> {
-    const configured = this.configured(body.use_cli);
+    const configured = chosenFor(this.configured(true), body);
+    // A choice nothing is left of is a mistake to say, not a task to plan with any model.
+    if ((body.cli_only || body.only_models.length) && !configured.size) {
+      throw new HttpError(422, body.only_models.length ? `这些模型现在用不了（没启用或没配置）：${body.only_models.join("、")}` : "没有可用的会员 CLI。");
+    }
     const projectDir = this.projectDir(body.project_dir);
     const attached = this.attached(body.attachments, 400);
     const needsVision = attached.some((item) => item.kind === "image");
@@ -350,7 +370,7 @@ export class Api {
     // The lead plans within what the steps' sandbox allows (planner.WORK_RULES).
     if (body.allow_network) request += "\n\n" + INTERNET_NOTE;
     this.executor.syncImprovements();
-    const lessons = learning.selected(this.db, request);
+    const lessons = uses.learning() ? learning.selected(this.db, request) : [];
     const note = learning.instruction(lessons);
     if (note) request += "\n\n" + note;
     // The planner knows the tools earlier tasks built, so it plans to use them (capabilities.ts).
@@ -360,13 +380,16 @@ export class Api {
     const root = projectDir ?? (parent ? join(settings.workspace_root, folderId(parent)) : null);
     let brief: string | null = null;
     let briefCost = 0;
-    if (root && isFullFolder(root)) {
+    // The brief is the planning capability's: without it the one step reads the project itself.
+    if (root && uses.planning() && isFullFolder(root)) {
       const writer = settings.project_brief ? await briefWriter(Object.values(this.models), configured) : null;
       [brief, briefCost] = await briefing.planningBrief(root, settings.data_dir, this.providers, writer);
     }
     const session = SupervisorSessionSchema.parse({});
     const asked = background ? `${background}\n\n新需求：\n${request}` : request;
-    let plan = parent || decided ? null : await this.quickPlan(body, request, background, configured, projectDir);
+    // Without the planning capability the whole request is one step (FluidForm's base).
+    let plan = !uses.planning() ? oneStep(request, background, projectDir)
+      : parent || decided ? null : await this.quickPlan(body, request, background, configured, projectDir);
     try {
       plan ??= await this.deps.autonomousPlan(asked, Object.values(this.models), configured, this.providers,
         projectDir ? projectContext(projectDir) : null, session, brief);

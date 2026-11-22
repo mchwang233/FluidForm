@@ -11,7 +11,7 @@ import { type ExecutionRun, folderId } from "./models.js";
 import { writeZip } from "./zip.js";
 
 // Tool and review folders the agents leave behind are not part of the output.
-export const SKIP = new Set([".git", ".review", ".claude", ".codex", "node_modules", "__pycache__", ".venv", "venv", ".super-partner"]);
+export const SKIP = new Set([".git", ".review", ".claude", ".codex", "node_modules", "__pycache__", ".venv", "venv", ".fluidform", ".super-partner"]);
 export const MAX_FILES = 5_000;
 export const MAX_ARCHIVE_BYTES = 200 * 1024 * 1024;
 export const MAX_VIEW_BYTES = 1024 * 1024;
@@ -109,7 +109,7 @@ export function archive(run: ExecutionRun): Buffer {
     entries.push({ name: item.path, data: readFileSync(path), deflate: true, modified: statSync(path).mtime, mode: statSync(path).mode & 0o777 | 0o100000 });
     names.add(item.path);
   }
-  entries.push({ name: names.has("RESULT.md") ? "SUPER_PARTNER_RESULT.md" : "RESULT.md", data: resultMarkdown(run), deflate: true });
+  entries.push({ name: names.has("RESULT.md") ? "FLUIDFORM_RESULT.md" : "RESULT.md", data: resultMarkdown(run), deflate: true });
   return writeZip(entries);
 }
 
@@ -122,7 +122,7 @@ function git(args: string[], cwd: string, env: NodeJS.ProcessEnv, token: string 
 
 function identity(): [string, string] {
   const get = (key: string) => (spawnSync("git", ["config", "--global", key], { encoding: "utf8" }).stdout ?? "").trim();
-  return [get("user.name") || "FluidForm", get("user.email") || "super-partner@localhost"];
+  return [get("user.name") || "FluidForm", get("user.email") || "fluidform@localhost"];
 }
 
 /** Commit the task's output in a fresh repository and push it as ``main``. */

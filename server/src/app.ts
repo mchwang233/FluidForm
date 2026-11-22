@@ -1,5 +1,6 @@
 // FluidForm's HTTP API, served by Fastify: the local-only guard, and
 // the routes the console uses. What they work with is the Api (api.ts).
+import { uses } from "./features.js";
 import { createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -12,6 +13,7 @@ import * as files from "./attachments.js";
 import { taskName } from "./automations.js";
 import * as capabilities from "./capabilities.js";
 import * as chat from "./chat.js";
+import * as interfaces from "./interfaces.js";
 import * as services from "./services.js";
 import * as packages from "./capability-packages.js";
 import { missing as sandboxMissing } from "./capability-sandbox.js";
@@ -235,7 +237,10 @@ export function buildApp(api: Api): FastifyInstance {
       return reply.code(200).send("OK");
     }
     const mutation = !SAFE_METHODS.has(request.method);
-    if (mutation && origin && !settings.allowed_origins.includes(origin)) {
+    // A page FluidForm serves itself (an interface package) writes from FluidForm's own address,
+    // whose host was checked above.
+    const own = origin === `http://${request.headers.host}` || origin === `https://${request.headers.host}`;
+    if (mutation && origin && !own && !settings.allowed_origins.includes(origin)) {
       return reply.code(403).send({ detail: "Origin not allowed" });
     }
     if (mutation && executor().platformPending && !/\/(cancel|pause)$/.test(request.url.split("?")[0])) {
@@ -271,6 +276,24 @@ export function buildApp(api: Api): FastifyInstance {
   };
 
   // ---- Health, profile, memory, recovery ----
+
+  // Interface packages (a web console): each active one's page at /<its id>/, and FluidForm's own
+  // address leads to the web console when there is one.
+  app.get("/", async (_request, reply) => {
+    const home = interfaces.home();
+    if (home) return reply.redirect(`/${home.id}/`);
+    return reply.type("text/plain; charset=utf-8").send(interfaces.NO_INTERFACE);
+  });
+  app.get<{ Params: { capability_id: string } }>("/:capability_id", async (request, reply) => {
+    if (!interfaces.active(request.params.capability_id)) return reply.code(404).send({ detail: "Not Found" });
+    return reply.redirect(`/${request.params.capability_id}/`);
+  });
+  app.get<{ Params: { capability_id: string; "*": string } }>("/:capability_id/*", async (request, reply) => {
+    const found = interfaces.file(request.params.capability_id, request.params["*"]);
+    if (!found) return reply.code(404).send({ detail: "Not Found" });
+    return reply.headers({ "content-type": found.type, "x-content-type-options": "nosniff", "cache-control": found.index ? "no-cache" : "max-age=3600" })
+      .send(createReadStream(found.path));
+  });
 
   app.get("/health", async () => ({
     status: "ok", pid: process.pid, configured_providers: [...configuredProviders(), "mock"], keyring_unavailable: keyringUnavailable(),
@@ -607,7 +630,7 @@ export function buildApp(api: Api): FastifyInstance {
     try {
       const parent = run.parent_run_id ? db.getRun(run.parent_run_id) : null;
       const again = CreateTask.parse({ prompt: run.prompt, attachments: run.attachments.map((item) => item.id), budget_usd: run.budget_usd,
-        use_cli: run.use_cli, project_dir: run.project_dir, allow_network: run.allow_network });
+        use_cli: run.use_cli, only_models: run.only_models, cli_only: run.cli_only, project_dir: run.project_dir, allow_network: run.allow_network });
       made = await api.makePlan(again, parent, decided);
     } finally {
       api.replanning.delete(runId);
@@ -631,7 +654,8 @@ export function buildApp(api: Api): FastifyInstance {
     if (!CHANGEABLE.has(parent.status)) throw new HttpError(409, "任务还在进行中，结束后才能提出需求变更。");
     return reply.code(201).send(await api.newTask(CreateTask.parse({
       prompt: body.prompt, attachments: body.attachments, budget_usd: body.budget_usd || parent.budget_usd,
-      use_cli: body.use_cli ?? parent.use_cli, project_dir: parent.project_dir, allow_network: body.allow_network ?? parent.allow_network,
+      use_cli: body.use_cli ?? parent.use_cli, only_models: parent.only_models, cli_only: parent.cli_only, project_dir: parent.project_dir,
+      allow_network: body.allow_network ?? parent.allow_network,
     }), parent));
   });
 
@@ -904,8 +928,9 @@ export function buildApp(api: Api): FastifyInstance {
   app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/lead", async (request, reply) => {
     const body = parse(LeadQuestion, request.body);
     const runId = request.params.run_id;
-    // A chat goes on only with the chat capability; a task's lead answers either way.
+    // A chat goes on only with the chat capability; a task's lead only with the lead capability.
     if (api.getTask(runId).kind === "chat") chatRequired();
+    else if (!uses.lead()) throw new HttpError(409, "没有启用负责人能力：任务里不能对话。");
     const attached = api.attached(body.attachments);
     const message = body.message.trim() || (attached.length ? "（见附件）" : "");
     if (!message) throw new HttpError(422, "请写下要说的话，或附上文件。");
@@ -1118,7 +1143,7 @@ export function buildApp(api: Api): FastifyInstance {
     return found;
   };
   const packagesAllowed = () => {
-    if (!settings.capability_packages) throw new HttpError(409, "本机还没开启能力包：在 .env 里设 SUPER_PARTNER_CAPABILITY_PACKAGES=true 后重启。");
+    if (!settings.capability_packages) throw new HttpError(409, "本机还没开启能力包：在 .env 里设 FLUIDFORM_CAPABILITY_PACKAGES=true 后重启。");
   };
 
   // Use it again, or stop telling later work about it (an automation: start or stop it). A failed one
@@ -1129,7 +1154,8 @@ export function buildApp(api: Api): FastifyInstance {
     if (item.status === "failed" && body.enabled) throw new HttpError(409, "这个能力的检查没有通过，修好之前不能启用。");
     const runs = item.kind === "automation" && item.source === "upload";
     if (body.enabled && item.source === "upload") {
-      packagesAllowed();
+      // An interface runs nothing here: a web page FluidForm serves.
+      if (item.kind !== "interface") packagesAllowed();
       if (!body.confirmed) throw new HttpError(409, "启用上传的能力要先确认它能访问的域名和拿到的密钥。");
       const lacking = Object.entries(await packages.secretsSet(item)).filter(([, stored]) => !stored).map(([name]) => name);
       if (lacking.length) throw new HttpError(409, `先填好：${lacking.join("、")}`);

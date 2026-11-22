@@ -1,5 +1,6 @@
-// Repairing Super Partner itself: an edited and checked copy (platform-repair.ts) applied
+// Repairing FluidForm itself: an edited and checked copy (platform-repair.ts) applied
 // by a restart, while tasks wait.
+import { PLATFORM_SCOPE } from "./models.js";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { settings } from "./config.js";
@@ -44,7 +45,7 @@ export abstract class SelfRepair extends Diagnosing {
   async fixPlatform(run: ExecutionRun, diagnosis: Diagnosis, node: TaskNode | null, problem: string): Promise<[string, number]> {
     let latest = this.db.getRun(run.id)!;
     let record = latest.diagnoses.find((d) => d.id === diagnosis.id)!;
-    record.scope = "super_partner";
+    record.scope = PLATFORM_SCOPE;
     this.save(latest);
     if (this.platformPending) {
       record.repair_id = this.platformPending.id;
@@ -62,7 +63,7 @@ export abstract class SelfRepair extends Diagnosing {
     this.emit(run.id, "run.platform_repair", { diagnosis_id: diagnosis.id, repair_id: job.id, phase: "editing" });
     const replied = latest.diagnoses.filter((d) => d.messages.length).sort((a, b) => (a.messages.at(-1)!.created_at < b.messages.at(-1)!.created_at ? -1 : 1));
     const replies = replied.slice(-5).map((d) => ({ question: d.question, answers: d.messages.slice(-5) }));
-    const base = "[[super-partner:platform-repair]]\n"
+    const base = "[[fluidform:platform-repair]]\n"
       + "Fix an evidenced defect in FluidForm itself in this isolated source copy. "
       + "The user authorizes this repair. Preserve unrelated existing changes. Modify "
       + "application code and add a regression test reproducing the defect; do not weaken "
@@ -264,7 +265,7 @@ export abstract class SelfRepair extends Diagnosing {
       this.save(run);
       this.emit(run.id, success ? "run.platform_activated" : "run.platform_failed", { repair_id: job.id, files: job.files, error: job.error ?? null });
     }
-    this.db.saveSharedRepair({ id: job.id, scope: "super_partner", status: job.status, run_id: job.run_id ?? null, model_id: job.model_id ?? null, files: job.files,
+    this.db.saveSharedRepair({ id: job.id, scope: PLATFORM_SCOPE, status: job.status, run_id: job.run_id ?? null, model_id: job.model_id ?? null, files: job.files,
       checks: job.checks ?? [], report: job.report ?? "", error: job.error ?? null, created_at: nowIso().replace(/Z$/, "+00:00") });
     this.platform.clearPending(job);
     this.platformPending = null;

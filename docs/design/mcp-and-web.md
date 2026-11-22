@@ -70,7 +70,7 @@
 - 还有一个缺陷：联网时 pasta 会把命名管道的 stdin 换成 `/null`，本地 MCP 服务一启动就退出。现在联网时把管道所在的
   目录挂进沙箱，在沙箱里按路径重定向。
 
-本机的配置（`.env` 的 `SUPER_PARTNER_MCP_SERVERS`）：
+本机的配置（`.env` 的 `FLUIDFORM_MCP_SERVERS`）：
 
 ```json
 {"minimax": {"command": ["node", "<tools>/node/node_modules/minimax-mcp-js/build/index.js"], "secrets": ["MINIMAX_API_KEY"],

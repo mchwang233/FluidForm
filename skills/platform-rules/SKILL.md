@@ -1,11 +1,11 @@
 ---
 name: platform-rules
-description: Limits on any change to Super Partner's own source, by its platform engineer or a platform repair. Super Partner runs on many machines; facts about one machine belong in settings, not in code. Use it together with skills/platform-repair/SKILL.md or skills/platform-engineer/SKILL.md whenever you edit Super Partner itself.
+description: Limits on any change to FluidForm's own source, by its platform engineer or a platform repair. FluidForm runs on many machines; facts about one machine belong in settings, not in code. Use it together with skills/platform-repair/SKILL.md or skills/platform-engineer/SKILL.md whenever you edit FluidForm itself.
 ---
 
-# Rules for changing Super Partner itself
+# Rules for changing FluidForm itself
 
-Super Partner is one program that runs on many machines. A change to its source reaches every
+FluidForm is one program that runs on many machines. A change to its source reaches every
 one of them, so it must be right for all of them, not only for the machine where the problem
 showed up.
 
@@ -17,19 +17,19 @@ host names, ports, user names, tool versions, license servers, environment scrip
 
 Put such a fact where machine settings live, and make the code read it:
 
-- a setting in `server/src/config-fields.ts` (an environment variable `SUPER_PARTNER_...`),
+- a setting in `server/src/config-fields.ts` (an environment variable `FLUIDFORM_...`),
   whose default does nothing (empty list, empty string, off);
-- or the recorded environment in `.super-partner/tools/sandbox.json` (`environment.ts`:
+- or the recorded environment in `.fluidform/tools/sandbox.json` (`environment.ts`:
   `env`, `host_ports`, ...), which environment repairs write for this machine.
 
 Tests use temporary paths and set the setting themselves; they never depend on what is installed.
 In the report, say which setting this machine needs and its value (see 7).
 
-## 2. Is it the machine, or Super Partner?
+## 2. Is it the machine, or FluidForm?
 
 If the problem is this machine's setup (a tool not installed, a service stopped, a path or a
 variable missing), it is an environment repair: record it for this machine (sandbox.json, the
-shared tools folder). Change the source only when Super Partner behaves wrongly on any machine,
+shared tools folder). Change the source only when FluidForm behaves wrongly on any machine,
 for example it cannot use a setting that exists, or it loses output.
 
 ## 3. The sandbox stays closed by default
@@ -41,7 +41,7 @@ say in the report what steps can reach now that they could not before.
 ## 4. Secrets and what comes from outside
 
 - A secret (an API key, an app secret, a token, a password in a proxy URL) lives only in the
-  system keyring (`secrets.ts`). Never in a file, a setting, Super Partner's own environment, a
+  system keyring (`secrets.ts`). Never in a file, a setting, FluidForm's own environment, a
   log line, an event, a prompt, or a command line: every user of the machine can read a
   process's command line, so a sandbox gets secrets as its environment
   (`agent.ts`, `withoutEnvArgs`), never as `--setenv` arguments.

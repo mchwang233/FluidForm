@@ -13,7 +13,7 @@ Synopsys, `cdslmd` for Cadence, `mgcld` for Siemens), which the tools talk to af
 The vendor daemon picks a **new random port at every start** unless the license file fixes it.
 
 The step sandbox reaches only the host ports listed in `sandbox.json`'s `host_ports` (or the
-`SUPER_PARTNER_SANDBOX_HOST_PORTS` setting). So both ports must be fixed and listed: lmgrd's, and
+`FLUIDFORM_SANDBOX_HOST_PORTS` setting). So both ports must be fixed and listed: lmgrd's, and
 each vendor daemon's.
 
 ## Symptoms

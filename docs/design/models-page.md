@@ -31,5 +31,5 @@ the groups, their order and totals, the details, switching, a model without a ke
 ## 风险
 
 - A deleted task's model calls are deleted with it, so they leave the totals.
-- A CLI's cost is what Super Partner records for it (a membership's estimate), so a CLI row shows
+- A CLI's cost is what FluidForm records for it (a membership's estimate), so a CLI row shows
   calls only.

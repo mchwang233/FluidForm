@@ -1,5 +1,6 @@
 // The check before a task's first step, as the executor runs it (Python's preflight.Preflighting
 // mixin); the checks and prompts themselves are in preflight.ts.
+import { uses } from "./features.js";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -44,7 +45,7 @@ export abstract class Preflighting extends Engineering {
    *  failed check is not stopped again. */
   async preflight(runId: string): Promise<boolean> {
     let run = this.db.getRun(runId);
-    if (!settings.preflight || !run || run.preflight?.passed) return true;
+    if (!uses.preflight() || !run || run.preflight?.passed) return true;
     if (!run.plan.nodes.some((node) => node.status === "pending") && !run.plan.parts.length) return true;
     const overruled = Boolean(run.preflight?.paused);
     this.emit(runId, "run.preflight_started");

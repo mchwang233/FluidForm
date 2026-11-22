@@ -1,0 +1,8 @@
+{
+  "id": "web",
+  "name": "网页界面",
+  "kind": "interface",
+  "site": "site",
+  "version": "1.0.0",
+  "summary": "FluidForm 的网页控制台：新建和查看任务、对话、模型、平台工程师、能力。停用后在 http://127.0.0.1:8000 打开不到它；任务、模型和能力都能用命令行 super-partner 管理。"
+}

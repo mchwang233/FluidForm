@@ -3,8 +3,8 @@
 ## 目标
 
 A capability (docs/design/capabilities.md) can be uploaded as a package and uninstalled again,
-without changing Super Partner's source or restarting it. An automation package keeps running in
-the background (the runner capabilities.md left for later). Super Partner knows nothing of any one
+without changing FluidForm's source or restarting it. An automation package keeps running in
+the background (the runner capabilities.md left for later). FluidForm knows nothing of any one
 service: the Feishu bot, built into the core before, becomes the first package
 (`feishu-bot/` on the `capabilities` branch), which can be uninstalled and uploaded again.
 
@@ -38,11 +38,11 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - **Uninstall:** stops it and removes its folder, its data folder, its state and its secrets.
     The chats it started stay, as the user's conversations.
 - **`capability_sandbox.py`** (new): how a capability's commands run.
-  - The steps' sandbox rules: the home folder and Super Partner's data are hidden, and there is
+  - The steps' sandbox rules: the home folder and FluidForm's data are hidden, and there is
     no network of its own.
   - Its folder is read-only. Its data folder (`<data_dir>/capability-data/<id>/`) is the only
     place it can write, besides its own `/tmp`.
-  - **Domain proxy:** the only way out is a proxy in Super Partner, bridged in on a Unix socket
+  - **Domain proxy:** the only way out is a proxy in FluidForm, bridged in on a Unix socket
     (`HTTPS_PROXY`). It lets a connection through only to a declared host, on port 443 or 80,
     and through the user's own proxy when the service has one. A refused host is written to the
     capability's log.
@@ -122,7 +122,7 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - Enabling an uploaded capability needs `confirmed: true`, the user having seen what it may
     reach and which secrets it gets. `DELETE` uninstalls.
 - **`secrets.py`:** private secrets are named `capability/<id>/<VARIABLE>`: in the keyring, never
-  in a file or in Super Partner's environment.
+  in a file or in FluidForm's environment.
 - **`frontend/capabilities.tsx`:** 平台工程师 → 能力 gets:
   - **上传能力包;**
   - for each package:
@@ -134,7 +134,7 @@ unpacked and `MAX_PACKAGE_FILES` files.
   - **卸载.**
 - **Removed from the core:** `feishu.py`, the Feishu endpoints, settings, menu item and panel
   (`frontend/feishu.tsx`), and the optional dependency `lark-oapi`.
-- **The `capabilities` branch:** packages are kept apart from Super Partner's source, on a branch
+- **The `capabilities` branch:** packages are kept apart from FluidForm's source, on a branch
   of their own with no shared history (`feishu-bot/`: the Feishu bot).
   - Its own `lark-oapi` in its `requirements.txt`.
   - Reaches `*.feishu.cn` and `*.larksuite.com`.
@@ -143,7 +143,7 @@ unpacked and `MAX_PACKAGE_FILES` files.
     answer comes (CardKit streaming, 1.0.5), and sends a task's result back.
   - Pictures, rich text with pictures, and files are downloaded into its data folder and sent
     along (1.0.3). In a group only rich text can @ it, so a picture there goes in a rich-text message.
-- **`settings.capability_packages`** (`SUPER_PARTNER_CAPABILITY_PACKAGES`, off by default): without
+- **`settings.capability_packages`** (`FLUIDFORM_CAPABILITY_PACKAGES`, off by default): without
   it, nothing can be uploaded and no automation runs.
 
 ## 聊天模型的生效范围
@@ -234,3 +234,18 @@ FluidForm 本体用到的能力（聊天、计价）可以由能力包提供（d
 `server/packages/<id>` 里的包在第一次启动时装上并启用（`bundled.ts`），条件是允许能力包、这台机器有沙箱；
 有新版本时更新（保持原来的启用状态）；用户卸载后不再装回（`<data_dir>/bundled.json` 记着提供过哪些）。
 服务包可以用 Node 写：沙箱里能找到 FluidForm 自己用的 `node`（即使它装在被隐藏的主目录里）。现在有：计价（`pricing`）、聊天（`chat`）。聊天包第一次安装时把本体以前的 `<data_dir>/memory.json` 搬进它的数据目录（`bundled.CARRIED`）。
+
+## 界面（`kind: "interface"`）
+
+FluidForm 的核心是 API 服务和命令行（`fluidform`）：发起任务、自动在会员 CLI 和 API 模型之间选，
+以及管理任务、模型、key、能力包。其他界面都是能力，网页控制台也是。
+
+- `capability.json` 写 `kind: "interface"` 和 `site`（网页文件夹，默认 `site`，里面要有 `index.html`）。
+  不运行任何进程，不需要沙箱、密钥和域名。
+- 启用后 FluidForm 在 `/<id>/` 提供它（`interfaces.ts`）：找不到的路径给 `index.html`（页面自己用 `#` 路由），
+  路径出不了网页文件夹。`/` 跳到网页控制台（`web`），没有就说明怎么用命令行。`api`、`health` 这些地址不能当 id。
+- 页面从 FluidForm 自己的地址发写请求，这个来源总是允许（主机名已经检查过）。所以界面包能用 FluidForm 的全部接口：
+  启用时要说清楚这一点。
+- 网页控制台是 `server/packages/web`：`frontend` 的 `npm run package` 把页面构建进 `site/`（`./start.sh` 每次都构建），
+  随 FluidForm 提供、默认启用；内容变了就重新安装（`bundled.ts` 按文件内容比较，不只看版本号）。
+  停用或卸载后用 `fluidform capabilities enable web` 再启用。开发页面时照旧在 `frontend` 里 `npm run dev`。

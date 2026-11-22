@@ -22,7 +22,7 @@ beforeEach(() => {
   // conftest's project_root: the allowed root, with the data folder inside one of its projects.
   root = join(folder, "home");
   mkdirSync(join(root, "app"), { recursive: true });
-  Object.assign(settings, { project_roots: [root], data_dir: join(root, "app", ".super-partner"), workspace_root: join(folder, "scratch") });
+  Object.assign(settings, { project_roots: [root], data_dir: join(root, "app", ".fluidform"), workspace_root: join(folder, "scratch") });
 });
 afterEach(() => {
   Object.assign(settings, saved);
@@ -38,7 +38,7 @@ test("a project folder under a root is accepted", () => {
 
 test("bad paths, folders outside the roots and the data folder are rejected", () => {
   assert.throws(() => projects.resolveProjectDir("relative/app"), (e: Error) => e instanceof ProjectDirError && e.message.includes("absolute"));
-  assert.throws(() => projects.resolveProjectDir("/nonexistent-super-partner-dir"), /does not exist/);
+  assert.throws(() => projects.resolveProjectDir("/nonexistent-fluidform-dir"), /does not exist/);
   assert.throws(() => projects.resolveProjectDir(folder), /allowed root/);
   mkdirSync(settings.data_dir);
   assert.throws(() => projects.resolveProjectDir(settings.data_dir), /data directory/);

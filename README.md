@@ -90,7 +90,7 @@ cd FluidForm
 ./start.sh
 ```
 
-Open <http://127.0.0.1:5173>.
+Open <http://127.0.0.1:8000>: the web console, a capability package FluidForm serves. Everything can also be done from the command line: `fluidform --help`.
 
 - **No keys needed:** the built-in offline demo model runs the whole flow.
 - **Real models:** add API keys on the **模型** (Models) page. Membership CLIs show up once they

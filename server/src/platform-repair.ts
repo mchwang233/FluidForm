@@ -1,8 +1,9 @@
-// Repairs of Super Partner itself: a copy of its source, edited, checked, then
+// Repairs of FluidForm itself: a copy of its source, edited, checked, then
 // applied by a restart. The copy is checked in a sandbox (types, the database's records, the server's
 // and the frontend's tests, the build); a worker outside the service (repair-worker.ts, copied with the
 // job so a repair cannot change it) puts the files in place, builds the server, restarts the service
 // and rolls it all back when the new version does not answer.
+import { PLATFORM_SCOPE } from "./models.js";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, openSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
@@ -83,7 +84,7 @@ export function sourceRoot(configured: string | null = null): string | null {
 export function unitName(root: string): string {
   const result = spawnSync("cksum", [], { input: root, encoding: "utf8" });
   if (result.status !== 0) throw new RepairError("cksum failed");
-  return `super-partner-${result.stdout.split(/\s+/)[0]}-api.service`;
+  return `fluidform-${result.stdout.split(/\s+/)[0]}-api.service`;
 }
 
 /** What tests replace: starting a check's or the worker's process. */
@@ -231,7 +232,7 @@ export class SourceRepairs implements PlatformRepairs {
     }
     const activate = join(folder, WORKER.endsWith(".ts") ? "activate.ts" : "activate.js");
     copyFileSync(WORKER, activate);
-    const job: RepairJob = { id: folder.split("/").at(-1)!, scope: "super_partner", status: "editing", run_id: runId, diagnosis_id: diagnosisId, root: this.root,
+    const job: RepairJob = { id: folder.split("/").at(-1)!, scope: PLATFORM_SCOPE, status: "editing", run_id: runId, diagnosis_id: diagnosisId, root: this.root,
       folder, unit, old_pid: process.pid, database_path: this.databasePath, api_url: this.apiUrl, before, files: [], checks: [], allow_network: allowNetwork,
       activate, created_at: Date.now() / 1000 };
     this.save(job);
@@ -343,9 +344,9 @@ export class SourceRepairs implements PlatformRepairs {
   async checkCommand(command: string[], cwd: string, source: string, { allowNetwork = false }: { allowNetwork?: boolean } = {}): Promise<Check> {
     if (!environment.which("bwrap")) throw new RepairError("平台修复验证需要 bubblewrap，以隔离真实任务数据。");
     const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", LANG: "C.UTF-8", HOME: join(source, ".validation", "home"),
-      SUPER_PARTNER_CATALOG_AUTO_SYNC: "false", SUPER_PARTNER_PLATFORM_SELF_REPAIR: "false", SUPER_PARTNER_DATA_DIR: join(source, ".validation", "data"),
-      SUPER_PARTNER_DATABASE_PATH: join(source, ".validation", "data", "test.db"), SUPER_PARTNER_WORKSPACE_ROOT: join(source, ".validation", "workspaces"),
-      SUPER_PARTNER_VALIDATION_ALLOW_NETWORK: String(allowNetwork) };
+      FLUIDFORM_CATALOG_AUTO_SYNC: "false", FLUIDFORM_PLATFORM_SELF_REPAIR: "false", FLUIDFORM_DATA_DIR: join(source, ".validation", "data"),
+      FLUIDFORM_DATABASE_PATH: join(source, ".validation", "data", "test.db"), FLUIDFORM_WORKSPACE_ROOT: join(source, ".validation", "workspaces"),
+      FLUIDFORM_VALIDATION_ALLOW_NETWORK: String(allowNetwork) };
     if (allowNetwork) for (const name of agent.PROXY_ENV) if (process.env[name] !== undefined) env[name] = process.env[name]!;
     mkdirSync(join(source, ".validation", "home"), { recursive: true });
     const home = realOr(userInfo().homedir || homedir());

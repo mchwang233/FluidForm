@@ -1,5 +1,5 @@
 // A fixed set of tasks run on the live service, to see whether a change made FluidForm better or
-// worse: how many pass, how long they take, what they cost (`super-partner eval`).
+// worse: how many pass, how long they take, what they cost (`fluidform eval`).
 //
 // A suite is a JSON file (evals/basic.json): {"cases": [{"name", "prompt", "budget_usd",
 // "allow_network", "timeout_seconds", "expect": {"status", "contains_any", "max_seconds",

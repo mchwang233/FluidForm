@@ -119,7 +119,7 @@ test("the sandbox hides the home and the data, keeps its folder read-only and ha
   const env = sandbox.environmentFor(where, data, { TOKEN: "v" }, true);
   const args = sandbox.wrap(where, data, "python3 bot.py", env, "/tmp/sp-cap-x");
   const joined = args.join(" ");
-  // The home folder is hidden; Super Partner's data is too (here it is under /tmp, its own tmpfs).
+  // The home folder is hidden; FluidForm's data is too (here it is under /tmp, its own tmpfs).
   assert.ok(joined.includes(`--tmpfs ${realHome()}`) && joined.includes("--tmpfs /tmp "));
   assert.ok(joined.includes(`--ro-bind ${where} ${where}`) && joined.includes(`--bind ${data} ${data}`));
   assert.ok(args.includes("--unshare-net") && args.includes("--clearenv") && joined.includes("--setenv TOKEN v"));

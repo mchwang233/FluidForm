@@ -1,5 +1,5 @@
 {
-  "name": "super-partner-web",
+  "name": "fluidform-web",
   "private": true,
   "version": "0.1.0",
   "license": "MIT",
@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "package": "tsc -b && vite build --base ./ --outDir ../server/packages/web/site --emptyOutDir"
   },
   "dependencies": {
     "react": "^19.2.8",

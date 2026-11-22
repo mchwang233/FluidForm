@@ -10,7 +10,7 @@
 - **`evals.py`**：通过服务自己的 API，像用户一样建任务、确认、跟到结束。一个接一个跑，免得互相影响耗时。
   - 每个任务记下：通过与否、哪里没过、排计划和执行各用了几秒、花费、尝试次数、负责人决策次数。
   - 再算一个汇总。
-- **`super-partner eval [suite] --out report.json --against old.json --only 名字`**：打印每个任务和汇总，并和之前的报告比，列出变了的地方：通过的变化、耗时变化超过 25%、汇总。
+- **`fluidform eval [suite] --out report.json --against old.json --only 名字`**：打印每个任务和汇总，并和之前的报告比，列出变了的地方：通过的变化、耗时变化超过 25%、汇总。
 
 ## 测试
 

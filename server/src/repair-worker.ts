@@ -1,4 +1,4 @@
-// Applying a checked repair of Super Partner, and rolling it back.
+// Applying a checked repair of FluidForm, and rolling it back.
 //
 // This file uses only Node's own modules and syntax Node can run from the .ts file as it is (types
 // only, nothing to compile): a frozen copy of it applies the repair from outside the API's service,
@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 // What a repair may read and change: the source, never live tasks, secrets, dependencies or git.
 export const SOURCE_DIRS = new Set(["server", "frontend", "scripts", "docs", "skills"]);
 export const ROOT_FILES = new Set(["README.md", "AGENTS.md", "CLAUDE.md", "Dockerfile", "compose.yaml", ".gitignore", ".dockerignore", "start.sh", "stop.sh"]);
-export const SKIP = new Set([".git", ".agents", ".aws", ".claude", ".codex", ".super-partner", "workspaces", ".venv", "node_modules", "dist", "build",
+export const SKIP = new Set([".git", ".agents", ".aws", ".claude", ".codex", ".fluidform", ".super-partner", "workspaces", ".venv", "node_modules", "dist", "build",
   "coverage", "__pycache__"]);
 export const SUFFIXES = new Set([".py", ".ts", ".tsx", ".js", ".mjs", ".css", ".html", ".json", ".sh", ".md", ".svg", ".png", ".webp"]);
 export const PRIVATE = new Set(["credentials.json", "secrets.json", ".env"]);

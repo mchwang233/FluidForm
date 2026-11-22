@@ -107,7 +107,8 @@ test("what a package requires must be there, and what others need keeps its prov
   // A package providing chat, enabled: now it can be.
   await upload(client, pkg("chat-a", { provides: ["chat"] }));
   assert.equal((await enable(client, "chat-a")).status_code, 200);
-  assert.deepEqual((await client.get("/api/capabilities/provided")).json(), { chat: "chat-a", pricing: null });
+  const provided = (await client.get("/api/capabilities/provided")).json();
+  assert.deepEqual([provided.chat, provided.pricing, provided.planning], ["chat-a", null, "builtin"]);
   assert.equal((await enable(client, "bot")).status_code, 200);
   // Another provider of chat waits until the first is off.
   await upload(client, pkg("chat-b", { provides: ["chat"] }));

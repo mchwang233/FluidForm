@@ -3,10 +3,11 @@
 // answer goes to stdout; secrets travel only through these pipes.
 // Usage: keyring-worker [get|set|delete] (with {"provider", "value"} on stdin); without an action,
 // every saved provider key not in the environment, as {ENV_NAME: value}.
-// SUPER_PARTNER_KEYRING_BACKEND names a module exporting {getPassword, setPassword,
-// deletePassword} (service, name[, value]) to use instead of the OS keyring (tests).
+// FLUIDFORM_KEYRING_BACKEND (or the former SUPER_PARTNER_KEYRING_BACKEND) names a module exporting
+// {getPassword, setPassword, deletePassword} (service, name[, value]) to use instead of the OS
+// keyring (tests).
 import { pathToFileURL } from "node:url";
-import { SECRET_ENV, SERVICE } from "./secret-names.js";
+import { FORMER_SERVICE, SECRET_ENV, SERVICE } from "./secret-names.js";
 
 type Backend = {
   getPassword(service: string, name: string): string | null | Promise<string | null>;
@@ -15,7 +16,7 @@ type Backend = {
 };
 
 async function backend(): Promise<Backend> {
-  const custom = process.env.SUPER_PARTNER_KEYRING_BACKEND;
+  const custom = process.env.FLUIDFORM_KEYRING_BACKEND || process.env.SUPER_PARTNER_KEYRING_BACKEND;
   if (custom) return (await import(pathToFileURL(custom).href)) as Backend;
   const { Entry } = await import("@napi-rs/keyring");
   return {
@@ -23,6 +24,16 @@ async function backend(): Promise<Backend> {
     setPassword: (service, name, value) => new Entry(service, name).setPassword(value),
     deletePassword: (service, name) => new Entry(service, name).deletePassword(),
   };
+}
+
+/** A secret under FluidForm's name, or one kept under its former name (then copied to the new
+ *  one; the old stays, so an older FluidForm still finds it). */
+async function read(keyring: Backend, name: string): Promise<string | null> {
+  const value = await keyring.getPassword(SERVICE, name);
+  if (value) return value;
+  const former = await keyring.getPassword(FORMER_SERVICE, name);
+  if (former) await keyring.setPassword(SERVICE, name, former);
+  return former ?? null;
 }
 
 async function readStdin(): Promise<string> {
@@ -38,14 +49,17 @@ async function main(): Promise<number> {
     const request = JSON.parse(await readStdin()) as { provider: string; value: string | null };
     try {
       if (action === "get") {
-        process.stdout.write(JSON.stringify({ value: (await keyring.getPassword(SERVICE, request.provider)) ?? null }));
+        process.stdout.write(JSON.stringify({ value: (await read(keyring, request.provider)) ?? null }));
       } else if (action === "set") {
         await keyring.setPassword(SERVICE, request.provider, request.value ?? "");
       } else {
-        try {
-          await keyring.deletePassword(SERVICE, request.provider);
-        } catch {
-          // not there: nothing to delete
+        // Under both names, or the former one would bring it back.
+        for (const service of [SERVICE, FORMER_SERVICE]) {
+          try {
+            await keyring.deletePassword(service, request.provider);
+          } catch {
+            // not there: nothing to delete
+          }
         }
       }
     } catch {
@@ -60,7 +74,7 @@ async function main(): Promise<number> {
     if (envName in process.env) continue;
     asked += 1;
     try {
-      const value = await keyring.getPassword(SERVICE, provider);
+      const value = await read(keyring, provider);
       if (value) values[envName] = value;
     } catch {
       failed += 1;

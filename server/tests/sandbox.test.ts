@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 /** Live network checks run only when the validation task permits networking (conftest.network_enabled). */
-const networkAllowed = () => process.env.SUPER_PARTNER_VALIDATION_ALLOW_NETWORK !== "false";
+const networkAllowed = () => process.env.FLUIDFORM_VALIDATION_ALLOW_NETWORK !== "false";
 
 /** command_workspace: command I/O and file isolation without needing a network namespace. */
 function commandWorkspace(): Workspace {
@@ -245,7 +245,7 @@ test("a step cannot read other tasks or the platform's data", async () => {
     const tools = environment.prepare();
     writeFileSync(join(tools, "bin", "mytool"), "#!/bin/sh\necho tool-ran\n");
     chmodSync(join(tools, "bin", "mytool"), 0o755);
-    writeFileSync(join(settings.data_dir, "super-partner.db"), "all tasks");
+    writeFileSync(join(settings.data_dir, "fluidform.db"), "all tasks");
     mkdirSync(join(settings.data_dir, "supervisors"));
     const mine = join(settings.workspace_root, "task-a");
     const other = join(settings.workspace_root, "task-b");
@@ -253,7 +253,7 @@ test("a step cannot read other tasks or the platform's data", async () => {
     mkdirSync(other);
     writeFileSync(join(other, "secret.txt"), "task b");
     const output = await new Workspace(mine).call("Bash", { command: `ls ${settings.workspace_root}; cat ${other}/secret.txt `
-      + `${settings.data_dir}/super-partner.db ${elsewhere} 2>/dev/null; ls ${settings.data_dir}; mytool; echo ok > ${mine}/mine.txt && cat ${mine}/mine.txt` });
+      + `${settings.data_dir}/fluidform.db ${elsewhere} 2>/dev/null; ls ${settings.data_dir}; mytool; echo ok > ${mine}/mine.txt && cat ${mine}/mine.txt` });
     for (const hidden of ["task b", "all tasks", "other database", "task-b", "supervisors"]) assert.ok(!output.includes(hidden), `${hidden}: ${output}`);
     assert.ok(output.includes("task-a") && output.includes("tool-ran") && output.trimEnd().endsWith("ok"), output);
   } finally {
@@ -265,14 +265,14 @@ test("a task in the platform's own folder still cannot read its data", async () 
   const place = outsideTmp();
   try {
     const project = join(place, "project");
-    Object.assign(settings, { data_dir: join(project, ".super-partner"), workspace_root: join(project, "workspaces"), database_path: null });
+    Object.assign(settings, { data_dir: join(project, ".fluidform"), workspace_root: join(project, "workspaces"), database_path: null });
     const tools = environment.prepare();
     writeFileSync(join(tools, "bin", "mytool"), "#!/bin/sh\necho tool-ran\n");
     chmodSync(join(tools, "bin", "mytool"), 0o755);
-    writeFileSync(join(settings.data_dir, "super-partner.db"), "all tasks");
+    writeFileSync(join(settings.data_dir, "fluidform.db"), "all tasks");
     mkdirSync(join(project, "workspaces", "task-b"), { recursive: true });
     writeFileSync(join(project, "main.py"), "print('project')\n");
-    const output = await new Workspace(project).call("Bash", { command: "cat main.py; cat .super-partner/super-partner.db 2>/dev/null; ls workspaces; mytool" });
+    const output = await new Workspace(project).call("Bash", { command: "cat main.py; cat .fluidform/fluidform.db 2>/dev/null; ls workspaces; mytool" });
     assert.ok(output.includes("print('project')") && output.includes("tool-ran"), output);
     assert.ok(!output.includes("all tasks") && !output.includes("task-b"));
   } finally {

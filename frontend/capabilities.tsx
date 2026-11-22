@@ -15,6 +15,8 @@ export type Capability = CapabilityCard & {
   source?: "task" | "upload"; version?: string; entry?: string;
   // A service package: the capabilities it gives FluidForm itself; any package: what it needs first.
   provides?: string[]; requires?: string[];
+  // An interface package: the web page FluidForm serves at /<id>/.
+  site?: string;
 };
 export type CapabilityProposal = CapabilityCard & { status: "proposed" | "solidified" | "dismissed"; capability_id?: string | null };
 /** An uploaded package's secrets stored, and an automation's state (server: capability-runner.ts). */
@@ -25,7 +27,7 @@ type Runtime = {
 };
 type Runtimes = { available: boolean; missing: string; capabilities: Record<string, Runtime> };
 
-const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务" };
+const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务", interface: "界面" };
 // The capabilities FluidForm itself uses, as the page names them (server: service-names.ts).
 const PROVIDED: Record<string, string> = { chat: "聊天", pricing: "计价" };
 const named = (names: string[] = []) => names.map(name => PROVIDED[name] ?? name).join("、");
@@ -79,7 +81,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
         <Icon name="plus" size={14} />{uploading ? "正在安装…" : "上传能力包"}</button>
       <input ref={picker} type="file" accept=".zip,application/zip" hidden aria-label="能力包" onChange={event => void upload(event.target.files?.[0])} />
       <small className="muted">{runtime?.available === false
-        ? <>本机还没开启能力包：在 .env 里加 <code>SUPER_PARTNER_CAPABILITY_PACKAGES=true</code> 后重启。</>
+        ? <>本机还没开启能力包：在 .env 里加 <code>FLUIDFORM_CAPABILITY_PACKAGES=true</code> 后重启。</>
         : uploading ? "解包、装依赖、跑检查，可能要几分钟。" : runtime?.missing || "一个 zip：capability.json、代码、可选的 SKILL.md 和 requirements.txt。"}</small>
     </div>
     {error && <p className="error" role="alert">{error}</p>}
@@ -91,7 +93,7 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
         : act(call(one(item.id), sendJson("PATCH", { enabled: item.status !== "active" })));
       return <li key={item.id} className={`capability ${item.status}`}>
         <div className="capability-head">
-          <Icon name={item.kind === "automation" ? "activity" : item.kind === "service" ? "cpu" : "wrench"} size={15} />
+          <Icon name={item.kind === "automation" ? "activity" : item.kind === "service" ? "cpu" : item.kind === "interface" ? "monitor" : "wrench"} size={15} />
           <b>{item.name}</b>
           <span className="capability-kind">{KIND[item.kind] ?? item.kind}{uploaded && ` · 能力包${item.version ? ` v${item.version}` : ""}`}</span>
           <span className={`capability-status ${item.status}`}>{STATUS[item.status]}</span>
@@ -104,15 +106,18 @@ export function CapabilityShelf({ apiBase, runs, onOpenRun }: {
         </div>
         {item.summary && <p>{item.summary}</p>}
         {removing === item.id && item.provides?.includes("pricing") && <p className="error" role="alert">卸载后任务不再估价、不记账，也不受预算上限限制。</p>}
+        {item.kind === "interface" && <p className="capability-note">{item.status === "active" && <><a href={`${apiBase}/${encodeURIComponent(item.id)}/`} target="_blank" rel="noreferrer">打开</a> · </>}停用或卸载后这个网页就打不开了；用命令行 <code>fluidform capabilities enable {item.id}</code> 可以再启用。</p>}
         {confirming === item.id && <div className="capability-confirm" role="group" aria-label="确认启用">
-          <p><b>启用「{item.name}」？</b>它是上传的代码，会在沙箱里{item.kind === "automation" || item.kind === "service" ? "一直运行" : "被之后的任务使用"}：</p>
-          <ul>
+          {item.kind === "interface"
+            ? <p><b>启用「{item.name}」？</b>它是上传的网页，FluidForm 在 <code>/{item.id}/</code> 提供它。它在你的浏览器里运行，能用 FluidForm 的全部接口（新建和执行任务、改设置）。</p>
+            : <p><b>启用「{item.name}」？</b>它是上传的代码，会在沙箱里{item.kind === "automation" || item.kind === "service" ? "一直运行" : "被之后的任务使用"}：</p>}
+          {item.kind !== "interface" && <ul>
             <li>能访问：{item.domains.length ? item.domains.join("、") : "不联网"}（只有这些）</li>
             {!!item.secrets.length && <li>会拿到你填的：{item.secrets.join("、")}</li>}
             <li>只能写它自己的数据文件夹，看不到你的主目录和 FluidForm 的数据</li>
             {item.kind === "automation" && <li>别人通过它提的事要你确认才开工，每天的花费有上限</li>}
             {!!item.provides?.length && <li>给 FluidForm 提供{named(item.provides)}能力，拿不到你的 API 密钥</li>}
-          </ul>
+          </ul>}
           {!!lacking.length && <p className="capability-confirm-missing">先在下面填好 {lacking.join("、")}。</p>}
           <span className="capability-actions">
             <button type="button" className="ghost" onClick={() => setConfirming(null)}>取消</button>

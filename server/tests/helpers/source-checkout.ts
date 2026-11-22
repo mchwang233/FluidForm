@@ -1,4 +1,4 @@
-// test_platform_repair's source_checkout: a Super Partner checkout laid out as after the switch
+// test_platform_repair's source_checkout: a FluidForm checkout laid out as after the switch
 // (server/ and frontend/, regression tests in server/tests), with data, secrets and tasks that a
 // repair must not touch, and the service manager saying this process is its service.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,8 +12,8 @@ export function sourceCheckout(folder: string): string {
   const files: Record<string, string> = {
     "server/package.json": "{}\n", "server/src/main.ts": "export {};\n", [API]: "export const VALUE = 'broken';\n// unrelated user edit\n",
     "frontend/package.json": "{}\n", "server/tests/regression.test.ts": "// existing\n",
-    "skills/platform-repair/SKILL.md": "---\nname: platform-repair\n---\n# Repairing Super Partner\n", "docs/ARCHITECTURE.md": "# Super Partner architecture map\n",
-    "AGENTS.md": "# Super Partner\n", ".super-partner/super-partner.db": "keep task data", ".env": "keep private configuration", "workspaces/kept/file.txt": "keep project",
+    "skills/platform-repair/SKILL.md": "---\nname: platform-repair\n---\n# Repairing FluidForm\n", "docs/ARCHITECTURE.md": "# FluidForm architecture map\n",
+    "AGENTS.md": "# FluidForm\n", ".fluidform/fluidform.db": "keep task data", ".env": "keep private configuration", "workspaces/kept/file.txt": "keep project",
   };
   for (const [name, contents] of Object.entries(files)) {
     mkdirSync(dirname(join(root, name)), { recursive: true });

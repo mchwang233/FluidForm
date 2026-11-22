@@ -9,6 +9,7 @@
 // A step is given the skills whose tools its own text names (forStep). Skills found in public
 // repositories are kept apart, in <data_dir>/skills-discovered/: never given to a step, only shown
 // to the model that writes this machine's skill, as a reference it must check.
+import { uses } from "./features.js";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -131,7 +132,8 @@ export function forStep(text: string, skills: Skill[] | null = null): Skill[] {
 
 /** The skills as a part of a step's prompt. */
 export function section(skills: Skill[]): string {
-  if (!skills.length) return "";
+  // Without the skills capability steps are given none.
+  if (!skills.length || !uses.skills()) return "";
   const parts = skills.map((skill) => {
     const body = skill.body.length <= MAX_SKILL_CHARS ? skill.body : head(skill.body, MAX_SKILL_CHARS) + "\n[...]";
     return `### Skill: ${skill.name} (${skill.machine ? "checked on this machine" : "general"})\n${body}`;

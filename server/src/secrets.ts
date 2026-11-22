@@ -141,7 +141,7 @@ export async function getSecret(name: string): Promise<string | null> {
 /** Let processes of this user read the keyring one after another: several at once make a
  *  desktop keyring slow enough to time out. After ``wait`` seconds a process goes ahead anyway. */
 export async function oneAtATime<T>(wait: number, work: () => Promise<T>): Promise<T> {
-  const path = join(tmpdir(), `super-partner-keyring-${userInfo().uid}.ts.lock`);
+  const path = join(tmpdir(), `fluidform-keyring-${userInfo().uid}.ts.lock`);
   const deadline = Date.now() + wait * 1000;
   let locked = false;
   while (!locked && Date.now() < deadline) {

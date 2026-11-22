@@ -1,5 +1,6 @@
 // Artifact handoffs and bounded work packages. No model assertion substitutes for
 // evidence.
+import { uses } from "./features.js";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, lstatSync, openSync, readdirSync, readlinkSync, readSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -95,7 +96,7 @@ export function safeName(name: string): boolean {
   // Database files inside VDBs are data, so do not use the review policy's .db exclusion.
   const path = posixPath(name);
   return Boolean(name.trim() && !path.absolute && path.parts.length && name === path.posix
-    && !path.parts.some((part) => ["..", ".", ".git", ".super-partner"].includes(part)
+    && !path.parts.some((part) => ["..", ".", ".git", ".fluidform", ".super-partner"].includes(part)
       || PRIVATE_DIRS.has(part.toLowerCase()) || PRIVATE_NAMES.has(part.toLowerCase())
       || part.toLowerCase().startsWith(".env")
       || PRIVATE_NAMES.has(stem(part).toLowerCase())
@@ -420,7 +421,7 @@ const sameRecord = (a: Record<string, string>, b: Record<string, string>) =>
 export function accepted(run: ExecutionRun, node: TaskNode, seen: Set<string> | null = null): void {
   const evidence = node.artifact_evidence;
   const contract = node.artifact_contract;
-  if (!contract || !settings.acceptance) return;
+  if (!contract || !uses.review()) return;
   if (!evidence || !evidence.accepted || evidence.generation !== node.generation
     || JSON.stringify(evidence.checks.map((check) => (check as Record<string, unknown>).command ?? null)) !== JSON.stringify(contract.acceptance_commands)
     || !evidence.checks.every((check) => (check as Record<string, unknown>).ok)) {
@@ -446,7 +447,7 @@ export function inputSnapshot(run: ExecutionRun, node: TaskNode, seen: Set<strin
       if (owners.length !== 1 || owners[0].status !== "succeeded") throw new ArtifactBlocked(`${item.path} 缺少已完成且已验收的上游步骤`);
       const producer = owners[0];
       accepted(run, producer, seen);
-      if (settings.acceptance && producer.artifact_evidence!.outputs[item.path] !== value) throw new ArtifactBlocked(`${item.path} 与上游验收的产物不一致`);
+      if (uses.review() && producer.artifact_evidence!.outputs[item.path] !== value) throw new ArtifactBlocked(`${item.path} 与上游验收的产物不一致`);
     }
     found[item.path] = value;
   }

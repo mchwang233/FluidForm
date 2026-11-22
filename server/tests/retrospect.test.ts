@@ -80,7 +80,7 @@ test("a problem that comes back after a repair is marked", () => {
   for (const [runId, days] of [["first", 3], ["second", 1], ["third", 0]] as const) db.saveRun(finished(runId, [vcsStep()], days));
   // The sandbox was repaired in the first task and again in the second: it did not hold.
   for (const runId of ["first", "second"]) {
-    db.saveSharedRepair({ id: `rep-${runId}`, run_id: runId, scope: "super_partner", status: "activated", files: ["backend/super_partner/agent.py"],
+    db.saveSharedRepair({ id: `rep-${runId}`, run_id: runId, scope: "fluidform", status: "activated", files: ["backend/super_partner/agent.py"],
       report: "根本原因：沙箱没有加载 EDA 环境", created_at: new Date().toISOString() });
   }
   const groups = new Map(retrospect.recurring(db).map((group) => [`${group.kind}|${group.key}`, group]));

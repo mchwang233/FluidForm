@@ -303,7 +303,7 @@ test("explicit build logs cannot bypass private paths or link targets", async ()
   const root = join(folder, "project");
   mkdirSync(root);
   const blocked = ["build/.env.log", "build/credentials.txt", "build/secrets.log", "build/server.pem", "build/.aws/check.log", "build/.git/check.log",
-    "build/.super-partner/check.log", "build/node_modules/check.log", "build/.venv/check.log", "build/.review/check.log", "build/program.py",
+    "build/.fluidform/check.log", "build/node_modules/check.log", "build/.venv/check.log", "build/.review/check.log", "build/program.py",
     "build/simulation", "build/summary.json", "dist/check.log"];
   for (const name of blocked) {
     mkdirSync(dirname(join(root, name)), { recursive: true });

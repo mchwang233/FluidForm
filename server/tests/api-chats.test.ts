@@ -98,7 +98,7 @@ test("a chat can be deleted", async () => {
   assert.equal(api.db.getRun(chat.id), null);
 });
 
-test("a question left to Super Partner becomes a chat", async () => {
+test("a question left to FluidForm becomes a chat", async () => {
   const { api, client } = taskApi(folder());
   const [sent, asked] = triaging(api, '{"kind": "chat"}');
   const response = await client.post("/api/start", { json: { prompt: "WAL 和回滚日志有什么区别？" }, headers: ORIGIN });
@@ -112,7 +112,7 @@ test("a question left to Super Partner becomes a chat", async () => {
   assert.ok(saved.actual_cost_usd > 0 && sent[0][0] === "x:best");
 });
 
-test("work left to Super Partner is planned as a task, and can still become a chat", async () => {
+test("work left to FluidForm is planned as a task, and can still become a chat", async () => {
   const { api, client } = taskApi(folder());
   const [sent] = triaging(api, '{"kind": "task"}');
   const run = (await client.post("/api/start", { json: { prompt: "给商品接口加 Redis 缓存" }, headers: ORIGIN })).json();

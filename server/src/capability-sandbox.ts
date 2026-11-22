@@ -1,6 +1,6 @@
 // How a capability's commands run (docs/design/capability-packages.md).
 //
-// As the steps' sandbox does, it hides the home folder and Super Partner's data. On top of that:
+// As the steps' sandbox does, it hides the home folder and FluidForm's data. On top of that:
 // - its folder is read-only, and its data folder is the only place it writes, besides its own /tmp;
 // - it has no network of its own: the only way out is DomainProxy, a proxy in this process, bridged in
 //   on a Unix socket, which lets a connection through only to a host the capability declared;

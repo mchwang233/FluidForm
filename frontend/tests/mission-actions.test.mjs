@@ -1582,10 +1582,10 @@ test("the sidebar groups tasks by what they need and folds into a rail it rememb
   assert.match(dots[2].title, /broken-task · 失败/);
   await click(dots[2]);
   assert.match(document.querySelector(".detail h3").textContent, /broken-task/);
-  assert.equal(window.localStorage.getItem("super-partner.history"), "collapsed");
+  assert.equal(window.localStorage.getItem("fluidform.history"), "collapsed");
   await click(document.querySelector('.mission-history [title="展开任务栏"]'));
   assert.ok(document.querySelector(".mission-history .run-list"));
-  assert.equal(window.localStorage.getItem("super-partner.history"), "open");
+  assert.equal(window.localStorage.getItem("fluidform.history"), "open");
 });
 
 test("the new-task form stays folded behind the sidebar button once tasks exist", async t => {
@@ -2474,7 +2474,7 @@ test("chats sit in their own sidebar group, can be deleted, and turn into a task
 });
 
 
-test("by default the composer leaves it to Super Partner to tell a chat from a task", async t => {
+test("by default the composer leaves it to FluidForm to tell a chat from a task", async t => {
   const { state, window, document, act, button, click } = await setup(t, [mission("finished-task", "succeeded")]);
   const composer = document.querySelector(".composer");
   assert.equal(button("自动", composer.querySelector(".mode-switch")).getAttribute("aria-pressed"), "true");
@@ -2603,7 +2603,7 @@ test("the sidebar's foot is 模型 · 平台 · 设置, the theme and common fai
   const settings = nav.querySelector(".settings-menu");
   await click(settings.querySelector("summary"));
   await click(button("深色", settings));
-  assert.equal(window.localStorage.getItem("super-partner.theme"), "dark");
+  assert.equal(window.localStorage.getItem("fluidform.theme"), "dark");
   assert.equal(button("深色", settings).getAttribute("aria-pressed"), "true");
   await click(button("常见故障", settings));
   assert.ok(document.querySelector('[aria-label="常见故障"]'));
@@ -2940,4 +2940,25 @@ test("without the chat capability there is no 对话 to start, and an old chat c
   assert.match(page.querySelector(".lead-panel").textContent, /可以先加缓存/);
   assert.match(page.querySelector(".chat-off").textContent, /聊天能力已停用，这段对话只能查看/);
   assert.equal(page.querySelector('[aria-label="发消息"]'), null);
+});
+
+test("an interface package says it is a page FluidForm serves, opens it, and how to get it back", async t => {
+  const { state, document, button, click, act } = await setup(t, [], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.capabilities = [
+    { ...FEISHU, id: "web", name: "网页界面", kind: "interface", site: "site", source: "upload", status: "active", secrets: [], domains: [] },
+    { ...FEISHU, id: "board", name: "看板", kind: "interface", site: "site", source: "upload", status: "disabled", secrets: [], domains: [] },
+  ];
+  state.capabilityRuntime = { available: true, missing: "", capabilities: { web: { secrets: {} }, board: { secrets: {} } } };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  await click(button("更多 ›", document.querySelector(".platform-side .platform-side-head")));
+  await settle();
+  const [web, board] = document.querySelectorAll(".capability-shelf .capability");
+  assert.match(web.textContent, /网页界面.*界面 · 能力包/s);
+  assert.match(web.querySelector(".capability-note a").getAttribute("href"), /\/web\/$/);
+  assert.match(web.textContent, /fluidform capabilities enable web/);
+  assert.equal(board.querySelector(".capability-note a"), null);
+  await click(button("启用", board));
+  assert.match(board.querySelector('[aria-label="确认启用"]').textContent, /在 \/board\/ 提供它.*能用 FluidForm 的全部接口/s);
 });

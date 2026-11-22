@@ -20,16 +20,16 @@
 
 ## 配置与边界
 
-- `SUPER_PARTNER_PROVIDER_LIMITS`：JSON 对象，键为 provider，值可含 `concurrency`、`rpm`、
+- `FLUIDFORM_PROVIDER_LIMITS`：JSON 对象，键为 provider，值可含 `concurrency`、`rpm`、
   `tpm`，均为非负整数。未提供或零表示未配置。TPM 按输入字节上界和最大输出预留，
   收到用量后改为实际报告值；丢失响应保留保守预留。429 的 Retry-After 同时影响该供应商其他请求。
-- `SUPER_PARTNER_REASONING_FALLBACK`：默认 `report`，降级写入调用记录；`strict` 禁止移除
+- `FLUIDFORM_REASONING_FALLBACK`：默认 `report`，降级写入调用记录；`strict` 禁止移除
   被拒绝的推理参数。记录的强度是发送值，并不代表能观察模型内部实际推理强度。
-- `SUPER_PARTNER_API_TOOL_EXTENSIONS`：工具名映射到 `command`（argv 列表）、`description`、
+- `FLUIDFORM_API_TOOL_EXTENSIONS`：工具名映射到 `command`（argv 列表）、`description`、
   `parameters`。支持 object/array/string/integer/number/boolean、required、enum 和布尔型
   additionalProperties；不支持的 schema 被拒绝。命令收到一个安全引用的 JSON 参数。
   例如工具 `ProjectCheck` 可调用项目中的 `["python3", "scripts/check.py"]`。
-- `SUPER_PARTNER_API_TOOL_HOOKS`：`before_tool`、`after_tool` 各为 argv 列表的列表。
+- `FLUIDFORM_API_TOOL_HOOKS`：`before_tool`、`after_tool` 各为 argv 列表的列表。
   失败的前置钩子阻止工具；失败的后置钩子明确说明工具已经运行，不能假装回滚。
   钩子配置时读取工具也串行执行。工具及钩子继承任务网络许可、超时和文件沙箱；
   不运行于只读审核或宿主环境修复。此扩展是命令适配层，不是完整 MCP 客户端或 MCP 服务发现。

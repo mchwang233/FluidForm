@@ -1,11 +1,11 @@
-// The settings (SUPER_PARTNER_*): names, types and defaults (first generated from the Python settings; edited here since).
+// The settings (FLUIDFORM_*, or the former FLUIDFORM_*): names, types and defaults (first generated from the Python settings; edited here since).
 import { homedir } from "node:os";
 import { z } from "zod";
 import { lax } from "./lax.js";
 
 export const SettingsFields = {
   profile: z.enum(["", "fast", "balanced", "careful"]).default(() => ("" as const)),
-  data_dir: z.string().default(() => (".super-partner")),
+  data_dir: z.string().default(() => (".fluidform")),
   database_path: z.string().nullable().default(() => (null)),
   workspace_root: z.string().default(() => ("workspaces")),
   project_roots: z.array(z.string()).default(() => [homedir()]),

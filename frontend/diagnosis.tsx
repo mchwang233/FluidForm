@@ -77,7 +77,7 @@ function Report({ text }: { text: string }) {
 
 function AssistantMessage({ item, model, node, run }: { item: Diagnosis; model: string; node?: string; run: RunLike }) {
   const verdict = item.verdict ? VERDICTS[item.verdict] : undefined;
-  const running = item.scope === "super_partner" ? `${model} 正在修复平台自身问题，并验证修改…`
+  const running = (item.scope === "fluidform" || item.scope === "super_partner") ? `${model} 正在修复平台自身问题，并验证修改…`
     : item.reply_to ? `${model} 正在结合你的回复继续查…`
     : item.trigger === "auto" ? `${model} 正在排查卡住的原因，并尝试修复…`
     : `${model} 正在查任务的计划、每次尝试和改动…`;
@@ -176,7 +176,7 @@ export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models:
   const waiting = run.waiting_diagnosis_id === last.id;
   return <section className={`diagnosis-card dx-panel${waiting ? " waiting" : ""}`} aria-label="平台工程师">
     <div className="diagnosis-head">
-      <b>平台工程师{last.scope === "super_partner" ? " · 改 FluidForm 本身" : ""}</b>
+      <b>平台工程师{(last.scope === "fluidform" || last.scope === "super_partner") ? " · 改 FluidForm 本身" : ""}</b>
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
       {groups.length > 1 && <span className="diagnosis-nav">
         <button type="button" className="ghost" disabled={index <= 0} onClick={() => setIndex(i => i - 1)} aria-label="上一次">‹</button>

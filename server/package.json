@@ -1,10 +1,11 @@
 {
-  "name": "super-partner-server",
+  "name": "fluidform-server",
   "private": true,
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
   "bin": {
+    "fluidform": "dist/cli.js",
     "super-partner": "dist/cli.js"
   },
   "engines": {

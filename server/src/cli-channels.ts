@@ -203,8 +203,8 @@ export function codexServers(): string[] {
 // The permission profile a Codex step runs under (Codex's own sandbox, bubblewrap on Linux): its
 // workspace writable; this account's home (keys, Codex's login, other projects), the platform's data
 // and the other tasks' folders unreadable; the machine's shared /tmp replaced by TMPDIR.
-export const CODEX_STEP_PROFILE = "super-partner-step";
-export const CODEX_LEAD_PROFILE = "super-partner-lead";
+export const CODEX_STEP_PROFILE = "fluidform-step";
+export const CODEX_LEAD_PROFILE = "fluidform-lead";
 // Folders denied entry by entry: Codex lifts a deny only on a whole entry, not inside one.
 export const MAX_DENIED = 400;
 // /tmp entries a step's profile denies one by one; past this many it denies all of /tmp.
@@ -351,7 +351,7 @@ export function codexSettings(effort: string | null = null, serviceTier = ""): s
 // stops builds and clean-ups; an allow rule in the folder it works in lifts that, and its sandbox
 // still keeps everything outside the folder read-only. rm with wildcards or $(...) stays refused,
 // since Codex cannot tell what it removes (2026-10-21); steps are told to use find -delete.
-export const CODEX_RULES = ".codex/rules/super-partner.rules";
+export const CODEX_RULES = ".codex/rules/fluidform.rules";
 export const CODEX_ALLOW = 'prefix_rule(pattern=["rm"], decision="allow")\n';
 const ruleUsers = new Map<string, number>();
 

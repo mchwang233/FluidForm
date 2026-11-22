@@ -21,7 +21,7 @@ import json, math, os, sys, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
 def get(url):
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "super-partner-step"}
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "fluidform-step"}
     if "api.github.com" in url and os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
     try:

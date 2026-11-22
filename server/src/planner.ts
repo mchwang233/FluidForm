@@ -1,6 +1,7 @@
 // Planning a request: the task's lead plans it as tasks in a conversation it keeps
 // (task-planning.ts, supervisor.ts); with no lead model, the best planner plans it in one call; with no
 // planner at all, a fixed fallback plan.
+import { uses } from "./features.js";
 import { randomUUID } from "node:crypto";
 import * as pricing from "./pricing.js";
 import { settings } from "./config.js";
@@ -382,7 +383,7 @@ async function planAsLead(request: string, models: ModelProfile[], configured: S
     try {
       // A valid team is a completed decision. An outline timeout or model switch must not discard it,
       // spend another staffing call or change employee identities.
-      if (settings.employee_teams && roster === null) {
+      if (uses.team() && roster === null) {
         // Staffing is part of planning: with "auto", at the effort the difficulty calls for.
         const teamEffort = settings.team_reasoning_effort === "auto" ? planningEffort : settings.team_reasoning_effort;
         roster = await form(sayIn(fresh, teamEffort, "team"), teamRequest || request, models, configured);
@@ -406,7 +407,7 @@ async function planAsLead(request: string, models: ModelProfile[], configured: S
     if (judged) plan.planning_note += `；规划难度${DIFFICULTY_LABELS[judged[0]]}，用 ${planningEffort} 强度规划` + (judged[1] ? `（${judged[1]}）` : "");
     return plan;
   }
-  if (settings.employee_teams && supervisor.candidates(models, configured).length) {
+  if (uses.team() && supervisor.candidates(models, configured).length) {
     throw new contracts.ContractError("负责人未能建立有效团队和分工；请调整可用模型后重新规划。");
   }
   return null;
@@ -421,7 +422,7 @@ export async function autonomousPlan(prompt: string, models: ModelProfile[], giv
   let configured = given;
   const inProject = projectContext !== null || brief !== null;
   let body = prompt + [projectContext, brief].filter(Boolean).map((part) => `\n\n${part}`).join("");
-  if (!settings.acceptance) body += NO_ACCEPTANCE_NOTE;
+  if (!uses.review()) body += NO_ACCEPTANCE_NOTE;
   const request = PLANNER_PROMPT + body;
   const artifactWork = [...contracts.stages(TaskNodeSchema.parse({ id: "request", title: prompt, instructions: "", capability: "planning" }))]
     .some((stage) => stage === "coverage_vdb" || stage === "urg_report");

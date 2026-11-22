@@ -446,7 +446,7 @@ test("an artifact's limit survives a provider failure after a plain reply", asyn
 test("a project's steps run one at a time in the project, without a fallback", async () => {
   const root = join(folder(), "home");
   mkdirSync(join(root, "app"), { recursive: true });
-  Object.assign(settings, { project_roots: [root], data_dir: join(root, "app", ".super-partner"), workspace_root: join(folder(), "scratch"), review_nodes: false });
+  Object.assign(settings, { project_roots: [root], data_dir: join(root, "app", ".fluidform"), workspace_root: join(folder(), "scratch"), review_nodes: false });
   const project = join(root, "app");
   const nodes = [...[0, 1, 2].map((i) => ({ id: `edit${i}`, title: `Edit ${i}`, instructions: "edit", capability: "coding", model_id: "cli:codex", needs_workspace: true })),
     { id: "notes", title: "Notes", instructions: "write notes", capability: "research", model_id: "cli:gemini" }];

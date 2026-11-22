@@ -1488,12 +1488,12 @@
  {
   "call": "contracts.safe_name",
   "args": [
-   ".super-partner/x"
+   ".fluidform/x"
   ],
   "kwargs": {},
   "result": false,
   "after": [
-   ".super-partner/x"
+   ".fluidform/x"
   ]
  },
  {

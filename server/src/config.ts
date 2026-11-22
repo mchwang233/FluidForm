@@ -1,4 +1,4 @@
-// FluidForm's settings: SUPER_PARTNER_* from the environment
+// FluidForm's settings: FLUIDFORM_* (or the former SUPER_PARTNER_*) from the environment
 // and a .env file, read as pydantic-settings reads them, so one .env serves both backends.
 // Precedence: values given in code, then the environment, then .env, then the defaults.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { JSON_SETTINGS, SettingsFields } from "./config-fields.js";
 
-// Settings that go together, chosen with one name (SUPER_PARTNER_PROFILE, or 设置 → 工作方式); a
+// Settings that go together, chosen with one name (FLUIDFORM_PROFILE, or 设置 → 工作方式); a
 // setting given on its own still wins. Empty: every setting keeps its own default.
 export const PROFILES: Record<string, Record<string, unknown>> = {
   // Every task planned by the lead, every step's result accepted by another model.
@@ -51,14 +51,25 @@ export function readDotenv(text: string): Record<string, string> {
   return values;
 }
 
-/** SUPER_PARTNER_* values by setting name (lower case, as pydantic-settings matches them). */
+// The database's file in the data folder (it was super-partner.db: rename.ts moves it).
+export const DATABASE = "fluidform.db";
+export const FORMER_DATABASE = "super-partner.db";
+
+// What the settings are called: FLUIDFORM_*, and SUPER_PARTNER_* as they were named before (an older
+// .env goes on working; the new name wins when both are given).
+export const PREFIX = "FLUIDFORM_";
+export const FORMER_PREFIX = "SUPER_PARTNER_";
+
+/** FLUIDFORM_* (or SUPER_PARTNER_*) values by setting name (lower case, as pydantic-settings matches them). */
 function prefixed(source: Record<string, string | undefined>): Record<string, unknown> {
   const values: Record<string, unknown> = {};
-  for (const [key, raw] of Object.entries(source)) {
-    if (raw === undefined || !key.toUpperCase().startsWith("SUPER_PARTNER_")) continue;
-    const name = key.slice("SUPER_PARTNER_".length).toLowerCase();
-    if (!(name in SettingsFields)) continue;
-    values[name] = JSON_SETTINGS.has(name) ? JSON.parse(raw) : raw;
+  for (const prefix of [FORMER_PREFIX, PREFIX]) {
+    for (const [key, raw] of Object.entries(source)) {
+      if (raw === undefined || !key.toUpperCase().startsWith(prefix)) continue;
+      const name = key.slice(prefix.length).toLowerCase();
+      if (!(name in SettingsFields)) continue;
+      values[name] = JSON_SETTINGS.has(name) ? JSON.parse(raw) : raw;
+    }
   }
   return values;
 }
@@ -85,7 +96,7 @@ export class SettingsMethods {
     applyProfile(this);
   }
 
-  /** The profile picked on the page, which outlasts a restart and wins over SUPER_PARTNER_PROFILE. */
+  /** The profile picked on the page, which outlasts a restart and wins over FLUIDFORM_PROFILE. */
   get profilePath(): string {
     return join((this as unknown as Settings).data_dir, "profile.json");
   }
@@ -104,7 +115,7 @@ export class SettingsMethods {
 
   get dbPath(): string {
     const self = this as unknown as Settings;
-    return self.database_path ?? join(self.data_dir, "super-partner.db");
+    return self.database_path ?? join(self.data_dir, DATABASE);
   }
 
   prepare(this: Settings): void {

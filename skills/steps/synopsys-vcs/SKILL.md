@@ -7,7 +7,7 @@ tools: [vcs, urg, simv]
 
 # Synopsys VCS: compile, simulate, coverage
 
-Commands below were run in Super Partner's step sandbox. If the machine's own notes for VCS are
+Commands below were run in FluidForm's step sandbox. If the machine's own notes for VCS are
 given too, they take precedence (environment script, licence, versions).
 
 ## Compile

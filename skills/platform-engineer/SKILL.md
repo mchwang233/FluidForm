@@ -1,16 +1,16 @@
 ---
 name: platform-engineer
-description: How to add a component to Super Partner itself (a model or channel, a tool or skill for the steps, a web UI feature, a scheduling or check feature) as its platform engineer. Use it when planning or building such a change in a platform-engineer copy. For fixing a defect, follow skills/platform-repair/SKILL.md instead.
+description: How to add a component to FluidForm itself (a model or channel, a tool or skill for the steps, a web UI feature, a scheduling or check feature) as its platform engineer. Use it when planning or building such a change in a platform-engineer copy. For fixing a defect, follow skills/platform-repair/SKILL.md instead.
 ---
 
-# Adding a component to Super Partner
+# Adding a component to FluidForm
 
 Any model can follow this: it needs only file reading, search, editing and a shell.
-Super Partner gives it to the platform engineer for every component it plans or builds.
+FluidForm gives it to the platform engineer for every component it plans or builds.
 
 ## Rules
 
-- Change only Super Partner's source in the copy you were given. Do not touch task data,
+- Change only FluidForm's source in the copy you were given. Do not touch task data,
   credentials, Git history, the live source, or running services.
 - Keep unrelated existing changes. Never delete or weaken an existing test.
 - Every component comes with tests that fail without it and pass with it.
@@ -22,8 +22,8 @@ Super Partner gives it to the platform engineer for every component it plans or 
   copy of its code. Write it yourself only when neither exists or neither fits; say in the plan
   what you looked at and why it did not fit.
 - The product is called FluidForm. Every word a user sees (UI text, replies, errors, reports)
-  and every prompt given to a model says FluidForm. "Super Partner" stays only in the package
-  names, `SUPER_PARTNER_` settings and code identifiers.
+  and every prompt given to a model says FluidForm. "FluidForm" stays only in the package
+  names, `FLUIDFORM_` settings and code identifiers.
 - The job has a budget and the user is waiting: work economically (see Building, step 4).
 
 ## Planning (nothing is edited yet)

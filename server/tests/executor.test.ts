@@ -11,6 +11,8 @@ import { ExecutionRunSchema, type ExecutionRun, ModelProfileSchema, type TaskNod
 import { heuristicPlan } from "../src/planner.js";
 import { type CompleteOptions, ProviderRegistry, ProviderResult } from "../src/providers.js";
 import * as pricing from "../src/pricing.js";
+import { withoutChat } from "./helpers/chat.js";
+import { withoutPricing } from "./helpers/pricing.js";
 import { routeNode } from "../src/routing.js";
 import { sleep } from "../src/tasks.js";
 import { contractNode, coverageNodes, mockAcceptance, restoreAcceptance, setupExecutor } from "./helpers/artifacts.js";
@@ -215,6 +217,39 @@ test("a demo execution completes", async () => {
   const result = db.getRun("demo")!;
   assert.equal(result.status, "succeeded");
   assert.ok(result.final_result && result.plan.nodes.every((node) => node.result));
+});
+
+test("the core alone runs a task: without the pricing and chat packages it is routed between CLI and API, and done", async () => {
+  // FluidForm's base: a task asked for (the command line, fluidform plan / run), its models chosen
+  // between membership CLIs and API models, run to its end. None of it needs a package.
+  const restore = [withoutPricing(), withoutChat()];
+  try {
+    const db = newDb();
+    const models = builtinModels();
+    const plan = heuristicPlan("Research and implement a small feature");
+    const cli = ModelProfileSchema.parse({ ...models.find((model) => model.id === "mock:local")!, id: "cli:codex", channel: "cli", execution_priority: 0, input_per_million: null, output_per_million: null });
+    for (const node of plan.nodes) {
+      node.quality_threshold = Math.min(node.quality_threshold, 80);
+      // API models first by default (subtasks_prefer_api); with that off, the membership CLI,
+      // unpriced as it is.
+      await routeNode(node, [...models, cli], new Set(["mock:local", "cli:codex"]));
+      assert.equal(node.model_id, "mock:local");
+      settings.subtasks_prefer_api = false;
+      await routeNode(node, [...models, cli], new Set(["mock:local", "cli:codex"]));
+      assert.equal(node.model_id, "cli:codex");
+      settings.subtasks_prefer_api = true;
+      await routeNode(node, models, new Set(["mock:local"]));
+    }
+    plan.estimate = await pricing.estimate(plan.nodes, 1);
+    assert.equal(plan.estimate, null);
+    db.saveRun(ExecutionRunSchema.parse({ id: "core", prompt: "core", status: "queued", plan, budget_usd: 1 }));
+    await new Executor(db, new ProviderRegistry(), catalog()).execute("core");
+    const result = db.getRun("core")!;
+    assert.equal(result.status, "succeeded", result.error ?? "");
+    assert.equal(result.actual_cost_usd, 0);
+  } finally {
+    restore.forEach((undo) => undo());
+  }
 });
 
 test("resuming runs the steps an interruption cut off again", async () => {

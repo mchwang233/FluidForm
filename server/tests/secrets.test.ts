@@ -43,7 +43,7 @@ beforeEach(() => {
   folder = mkdtempSync(join(tmpdir(), "keyring-"));
   writeFileSync(join(folder, "fake-keyring.mjs"), FAKE_KEYRING);
   for (const envName of Object.values(SECRET_ENV)) delete process.env[envName];
-  process.env.SUPER_PARTNER_KEYRING_BACKEND = join(folder, "fake-keyring.mjs");
+  process.env.FLUIDFORM_KEYRING_BACKEND = join(folder, "fake-keyring.mjs");
   process.env.TEST_KEYRING_STORE = join(folder, "store.txt");
   delete process.env.TEST_KEYRING_MODE;
   logged = [];
@@ -186,4 +186,29 @@ test("private secrets: only capability names, kept for the session", async () =>
   assert.equal(await secrets.getSecret("capability/other/TOKEN"), "saved-capability/other/TOKEN");
   await secrets.deleteSecret("capability/feishu-bot/APP_SECRET");
   assert.equal(readFileSync(join(folder, "store.txt"), "utf8"), "deleted capability/feishu-bot/APP_SECRET");
+});
+
+// A keyring that keeps each service's secrets apart, in a JSON file.
+const BY_SERVICE = `
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+const file = () => process.env.TEST_KEYRING_STORE;
+const load = () => (existsSync(file()) ? JSON.parse(readFileSync(file(), "utf8")) : {});
+const save = (data) => writeFileSync(file(), JSON.stringify(data));
+export function getPassword(service, name) { return load()[service]?.[name] ?? null; }
+export function setPassword(service, name, value) { const data = load(); (data[service] ??= {})[name] = value; save(data); }
+export function deletePassword(service, name) { const data = load(); delete data[service]?.[name]; save(data); }
+`;
+
+test("a secret kept under the former name (super-partner) is found, copied under FluidForm's, and deleted under both", async () => {
+  writeFileSync(join(folder, "by-service.mjs"), BY_SERVICE);
+  process.env.FLUIDFORM_KEYRING_BACKEND = join(folder, "by-service.mjs");
+  const store = join(folder, "store.json");
+  process.env.TEST_KEYRING_STORE = store;
+  writeFileSync(store, JSON.stringify({ "super-partner": { "capability/feishu-bot/FEISHU_APP_SECRET": "old-secret" } }));
+  assert.equal(await secrets.getSecret("capability/feishu-bot/FEISHU_APP_SECRET"), "old-secret");
+  const kept = JSON.parse(readFileSync(store, "utf8"));
+  assert.deepEqual([kept.fluidform["capability/feishu-bot/FEISHU_APP_SECRET"], kept["super-partner"]["capability/feishu-bot/FEISHU_APP_SECRET"]],
+    ["old-secret", "old-secret"]);
+  await secrets.deleteSecret("capability/feishu-bot/FEISHU_APP_SECRET");
+  assert.equal(await secrets.getSecret("capability/feishu-bot/FEISHU_APP_SECRET"), null);
 });

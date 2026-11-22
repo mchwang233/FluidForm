@@ -78,7 +78,7 @@ for (const [title, files] of [["实现 URG 文本解析及内容验收器", ["sc
   });
 }
 
-for (const unsafe of ["../outside.txt", "/tmp/outside.txt", ".env", ".git/config", "secrets.json", ".super-partner/tasks.db"]) {
+for (const unsafe of ["../outside.txt", "/tmp/outside.txt", ".env", ".git/config", "secrets.json", ".fluidform/tasks.db"]) {
   test(`artifact paths cannot read private or outside files: ${unsafe}`, async () => {
     assert.throws(() => contracts.fingerprint(folder, ArtifactSchema.parse({ path: unsafe })), contracts.ArtifactBlocked);
   });

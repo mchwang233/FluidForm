@@ -110,7 +110,7 @@
 - `unable`：判定这一步在当前环境中做不到，写明原因和需要用户做什么；其余步骤继续。
 - `ask_user`：暂停并提问（取代 `BLOCKED` 和 `NEEDS_INPUT`）。
 - `repair_environment`：启动环境修复（沿用现有的修复会话），修好后再试。
-- `repair_platform`：Super Partner 自身有缺陷，走平台修复流程。
+- `repair_platform`：FluidForm 自身有缺陷，走平台修复流程。
 - `replan`：调整计划，比如拆分、合并、增删步骤；已完成的步骤保留。
 
 所有决策写成 `run.decision` 事件，显示在任务时间线上，附带理由。

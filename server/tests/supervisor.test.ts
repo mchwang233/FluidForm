@@ -176,7 +176,7 @@ test("a lead works outside the platform's folder", async () => {
   settings.lead_root = null;
   process.env.XDG_CACHE_HOME = join(folder, "cache");
   const session = supervisor.newSession(coder("cli:codex", 95, "cli"));
-  const leads = join(folder, "cache", "super-partner", "leads");
+  const leads = join(folder, "cache", "fluidform", "leads");
   assert.ok(session.cwd!.startsWith(leads) && /^\d{8}-\d{6}-lead-codex$/.test(session.cwd!.split("/").at(-1)!));
   assert.ok(!session.cwd!.startsWith(settings.data_dir));
 });

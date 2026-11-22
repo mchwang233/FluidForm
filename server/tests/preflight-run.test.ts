@@ -90,7 +90,7 @@ function fakeHome(): string {
   delete process.env.CODEX_HOME;
   for (const name of ["this-task", "other-task"]) mkdirSync(join(settings.workspace_root, name), { recursive: true });
   mkdirSync(join(settings.data_dir, "tools", "bin"), { recursive: true });
-  writeFileSync(join(settings.data_dir, "super-partner.db"), "db");
+  writeFileSync(join(settings.data_dir, "fluidform.db"), "db");
   return home;
 }
 
@@ -173,7 +173,7 @@ test("a Codex step reads only its folder and what it needs", () => {
   const rules = resolved(rulesOf(cliChannels.codexStepPermissions(cwd, false)));
   const data = resolve(settings.data_dir);
   const denied = new Set(Object.entries(rules).filter(([, mode]) => mode === "deny").map(([path]) => path));
-  for (const path of [join(home, ".ssh"), join(home, "code"), join(home, "notes.txt"), join(home, ".codex", "auth.json"), join(data, "super-partner.db"),
+  for (const path of [join(home, ".ssh"), join(home, "code"), join(home, "notes.txt"), join(home, ".codex", "auth.json"), join(data, "fluidform.db"),
     join(resolve(settings.workspace_root), "other-task")]) assert.ok(denied.has(path), path);
   // Its folder is under /tmp here: the rest of /tmp is denied entry by entry instead.
   assert.ok(denied.has(":slash_tmp") || [...denied].some((path) => path.startsWith("/tmp/")));
@@ -193,7 +193,7 @@ test("a Codex step reads only its folder and what it needs", () => {
 
 test("Codex reading the platform's data is a warning", async () => {
   const home = fakeHome();
-  settings.database_path = join(settings.data_dir, "super-partner.db");
+  settings.database_path = join(settings.data_dir, "fluidform.db");
   class Leaky extends CodexSandbox {
     override async sandboxRun(modelId: string, command: string, cwd?: string, timeout?: number): Promise<[string, boolean]> {
       if (command.includes("readable:")) return [`readable: ${settings.dbPath}`, true];
@@ -213,7 +213,7 @@ test("in Codex's real sandbox a step cannot read keys or other tasks", { skip: !
   process.env.CODEX_HOME = REAL_CODEX_HOME;
   allowRealClis(); // only its sandbox runs: no model is asked anything
   const cwd = join(settings.workspace_root, "this-task");
-  const script = `cat ${home}/.ssh/id_rsa; cat ${settings.workspace_root}/other-task/../other-task 2>&1; cat ${settings.data_dir}/super-partner.db; `
+  const script = `cat ${home}/.ssh/id_rsa; cat ${settings.workspace_root}/other-task/../other-task 2>&1; cat ${settings.data_dir}/fluidform.db; `
     + "echo mine > own.txt && cat own.txt; echo t > $TMPDIR/t && cat $TMPDIR/t; echo s > /tmp/sp-step-$$ && cat /tmp/sp-step-$$ && rm /tmp/sp-step-$$";
   const [output] = await new cliChannels.CliChannelRegistry().sandboxRun("cli:codex", script, cwd, 60);
   if (output.includes("unknown") || output.includes("requires")) {

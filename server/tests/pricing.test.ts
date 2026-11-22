@@ -69,7 +69,8 @@ test("the pricing package ships enabled, and prices over JSON-RPC in its sandbox
   assert.deepEqual(await bundled.offer(), []);
   assert.equal(capabilities.load("pricing"), null);
   assert.ok(!pricing.enabled());
-  assert.deepEqual(JSON.parse(readFileSync(join(settings.data_dir, "bundled.json"), "utf8")), { chat: "1.0.0", pricing: "1.0.0" });
+  const offered = JSON.parse(readFileSync(join(settings.data_dir, "bundled.json"), "utf8"));
+  assert.ok(offered.pricing.startsWith("1.0.0#") && offered.chat.startsWith("1.0.0#"), JSON.stringify(offered));
 });
 
 test("switched off, the pricing package stops answering and nothing more is priced", async () => {

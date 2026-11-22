@@ -1,6 +1,7 @@
 // Accepting or rejecting a step's result: a verification's own verdict, or a reviewer model
 // against the acceptance criteria; and the checks on an attempt that runs long. Python mixes this into
 // the executor; here its functions take the executor (ReviewHost).
+import { uses } from "./features.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -59,7 +60,7 @@ export async function check(host: ReviewHost, run: ExecutionRun, node: TaskNode,
   let text = given;
   const blocked = quality.blockedClaim(text);
   if (blocked) return quality.verdict({ passed: false, reason: blocked, blocked });
-  if (!settings.acceptance) {
+  if (!uses.review()) {
     // Nothing is accepted or rejected: a step that finished has passed, unless it says itself that part
     // of its work cannot be done here.
     const claim = quality.unableClaim(text);

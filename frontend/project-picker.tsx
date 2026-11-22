@@ -5,7 +5,7 @@ import { detailText } from "./mission-history";
 type Suggestion = { path: string; name: string; source: "recent" | "found" };
 type Inspection = { path: string; git: boolean; branch?: string | null; uncommitted_files?: number };
 
-const RECENT_KEY = "super-partner.recent-projects";
+const RECENT_KEY = "fluidform.recent-projects";
 const MAX_RECENT = 6;
 
 function errorText(e: unknown) { return e instanceof Error ? e.message : String(e); }

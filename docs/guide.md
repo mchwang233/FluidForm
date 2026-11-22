@@ -32,7 +32,7 @@ More: [The task's lead](#the-tasks-lead) · [design](design/supervisor.md)
 
 Each step goes to the cheapest model that is good enough for it, judged by public benchmark
 scores. API models work through sandboxed tools (Bash, Read, Write, Edit, MultiEdit, Glob, Grep,
-LS); membership CLIs run in their own sandboxes. With `SUPER_PARTNER_EMPLOYEE_TEAMS=true` the lead
+LS); membership CLIs run in their own sandboxes. With `FLUIDFORM_EMPLOYEE_TEAMS=true` the lead
 first forms a team of named employees, one per module or area (up to 8), each with its model and
 skills. An employee that finds new subtasks can hand them to colleagues (`DELEGATE_TASKS`), and the
 task's **员工** (employees) tab shows who does what.
@@ -49,7 +49,7 @@ More: [How nodes hand off and check work](#how-nodes-hand-off-and-check-work)
 ### Progress checker
 
 Steps have no fixed timeout. Every 10 minutes of a long attempt
-(`SUPER_PARTNER_PROGRESS_CHECK_MINUTES`) another model looks at what it has been doing: an API
+(`FLUIDFORM_PROGRESS_CHECK_MINUTES`) another model looks at what it has been doing: an API
 model's latest tool calls, or the files a CLI changed and the processes it runs. Work that keeps
 moving goes on; only an attempt that is stuck (repeating itself, waiting for something that will
 not come) is stopped.
@@ -75,7 +75,7 @@ fails. It first finds where the fault is, then picks how to repair it:
   applied on its own; a component first shows you a plan to approve, and waits for you to apply
   it. Applying waits for running model calls, restarts the service, rolls back if the health check
   fails, and commits the changed files to git (without pushing). Its own budget is
-  `SUPER_PARTNER_ENGINEER_BUDGET_USD` (default $2).
+  `FLUIDFORM_ENGINEER_BUDGET_USD` (default $2).
 
 The two kinds of repair keep their own permissions: a repair of the machine may change this host
 but not the source; a source change happens only in the copy. What it found and did on a step is
@@ -86,7 +86,7 @@ More: [Environment repair](#how-nodes-hand-off-and-check-work) · [Repairing Flu
 
 Every finished task is summed up without a model call, so a problem that keeps coming back across
 tasks gets one name and a count (the **常见故障** page). With learning turned on (off by default:
-**复盘与改进 → 自动改进设置** on the result page, or `SUPER_PARTNER_LEARNING_ENABLED=true`), the
+**复盘与改进 → 自动改进设置** on the result page, or `FLUIDFORM_LEARNING_ENABLED=true`), the
 strongest available model also looks back on each task that ended by itself. It writes its
 conclusions and at most three improvements, each tied to real steps; they are checked separately
 before use. Skills and work rules then apply to matching later work, and source changes go to the
@@ -96,10 +96,10 @@ More: [design](design/continuous-improvement.md)
 ### Capabilities
 
 A task often builds something worth keeping: a client for a service, a converter, a bot. With
-`SUPER_PARTNER_CAPABILITY_PROPOSALS=true` the lead proposes such things when a task succeeds, and
+`FLUIDFORM_CAPABILITY_PROPOSALS=true` the lead proposes such things when a task succeeds, and
 you keep one from the result page (固化). Capabilities can also be uploaded as packages and
 uninstalled again, without touching FluidForm's source or restarting it
-(`SUPER_PARTNER_CAPABILITY_PACKAGES=true`, off by default):
+(`FLUIDFORM_CAPABILITY_PACKAGES=true`, off by default):
 
 - **Packages.** A package is a zip with a `capability.json` (id, kind, the hosts it may reach, the
   secrets it needs, an `entry` for an automation), its code, and optionally a `SKILL.md` and a
@@ -114,7 +114,7 @@ uninstalled again, without touching FluidForm's source or restarting it
 - **Automations.** An automation package keeps running in the background and talks to FluidForm
   in JSON lines. A question someone sends it is answered in a chat. Work it is asked to do becomes a
   task that waits for your confirmation, and the result goes back to it when the task ends. It has
-  a daily budget (`SUPER_PARTNER_CAPABILITY_DAILY_BUDGET_USD`, default $2) and is restarted if it
+  a daily budget (`FLUIDFORM_CAPABILITY_DAILY_BUDGET_USD`, default $2) and is restarted if it
   crashes.
 
 Packages are kept apart from this source, on the `capabilities` branch. The first one there is the
@@ -171,7 +171,7 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     UI["Web console<br/>(React + Vite)"] -- "HTTP / SSE" --> API["FastAPI service"]
-    CLI["super-partner CLI"] --> API
+    CLI["fluidform CLI"] --> API
     API --> PL["Planner and routing"]
     API --> EX["Executor"]
     EX --> LEAD["Lead"]
@@ -198,7 +198,7 @@ Module-level details are in [`docs/ARCHITECTURE.md`](ARCHITECTURE.md). The secti
 ./start.sh
 ```
 
-The first run installs missing server and frontend dependencies; every start builds the server (`server/dist`). Open <http://127.0.0.1:5173>, then stop everything with `./stop.sh`. Runtime logs are stored under `.super-partner/logs/`; use `./scripts/service.sh status` or `restart` for service management.
+The first run installs missing server and frontend dependencies; every start builds the server (`server/dist`). Open <http://127.0.0.1:8000> (the web console, a capability package the API serves), then stop everything with `./stop.sh`. Runtime logs are stored under `.fluidform/logs/`; use `./scripts/service.sh status` or `restart` for service management.
 
 When a systemd user manager is available, the launcher runs the API and web console as
 separate user services, independent of the terminal or automation session that started them.
@@ -221,7 +221,7 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. The built-in mock model works without credentials, so the full workflow is immediately testable. You can also use `docker compose up --build`.
+Open <http://localhost:8000>. The built-in mock model works without credentials, so the full workflow is immediately testable. You can also use `docker compose up --build`.
 
 ### Frontend interaction checks
 
@@ -242,37 +242,51 @@ With nothing set, FluidForm works like this:
 - **Pictures, search and reading pages** come from the vendors' official MCP servers you set in `MCP_SERVERS` (MiniMax for pictures, Zhipu's web search and page reader, for example; see docs/design/mcp-and-web.md). A server marked `makes_images` draws the pictures a plan asks for, and such a task is allowed the internet. A remote server is asked only for work allowed the internet.
 - **Every repair is the platform engineer's**: the lead just calls it, and it finds whether to repair this machine or FluidForm's source.
 
-**Settings → 工作方式** also offers **稳妥** (careful): every task is planned by the lead, and every step is reviewed by another model. You can also set `SUPER_PARTNER_PROFILE=careful` in `.env`.
+**Settings → 工作方式** also offers **稳妥** (careful): every task is planned by the lead, and every step is reviewed by another model. You can also set `FLUIDFORM_PROFILE=careful` in `.env`.
 
-Only these depend on the machine (all start with `SUPER_PARTNER_`):
+Only these depend on the machine (all start with `FLUIDFORM_`):
 
 - folders: `WORKSPACE_ROOT`, `DATA_DIR`, `PROJECT_ROOTS`;
 - membership CLI plans and pricing: `CLI_PLANS`, `CLI_FREE`;
 - local ports and variables the sandbox lets through: `SANDBOX_HOST_PORTS`, `SANDBOX_ENV`;
 - MCP servers you want: `MCP_SERVERS`, for example
   ```
-  SUPER_PARTNER_MCP_SERVERS='{"web-search": {"url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", "headers": {"Authorization": "Bearer ${ZHIPU_API_KEY}"}}, "github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
+  FLUIDFORM_MCP_SERVERS='{"web-search": {"url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", "headers": {"Authorization": "Bearer ${ZHIPU_API_KEY}"}}, "github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
   ```
   Their secrets live in the system keyring as `capability/mcp-<server>/<VARIABLE>`; a key FluidForm already keeps (`ZHIPU_API_KEY`, `MINIMAX_API_KEY`, `GITHUB_TOKEN`...) can be named directly.
 
-Each default above can still be turned off on its own, for example `SUPER_PARTNER_QUICK_TASKS=false`.
+Each default above can still be turned off on its own, for example `FLUIDFORM_QUICK_TASKS=false`.
 
 ### Evals
 
-`super-partner eval` runs the fixed tasks in `evals/basic.json` on the running service and prints, for each one, whether it passed, how long it took and what it cost. `--out` saves the report, `--against` compares it with an earlier one, and `--only` runs just the cases you name. The tasks cost real money and stay in the task list.
+`fluidform eval` runs the fixed tasks in `evals/basic.json` on the running service and prints, for each one, whether it passed, how long it took and what it cost. `--out` saves the report, `--against` compares it with an earlier one, and `--only` runs just the cases you name. The tasks cost real money and stay in the task list.
 
 ## CLI
 
-`cd server && npm run build && npm link` puts the `super-partner` command on PATH (or run
+`cd server && npm run build && npm link` puts the `fluidform` command on PATH (or run
 `node server/dist/cli.js`).
 
 ```bash
-super-partner models
-super-partner plan "Research and implement a health endpoint" --budget 2
-super-partner plan "Use APIs only" --no-use-cli
-super-partner plan "Fix the flaky test" --project ~/prj/my-app
-super-partner run TASK_ID
-super-partner eval --out report.json --against old.json
+# Tasks: FluidForm's base. Its models are chosen between membership CLIs and API models by itself;
+# keep it to one kind, or to models you name.
+fluidform plan "Research and implement a health endpoint" --budget 2
+fluidform plan "Use APIs only" --only-api          # same as --no-use-cli
+fluidform plan "Membership CLIs only" --only-cli
+fluidform plan "Just these" --model deepseek:deepseek-v4-flash --model cli:codex
+fluidform plan "Fix the flaky test" --project ~/prj/my-app
+fluidform run TASK_ID                               # the first characters `list` shows are enough
+fluidform list
+fluidform pause TASK_ID | resume TASK_ID [--budget N] | cancel TASK_ID
+# Models and keys (a key is typed at the terminal, or piped; kept in the system keyring)
+fluidform models
+fluidform models enable|disable MODEL_ID
+fluidform keys
+fluidform keys set|remove|test PROVIDER
+# Capability packages: everything besides this, the web console included
+fluidform capabilities
+fluidform capabilities install feishu-bot.zip
+fluidform capabilities secrets|enable|disable|remove ID
+fluidform eval --out report.json --against old.json
 ```
 
 ## Working on an existing project
@@ -280,7 +294,7 @@ super-partner eval --out report.json --against old.json
 Give a task a project directory to have membership CLI agents edit that checkout in place:
 
 ```bash
-super-partner plan "Fix the failing login test" --project ~/prj/my-app
+fluidform plan "Fix the failing login test" --project ~/prj/my-app
 ```
 
 In the web console, click the project directory field under the prompt: it suggests recently used
@@ -289,7 +303,7 @@ any typed or pasted path as you go, showing its branch and uncommitted changes. 
 desktop's own folder dialog on the machine running the API, starting at the current folder (needs
 `DISPLAY`/`WAYLAND_DISPLAY` and `zenity`; the button is hidden otherwise).
 
-- The directory must be an existing absolute path inside `SUPER_PARTNER_PROJECT_ROOTS` (a JSON list, default: your home directory), and cannot be the FluidForm data directory.
+- The directory must be an existing absolute path inside `FLUIDFORM_PROJECT_ROOTS` (a JSON list, default: your home directory), and cannot be the FluidForm data directory.
 - The planner sees the project's top-level layout and git state, and marks nodes that must read or change project files. Only those nodes run in the project; everything else runs in a scratch workspace.
 - Project nodes route to membership CLIs or to API models that support tool calls (see below); a CLI project node never falls back to an API. Nodes editing the same project run one at a time, across runs as well.
 - Each run records the starting git HEAD, branch, and uncommitted file count as a `workspace.snapshot` event. Agents are told not to commit, so review changes with `git diff` and revert with `git checkout`/`git stash` if needed. Starting from a clean working tree makes that easiest.
@@ -297,10 +311,10 @@ desktop's own folder dialog on the machine running the API, starting at the curr
 ## Local-only access
 
 The API can drive CLI agents that edit local files, so it only answers requests whose `Host` is
-in `SUPER_PARTNER_ALLOWED_HOSTS` (default `["127.0.0.1", "localhost", "::1"]`, which blocks DNS
+in `FLUIDFORM_ALLOWED_HOSTS` (default `["127.0.0.1", "localhost", "::1"]`, which blocks DNS
 rebinding) and refuses state-changing requests from browser origins outside
-`SUPER_PARTNER_ALLOWED_ORIGINS` (default: the web console on port 5173). Docker Compose publishes
-both ports on `127.0.0.1` only.
+`FLUIDFORM_ALLOWED_ORIGINS` (default: the Vite dev server on port 5173) and FluidForm's own address (the pages it serves). Docker Compose publishes
+port 8000 on `127.0.0.1` only.
 
 If the API stops while a task is queued or running, the task comes back **paused** on the next
 start rather than resuming by itself; check the project's state, then resume it from the console.
@@ -354,8 +368,8 @@ list are excluded from new routing.
 Optional `.env` settings:
 
 ```dotenv
-SUPER_PARTNER_CATALOG_AUTO_SYNC=true
-SUPER_PARTNER_CATALOG_SYNC_INTERVAL_HOURS=24
+FLUIDFORM_CATALOG_AUTO_SYNC=true
+FLUIDFORM_CATALOG_SYNC_INTERVAL_HOURS=24
 ```
 
 The interval accepts 1–720 hours. Turning off automatic sync keeps manual refresh available.
@@ -393,7 +407,7 @@ The catalog updater also synchronizes these sources, with persistent independent
   The importer retains displayed headline precision, inference settings, model links, and source
   asterisk annotations. Missing scores (`--`) stay missing. The page does not identify an
   evaluation version/date, so these remain explicitly unspecified, not the retrieval date.
-  No page scripts are executed. With an optional `SUPER_PARTNER_ARTIFICIAL_ANALYSIS_API_KEY`
+  No page scripts are executed. With an optional `FLUIDFORM_ARTIFICIAL_ANALYSIS_API_KEY`
   in `.env` (or exported `ARTIFICIAL_ANALYSIS_API_KEY`), restart the app to use the paginated
   [free-tier API](https://artificialanalysis.ai/data-api/docs), adding Coding and Agentic
   indices alongside the public per-benchmark measurements. A failed public page fetch does
@@ -468,12 +482,12 @@ new diagnosis each time. It answers with one decision and a reason, shown as `ru
 `retry` with instructions, `switch_model`, `accept` the result despite a failed check, `unable`,
 `ask_user` (shown like a diagnosis question; the answer goes back to the lead), or
 `repair_environment` / `repair_platform`, which run the repair session with its brief. Past
-`SUPER_PARTNER_MAX_NODE_DECISIONS` (5) decisions for a step or `SUPER_PARTNER_MAX_RUN_DECISIONS`
+`FLUIDFORM_MAX_NODE_DECISIONS` (5) decisions for a step or `FLUIDFORM_MAX_RUN_DECISIONS`
 (25) for the task, the task pauses; continuing it gives a fresh allowance. A failed verification also goes to the
 lead before anything is sent back: it judges whether the findings are real problems, new
 requirements the task never asked for, or mistakes of the verification, then reworks the steps
 it chooses with what to change (`rework`), accepts, or reruns the verification. Without a lead,
-the findings send all verified steps back, up to `SUPER_PARTNER_MAX_REWORK_ROUNDS`.
+the findings send all verified steps back, up to `FLUIDFORM_MAX_REWORK_ROUNDS`.
 
 The lead may also change the plan (`replan`): add steps, remove or rewrite steps that have not
 finished (finished and running steps stay; dependencies must stay acyclic; new steps are routed
@@ -481,7 +495,7 @@ like planned ones), shown as `run.plan_changed`. When every step has finished, t
 whole result against the request before the task ends: `done`, `rework` of any steps with what
 to change, or `replan` to add what is missing. The older rules (attempt counts, rework rounds,
 a diagnosis per failure) remain as the fallback when no lead can decide. Without a lead able to
-decide, the diagnosis below handles the failure. `SUPER_PARTNER_LEAD_DECISIONS=false` turns this
+decide, the diagnosis below handles the failure. `FLUIDFORM_LEAD_DECISIONS=false` turns this
 off.
 
 ## API models act through tools
@@ -494,7 +508,7 @@ answers without calling one: `Bash`, `Read`, `Write`, `Edit`, `MultiEdit`, `Glob
 
 Each request asks for the model's own output ceiling from the catalog (32768 tokens when the
 catalog does not give one). DeepSeek's reasoning models think at
-`SUPER_PARTNER_DEEPSEEK_REASONING_EFFORT` (sent as `reasoning_effort`; default `max`, the
+`FLUIDFORM_DEEPSEEK_REASONING_EFFORT` (sent as `reasoning_effort`; default `max`, the
 deepest; `none` turns thinking off). Deeper thinking is slower and spends more output tokens.
 
 - File tools resolve every path inside the working directory (symlinks included) and
@@ -504,15 +518,15 @@ deepest; `none` turns thinking off). Deeper thinking is slower and spends more o
   private, there is no network, and the environment is cleared, so API keys never reach a
   command. Without `bwrap` the tool is not offered.
 - Local services such as an EDA license server can be let through port by port, while
-  everything else stays offline. `SUPER_PARTNER_SANDBOX_HOST_PORTS` lists the host ports.
+  everything else stays offline. `FLUIDFORM_SANDBOX_HOST_PORTS` lists the host ports.
   Each one is served on a Unix socket mounted into the sandbox, and `socat` listens on the
-  same port inside it. `SUPER_PARTNER_SANDBOX_ENV` names host variables copied in; listing
+  same port inside it. `FLUIDFORM_SANDBOX_ENV` names host variables copied in; listing
   `PATH` uses the host's PATH. For Synopsys tools, pin the vendor daemon's port in the license
   file (`VENDOR snpslmd port=27021`) and list it next to lmgrd's:
 
   ```
-  SUPER_PARTNER_SANDBOX_HOST_PORTS=[26585,27021]
-  SUPER_PARTNER_SANDBOX_ENV=["PATH","VCS_HOME","VERDI_HOME","SNPSLMD_LICENSE_FILE","VCS_ARCH_OVERRIDE"]
+  FLUIDFORM_SANDBOX_HOST_PORTS=[26585,27021]
+  FLUIDFORM_SANDBOX_ENV=["PATH","VCS_HOME","VERDI_HOME","SNPSLMD_LICENSE_FILE","VCS_ARCH_OVERRIDE"]
   ```
 
   Only API models' commands get these ports; the membership CLIs' sandboxes stay offline.
@@ -525,14 +539,14 @@ deepest; `none` turns thinking off). Deeper thinking is slower and spends more o
 - **Turns and progress checks.** A turn is one model request, which may hold several tool
   calls; the prompt asks the model to batch independent calls and write each file whole. Steps
   have no turn limit by default and no fixed timeout, for API models and membership CLIs alike.
-  Instead, every `SUPER_PARTNER_PROGRESS_CHECK_MINUTES` (10) minutes of an attempt, another
+  Instead, every `FLUIDFORM_PROGRESS_CHECK_MINUTES` (10) minutes of an attempt, another
   model looks at what it has been doing (an API model's latest tool calls; for a CLI, the files
   it changed and the processes it runs) and says whether it is still getting somewhere. Long
   work that keeps moving goes on; an attempt found stuck (repeating itself, failing the same way,
   waiting on something that will not come, drifting off the step) is stopped and fails like any
   other attempt, without falling back to an API model. Each check is a `node.progress_check`
   event. A check that cannot be made lets the attempt continue; the task budget still applies.
-  `SUPER_PARTNER_API_AGENT_MAX_TURNS` sets an optional limit (×1 easy, ×1.5 normal, ×2 hard):
+  `FLUIDFORM_API_AGENT_MAX_TURNS` sets an optional limit (×1 easy, ×1.5 normal, ×2 hard):
   five turns before it the model is told to wrap up, and at it the model answers with a
   progress summary that is reviewed and reaches the next attempt. Tool loops nobody checks
   (diagnoses) stop at 40 turns. `Read` returns up to 2000 lines by default (at most 5000 per call).
@@ -545,7 +559,7 @@ deepest; `none` turns thinking off). Deeper thinking is slower and spends more o
   membership CLI included, even under the API-first policy. Later retries do not go back to a
   model that failed the node twice. The rules are in `server/src/recovery.ts`.
 - Models marked as not supporting tools, and the offline demo model, only answer with text
-  and are not routed to project nodes. `SUPER_PARTNER_API_AGENT=false` turns tools off.
+  and are not routed to project nodes. `FLUIDFORM_API_AGENT=false` turns tools off.
 
 Planning and review calls stay single requests without tools.
 
@@ -563,7 +577,7 @@ reviewer is preferably not the model that did the work and follows the configure
 policy. Real tasks exclude the demo model from recovery and review. For project tasks the reviewer also sees the diff of the changed tracked
 files. A reviewer that errors or answers unreadably is replaced by another available reviewer.
 If none returns a valid verdict, the result stays unverified and follows bounded recovery;
-it is never accepted as a pass. Set `SUPER_PARTNER_REVIEW_NODES=false` to skip reviews.
+it is never accepted as a pass. Set `FLUIDFORM_REVIEW_NODES=false` to skip reviews.
 
 **Retries.** A node whose call fails or whose result is rejected runs again with the findings
 in its prompt, on the strongest available model for its capability, up to
@@ -635,8 +649,8 @@ activation rolls source files back. Durable task markers allow only tasks held b
 to continue after successful activation, within their original budgets; cancelled tasks,
 explicit user pauses and unanswered diagnosis questions stay stopped. Source changes, check
 results and activation outcomes are recorded in shared recovery history for all projects.
-The configuration switches are `SUPER_PARTNER_PLATFORM_SELF_REPAIR` (default `true`) and
-the optional `SUPER_PARTNER_PLATFORM_ROOT` for the source checkout. Other installation or
+The configuration switches are `FLUIDFORM_PLATFORM_SELF_REPAIR` (default `true`) and
+the optional `FLUIDFORM_PLATFORM_ROOT` for the source checkout. Other installation or
 service-manager layouts must provide a supported editable checkout before automatic activation
 is available. No model assertion alone marks a platform repair as active.
 
@@ -698,7 +712,7 @@ model cooldowns and learned error signatures for inspection.
 
 When a step runs out of attempts, or the diagnosis could not run, the task also pauses with
 the report instead of failing. **按此预算继续** then runs the failed step again with fresh
-attempts and the advice. `SUPER_PARTNER_AUTO_DIAGNOSE=false` turns diagnoses off: failures
+attempts and the advice. `FLUIDFORM_AUTO_DIAGNOSE=false` turns diagnoses off: failures
 retry as before, and a step that runs out of attempts fails the task. Resuming a failed task
 also hands the latest advice to the failed step. The task page shows the report and earlier
 ones.
@@ -782,7 +796,7 @@ Tasks with images route only to CLIs and to API models not marked as lacking vis
 
 Task planning uses the configured model with the strongest planning and reliability scores to generate a validated JSON dependency graph. Invalid, unavailable, or cyclic model plans fall back to the deterministic planner. Each resulting node is independently assigned to the lowest-cost enabled model that meets its capability and context requirements, while authenticated membership CLIs retain priority.
 
-Planning may use a membership CLI, but subtasks and their reviews go to API models first: a CLI takes a subtask only when no enabled API model can do it (none reaches the capability threshold, or none can act on the project). Each node records why its model was chosen. `SUPER_PARTNER_SUBTASKS_PREFER_API=false` restores CLI-first routing. At startup the app safely detects Codex CLI, Claude Code, Gemini CLI, and Qwen Code without exposing account details. A CLI failure falls back to the matching API only when its API key is configured, that API model is enabled, and its estimated cost fits the remaining budget.
+Planning may use a membership CLI, but subtasks and their reviews go to API models first: a CLI takes a subtask only when no enabled API model can do it (none reaches the capability threshold, or none can act on the project). Each node records why its model was chosen. `FLUIDFORM_SUBTASKS_PREFER_API=false` restores CLI-first routing. At startup the app safely detects Codex CLI, Claude Code, Gemini CLI, and Qwen Code without exposing account details. A CLI failure falls back to the matching API only when its API key is configured, that API model is enabled, and its estimated cost fits the remaining budget.
 
 The seven routing scores come only from Artificial Analysis; there are no hand-written
 presets. Each AA metric is converted by rank: a model's percentile among every AA-scored

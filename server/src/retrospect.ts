@@ -13,7 +13,7 @@
 import * as pricing from "./pricing.js";
 import type { Database } from "./db.js";
 import { log } from "./log.js";
-import { DiagnosisStatus, type ExecutionRun, type ModelProfile, Outcome, type TaskNode } from "./models.js";
+import { DiagnosisStatus, type ExecutionRun, type ModelProfile, Outcome, type TaskNode, isPlatformScope } from "./models.js";
 import { fixed, head, minBy, pyDumps, pyIsoformat, pyRegex, pyRound, pySplit, sortedBy, splitlines } from "./py.js";
 import { deps as routing } from "./routing.js";
 
@@ -95,7 +95,7 @@ function problem(kind: string, key: string, label: string, nodeId: string | null
   return { kind, key, label: head(label, 200), node_id: nodeId, repaired, detail: head(detail, 600) };
 }
 
-/** What a repair touched, as problem names: ["platform", module] for Super Partner's own source (agent
+/** What a repair touched, as problem names: ["platform", module] for FluidForm's own source (agent
  *  for agent.ts; cli_channels for cli-channels.ts, as the Python module was named, so older repairs
  *  count with newer ones), ["environment", tool] for the shared tools folder (ssh for bin/ssh). Tests
  *  and documents are not areas. */
@@ -147,7 +147,7 @@ export function review(run: ExecutionRun, events: { kind: string; data: Record<s
     const verdict = diagnosis.verdict;
     if (diagnosis.status !== "done" || verdict === null || verdict === DiagnosisStatus.RETRY || shared.has(diagnosis.id)) continue; // nothing found, or counted above
     if (verdict === DiagnosisStatus.QUOTA_EXHAUSTED || verdict === DiagnosisStatus.MODEL_UNAVAILABLE) continue; // counted as model_unavailable
-    if (verdict.startsWith("platform") || diagnosis.scope === "super_partner") continue; // a platform repair leaves a repair record
+    if (verdict.startsWith("platform") || isPlatformScope(diagnosis.scope)) continue; // a platform repair leaves a repair record
     problems.push(problem("environment", failingProgram(run, diagnosis.node_id), headline(diagnosis.report) || verdict, diagnosis.node_id,
       REPAIRED.has(verdict), diagnosis.report || ""));
   }

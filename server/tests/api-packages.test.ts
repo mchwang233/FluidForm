@@ -172,7 +172,7 @@ test("uploaded, it is installed switched off, and a new version keeps its secret
   assert.equal((await client.put("/api/capabilities/fake-bot/secrets", { json: { values: { OTHER: "x" } }, headers: ORIGIN })).status_code, 422);
   await client.put("/api/capabilities/fake-bot/secrets", { json: { values: { TOKEN: "t0ken-value" } }, headers: ORIGIN });
   assert.deepEqual(Object.fromEntries(kept), { "capability/fake-bot/TOKEN": "t0ken-value" });
-  // Never in a file, nor in Super Partner's environment.
+  // Never in a file, nor in FluidForm's environment.
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? walk(join(dir, entry.name)) : entry.isFile() ? [join(dir, entry.name)] : []);
   assert.ok(!walk(settings.data_dir).some((path) => readFileSync(path, "latin1").includes("t0ken-value")));
@@ -617,7 +617,7 @@ test("an automation's model does not change how its work is planned", async () =
   assert.equal(task.status, "awaiting_confirmation");
 });
 
-test("an automation asks Super Partner, and a conversation goes on in one chat", async () => {
+test("an automation asks FluidForm, and a conversation goes on in one chat", async () => {
   const { api, client, runner } = withPackages();
   triaging(api, '{"kind": "chat"}');
   await upload(client, pkg([{ conversation: "c1", text: "WAL 是什么？" }, { conversation: "c1", text: "检查点呢？" }, { conversation: "c2", text: "你好" }]));

@@ -2,7 +2,7 @@
 
 Two opt-in settings change preparation without changing worker or retrospective policy:
 
-- `SUPER_PARTNER_SKILL_REUSE_FIRST=true`: use an applicable local, bundled or cached skill first.
+- `FLUIDFORM_SKILL_REUSE_FIRST=true`: use an applicable local, bundled or cached skill first.
   A machine note takes precedence; a general skill is sufficient and does not automatically
   require a machine-specific rewrite. When none covers the tools and the task allows network,
   search public GitHub repositories for those tool names, inspect a bounded set of SKILL.md
@@ -13,7 +13,7 @@ Two opt-in settings change preparation without changing worker or retrospective 
   A public skill is therefore never given to a step: it is only shown, marked unchecked, to the
   model that writes this machine's skill in the steps' sandbox, which keeps only what it ran
   successfully. If that generation fails, the steps get no skill for those tools.
-- `SUPER_PARTNER_ADAPTIVE_REFINEMENT=true`: the lead's existing outline call assesses each
+- `FLUIDFORM_ADAPTIVE_REFINEMENT=true`: the lead's existing outline call assesses each
   part in the context of the project and records difficulty, refinement effort and a short
   rationale. Simple well-specified work normally uses low, routine work medium, complex
   constraints high; max needs an explicit justification. Missing/invalid selections fall back
@@ -27,7 +27,7 @@ discovery. Public repository search uses no credentials and sends only tool name
 or local paths. Search stops after 30 seconds, 12 requests or 6 candidate documents; redirects
 are not followed and response/document sizes are bounded. Rate limits produce a recorded miss
 instead of a long retry loop. Generation follows a search, found or not, bounded by
-`SUPER_PARTNER_SKILL_PREPARATION_TIMEOUT` and `SUPER_PARTNER_SKILL_GENERATION_MAX_TURNS` (6 by
+`FLUIDFORM_SKILL_PREPARATION_TIMEOUT` and `FLUIDFORM_SKILL_GENERATION_MAX_TURNS` (6 by
 default in reuse-first mode); an invalid result or timeout leaves a warning and lets the task
 start. Previously cached skills can be reused offline.
 

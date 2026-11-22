@@ -17,7 +17,7 @@ FluidForm 为每个任务组建一支由 AI 模型组成的小团队，在你自
 
 ### 员工
 
-每一步交给“够用且最便宜”的模型，依据公开评测成绩判断。API 模型通过沙箱中的工具干活（Bash、Read、Write、Edit、MultiEdit、Glob、Grep、LS）；会员 CLI 在各自的沙箱中运行。设置 `SUPER_PARTNER_EMPLOYEE_TEAMS=true` 后，负责人会先组建一支有名有姓的员工队伍，按模块或职责分工（最多 8 人），每人有自己的模型和 Skill。员工发现新的子任务时，可以委派给同事（`DELEGATE_TASKS`），任务的 **员工** 标签页会显示谁在做什么。
+每一步交给“够用且最便宜”的模型，依据公开评测成绩判断。API 模型通过沙箱中的工具干活（Bash、Read、Write、Edit、MultiEdit、Glob、Grep、LS）；会员 CLI 在各自的沙箱中运行。设置 `FLUIDFORM_EMPLOYEE_TEAMS=true` 后，负责人会先组建一支有名有姓的员工队伍，按模块或职责分工（最多 8 人），每人有自己的模型和 Skill。员工发现新的子任务时，可以委派给同事（`DELEGATE_TASKS`），任务的 **员工** 标签页会显示谁在做什么。
 详见：[API 模型通过工具工作](#api-模型通过工具工作) · [设计文档](design/project-team.md)
 
 ### 验收者
@@ -27,26 +27,26 @@ FluidForm 为每个任务组建一支由 AI 模型组成的小团队，在你自
 
 ### 进度检查员
 
-步骤没有固定的超时。一次尝试每运行 10 分钟（`SUPER_PARTNER_PROGRESS_CHECK_MINUTES`），就由另一个模型看看它在做什么：API 模型看最近的工具调用，CLI 看它改了哪些文件、在运行哪些进程。持续推进的工作继续进行；只有真正卡住的尝试（重复自己、等待不会到来的东西）才会被叫停。
+步骤没有固定的超时。一次尝试每运行 10 分钟（`FLUIDFORM_PROGRESS_CHECK_MINUTES`），就由另一个模型看看它在做什么：API 模型看最近的工具调用，CLI 看它改了哪些文件、在运行哪些进程。持续推进的工作继续进行；只有真正卡住的尝试（重复自己、等待不会到来的东西）才会被叫停。
 
 ### 平台工程师
 
 任务里所有的"修"，都由平台工程师来做。你点任务页的 **请平台工程师**，负责人请它（负责人只说"请平台工程师"，不必再分是修环境还是修平台），或者执行前检查没通过，它都会被请来。它先判断问题出在哪一边，再选修法：
 
 - **这台机器的问题**（缺软件、许可证、沙箱限制、连不上的服务）：当场在主机上修，但不能用 sudo。它把工具装进所有步骤都能用的共享目录，记下步骤沙箱需要的环境变量和本地端口，最后用一行状态汇报：`FIXED`、`RETRY`、`UNABLE`、`BLOCKED`（需要你）等。它也能认出额度用完或服务故障的模型，让这一步换一个模型继续。几分钟就好，任务原地等着。没有负责人能做决定时，由它独立处理失败。
-- **FluidForm 本身的问题**：转去改源码。它接两类工单：**修复**（一个缺陷）和 **组件**（新的模型渠道、工具、Skill、页面或流程中的一步）。你也可以直接找它（右下角的 🛠 气泡，或在任务的负责人对话里 `@平台工程师`）。它在源码的隔离副本里修改，并且必须补充测试；然后由程序独立运行检查：语法、数据库兼容、后端和前端测试、构建。修复通过检查后自动生效；组件会先给你看方案，批准后才动手，做完还要等你点“应用”。生效时会等正在进行的模型调用结束、重启服务，健康检查不通过就回滚，并把改动的文件提交到 git（不推送）。它有单独的预算 `SUPER_PARTNER_ENGINEER_BUDGET_USD`（默认 $2）。
+- **FluidForm 本身的问题**：转去改源码。它接两类工单：**修复**（一个缺陷）和 **组件**（新的模型渠道、工具、Skill、页面或流程中的一步）。你也可以直接找它（右下角的 🛠 气泡，或在任务的负责人对话里 `@平台工程师`）。它在源码的隔离副本里修改，并且必须补充测试；然后由程序独立运行检查：语法、数据库兼容、后端和前端测试、构建。修复通过检查后自动生效；组件会先给你看方案，批准后才动手，做完还要等你点“应用”。生效时会等正在进行的模型调用结束、重启服务，健康检查不通过就回滚，并把改动的文件提交到 git（不推送）。它有单独的预算 `FLUIDFORM_ENGINEER_BUDGET_USD`（默认 $2）。
 
 两种修法的权限分开：修环境时可以动本机、不能改源码；改源码时只在副本里改。它在一步上查到和修过的东西，负责人下次决定时都看得到。
 详见：[环境修复](#节点之间如何交接和检查) · [修复 FluidForm 自身](#节点之间如何交接和检查) · [设计文档](design/platform-engineer.md)、[一个平台工程师](design/one-engineer.md)
 
 ### 复盘员
 
-每个结束的任务都会在不调用模型的情况下做一次统计，所以跨任务反复出现的问题会被归到同一个名字下并计数（**常见故障** 页面）。开启自动改进后（默认关闭：在结果页的 **复盘与改进 → 自动改进设置** 中开启，或设置 `SUPER_PARTNER_LEARNING_ENABLED=true`），最强的可用模型还会对每个自然结束的任务做复盘：写出结论和最多三项改进，每项都要对应真实的步骤，使用前还会单独验证。Skill 和工作规则会用于之后相匹配的工作，源码改动则交给平台工程师。复盘有自己的预算（默认每个任务 $0.50）。
+每个结束的任务都会在不调用模型的情况下做一次统计，所以跨任务反复出现的问题会被归到同一个名字下并计数（**常见故障** 页面）。开启自动改进后（默认关闭：在结果页的 **复盘与改进 → 自动改进设置** 中开启，或设置 `FLUIDFORM_LEARNING_ENABLED=true`），最强的可用模型还会对每个自然结束的任务做复盘：写出结论和最多三项改进，每项都要对应真实的步骤，使用前还会单独验证。Skill 和工作规则会用于之后相匹配的工作，源码改动则交给平台工程师。复盘有自己的预算（默认每个任务 $0.50）。
 详见：[设计文档](design/continuous-improvement.md)
 
 ### 能力
 
-任务常常会顺带做出值得留下的东西：某个服务的客户端、一个转换器、一个机器人。设置 `SUPER_PARTNER_CAPABILITY_PROPOSALS=true` 后，任务成功时负责人会提出这类东西，你可以在结果页把其中一个固化下来。能力也可以做成能力包单独上传、单独卸载，不用改 FluidForm 的源码，也不用重启（`SUPER_PARTNER_CAPABILITY_PACKAGES=true`，默认关闭）：
+任务常常会顺带做出值得留下的东西：某个服务的客户端、一个转换器、一个机器人。设置 `FLUIDFORM_CAPABILITY_PROPOSALS=true` 后，任务成功时负责人会提出这类东西，你可以在结果页把其中一个固化下来。能力也可以做成能力包单独上传、单独卸载，不用改 FluidForm 的源码，也不用重启（`FLUIDFORM_CAPABILITY_PACKAGES=true`，默认关闭）：
 
 - **能力包。** 一个能力包就是一个 zip，里面有：
   - `capability.json`：id、类型、它能访问的域名、它需要的密钥，自动化还要写 `entry`；
@@ -60,7 +60,7 @@ FluidForm 为每个任务组建一支由 AI 模型组成的小团队，在你自
   - 密钥存在系统钥匙串里，只交给声明了它的能力包。
 
   启用前要你确认它能访问什么、会拿到什么。
-- **自动化。** 自动化类的能力包在后台一直运行，用 JSON 行和 FluidForm 通信。别人通过它问的问题，在一段对话里回答；要动手的事排成任务，等你确认才开工，结束后把结果发回给它。它有每日花费上限（`SUPER_PARTNER_CAPABILITY_DAILY_BUDGET_USD`，默认 $2），崩溃了会自动重启。
+- **自动化。** 自动化类的能力包在后台一直运行，用 JSON 行和 FluidForm 通信。别人通过它问的问题，在一段对话里回答；要动手的事排成任务，等你确认才开工，结束后把结果发回给它。它有每日花费上限（`FLUIDFORM_CAPABILITY_DAILY_BUDGET_USD`，默认 $2），崩溃了会自动重启。
 
 能力包和这份源码分开，放在 `capabilities` 分支上；第一个是飞书机器人（`feishu-bot/`）。
 详见：[能力](design/capabilities.md) · [能力包](design/capability-packages.md)
@@ -113,7 +113,7 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     UI["网页控制台<br/>(React + Vite)"] -- "HTTP / SSE" --> API["FastAPI 服务"]
-    CLI["super-partner 命令行"] --> API
+    CLI["fluidform 命令行"] --> API
     API --> PL["规划与模型分配"]
     API --> EX["执行器"]
     EX --> LEAD["负责人"]
@@ -139,7 +139,7 @@ flowchart TB
 ./start.sh
 ```
 
-首次运行会安装缺少的服务端和前端依赖；每次启动都会先构建服务端（`server/dist`）。打开 <http://127.0.0.1:5173>，用 `./stop.sh` 停止全部服务。运行日志在 `.super-partner/logs/` 下；服务管理可用 `./scripts/service.sh status` 或 `restart`。
+首次运行会安装缺少的服务端和前端依赖；每次启动都会先构建服务端（`server/dist`）。打开 <http://127.0.0.1:8000>（网页界面，是由 API 直接提供的能力包），用 `./stop.sh` 停止全部服务。运行日志在 `.fluidform/logs/` 下；服务管理可用 `./scripts/service.sh status` 或 `restart`。
 
 有 systemd 用户管理器时，启动脚本把 API 和网页控制台作为两个独立的用户服务运行，不依赖启动它们的终端或自动化会话。进程出错会自动重启，`stop.sh` 会停止这些服务。没有用户管理器时，启动脚本改用后台进程。日志在多次启动间追加写入。
 
@@ -159,7 +159,7 @@ npm install
 npm run dev
 ```
 
-打开 <http://localhost:5173>。内置的演示模型不需要任何凭据，可以直接体验完整流程。也可以用 `docker compose up --build`。
+打开 <http://localhost:8000>。内置的演示模型不需要任何凭据，可以直接体验完整流程。也可以用 `docker compose up --build`。
 
 ### 前端交互测试
 
@@ -177,36 +177,50 @@ npm run dev
 - **画图、搜索、读网页**：用各家官方的 MCP 服务，在 `MCP_SERVERS` 里配（比如 MiniMax 画图，智谱的联网搜索和网页读取，见 docs/design/mcp-and-web.md）。标了 `makes_images` 的服务负责计划里要画的图，这样的任务自动允许联网。远程服务只给允许联网的工作用。
 - **修复都交给平台工程师**：负责人只说"请平台工程师"，由平台工程师判断是修本机还是改源码。
 
-**设置 → 工作方式** 里还可以选 **稳妥**：每件事都由负责人排计划，每一步都另请模型验收。也可以在 `.env` 里写 `SUPER_PARTNER_PROFILE=careful`。
+**设置 → 工作方式** 里还可以选 **稳妥**：每件事都由负责人排计划，每一步都另请模型验收。也可以在 `.env` 里写 `FLUIDFORM_PROFILE=careful`。
 
-需要按机器来设的只有这些（都以 `SUPER_PARTNER_` 开头）：
+需要按机器来设的只有这些（都以 `FLUIDFORM_` 开头）：
 
 - 目录：`WORKSPACE_ROOT`、`DATA_DIR`、`PROJECT_ROOTS`。
 - 会员 CLI 的套餐和计费：`CLI_PLANS`、`CLI_FREE`。
 - 沙箱要放行的本地端口和环境变量：`SANDBOX_HOST_PORTS`、`SANDBOX_ENV`。
 - 想用的 MCP 服务器：`MCP_SERVERS`。例如：
   ```
-  SUPER_PARTNER_MCP_SERVERS='{"web-search": {"url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", "headers": {"Authorization": "Bearer ${ZHIPU_API_KEY}"}}, "github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
+  FLUIDFORM_MCP_SERVERS='{"web-search": {"url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp", "headers": {"Authorization": "Bearer ${ZHIPU_API_KEY}"}}, "github": {"command": ["github-mcp-server", "stdio"], "secrets": ["GITHUB_PERSONAL_ACCESS_TOKEN"]}}'
   ```
   密钥存在系统 keyring 里，名字是 `capability/mcp-<服务器>/<变量>`；FluidForm 已经保管的 key（`ZHIPU_API_KEY`、`MINIMAX_API_KEY`、`GITHUB_TOKEN` 等）可以直接写名字。
 
-上面这些默认做法也都能单独关掉，例如 `SUPER_PARTNER_QUICK_TASKS=false`。
+上面这些默认做法也都能单独关掉，例如 `FLUIDFORM_QUICK_TASKS=false`。
 
 ### 评测
 
-`super-partner eval` 把 `evals/basic.json` 里的固定任务在运行中的服务上跑一遍，打印每个任务有没有通过、用时和花费。`--out` 保存报告，`--against` 和之前的报告比较，`--only` 只跑指定的任务。这些任务会真的花钱，也会留在任务列表里。
+`fluidform eval` 把 `evals/basic.json` 里的固定任务在运行中的服务上跑一遍，打印每个任务有没有通过、用时和花费。`--out` 保存报告，`--against` 和之前的报告比较，`--only` 只跑指定的任务。这些任务会真的花钱，也会留在任务列表里。
 
 ## 命令行
 
-`cd server && npm run build && npm link` 之后可以直接用 `super-partner` 命令（或运行 `node server/dist/cli.js`）。
+`cd server && npm run build && npm link` 之后可以直接用 `fluidform` 命令（或运行 `node server/dist/cli.js`）。
 
 ```bash
-super-partner models
-super-partner plan "Research and implement a health endpoint" --budget 2
-super-partner plan "Use APIs only" --no-use-cli
-super-partner plan "Fix the flaky test" --project ~/prj/my-app
-super-partner run TASK_ID
-super-partner eval --out report.json --against old.json
+# 任务：FluidForm 最基础的功能。模型由它自己在会员 CLI 和 API 模型之间选；
+# 也可以只用一种，或只用你指定的模型。
+fluidform plan "Research and implement a health endpoint" --budget 2
+fluidform plan "Use APIs only" --only-api          # same as --no-use-cli
+fluidform plan "Membership CLIs only" --only-cli
+fluidform plan "Just these" --model deepseek:deepseek-v4-flash --model cli:codex
+fluidform plan "Fix the flaky test" --project ~/prj/my-app
+fluidform run TASK_ID                               # 写 list 里显示的前几位就行
+fluidform list
+fluidform pause TASK_ID | resume TASK_ID [--budget N] | cancel TASK_ID
+# 模型和 key（key 在终端里输入或从管道读入，存进系统钥匙串，不出现在命令行参数里）
+fluidform models
+fluidform models enable|disable MODEL_ID
+fluidform keys
+fluidform keys set|remove|test PROVIDER
+# 能力包：除此之外的都是能力，网页界面也是
+fluidform capabilities
+fluidform capabilities install feishu-bot.zip
+fluidform capabilities secrets|enable|disable|remove ID
+fluidform eval --out report.json --against old.json
 ```
 
 ## 在已有项目上工作
@@ -214,19 +228,19 @@ super-partner eval --out report.json --against old.json
 给任务指定一个项目目录，会员 CLI 代理就会直接修改该工作区：
 
 ```bash
-super-partner plan "Fix the failing login test" --project ~/prj/my-app
+fluidform plan "Fix the failing login test" --project ~/prj/my-app
 ```
 
 在网页控制台中，点击输入框下方的项目目录栏：它会列出最近用过的项目和在允许范围内找到的 git 仓库（最近活跃的在前），并实时检查输入或粘贴的路径，显示其分支和未提交的改动。**浏览…** 会在运行 API 的机器上打开桌面系统自带的文件夹选择框，从当前目录开始（需要 `DISPLAY`/`WAYLAND_DISPLAY` 和 `zenity`，否则按钮不显示）。
 
-- 目录必须是已存在的绝对路径，位于 `SUPER_PARTNER_PROJECT_ROOTS`（JSON 列表，默认是你的 home 目录）之内，且不能是 FluidForm 的数据目录。
+- 目录必须是已存在的绝对路径，位于 `FLUIDFORM_PROJECT_ROOTS`（JSON 列表，默认是你的 home 目录）之内，且不能是 FluidForm 的数据目录。
 - 规划器能看到项目的顶层结构和 git 状态，并标出哪些节点需要读取或修改项目文件。只有这些节点在项目中运行，其余节点在临时工作区中运行。
 - 项目节点只分配给会员 CLI 或支持工具调用的 API 模型（见下文）；CLI 项目节点失败时不会退回 API。修改同一项目的节点一次只运行一个，跨任务也是如此。
 - 每次运行都会把起始的 git HEAD、分支和未提交文件数记录为 `workspace.snapshot` 事件。代理被要求不提交，所以请用 `git diff` 查看改动，必要时用 `git checkout`/`git stash` 撤销。从干净的工作区开始最省事。
 
 ## 仅限本机访问
 
-API 可以驱动会修改本地文件的 CLI 代理，所以它只响应 `Host` 在 `SUPER_PARTNER_ALLOWED_HOSTS` 中的请求（默认 `["127.0.0.1", "localhost", "::1"]`，可以防御 DNS 重绑定攻击），并拒绝来自 `SUPER_PARTNER_ALLOWED_ORIGINS`（默认是 5173 端口的网页控制台）之外的浏览器来源的写操作请求。Docker Compose 只把两个端口发布在 `127.0.0.1` 上。
+API 可以驱动会修改本地文件的 CLI 代理，所以它只响应 `Host` 在 `FLUIDFORM_ALLOWED_HOSTS` 中的请求（默认 `["127.0.0.1", "localhost", "::1"]`，可以防御 DNS 重绑定攻击），并拒绝来自 `FLUIDFORM_ALLOWED_ORIGINS`（默认是开发用的 5173 端口）和 FluidForm 自己的地址（它提供的网页）之外的浏览器来源的写操作请求。Docker Compose 只把 8000 端口发布在 `127.0.0.1` 上。
 
 如果 API 在任务排队或运行时停止，下次启动时任务会变成**已暂停**，而不会自行恢复；请先检查项目状态，再从控制台继续。
 
@@ -257,8 +271,8 @@ API 可以驱动会修改本地文件的 CLI 代理，所以它只响应 `Host` 
 `.env` 中的可选设置：
 
 ```dotenv
-SUPER_PARTNER_CATALOG_AUTO_SYNC=true
-SUPER_PARTNER_CATALOG_SYNC_INTERVAL_HOURS=24
+FLUIDFORM_CATALOG_AUTO_SYNC=true
+FLUIDFORM_CATALOG_SYNC_INTERVAL_HOURS=24
 ```
 
 间隔可设为 1–720 小时。关闭自动同步后仍可手动刷新。
@@ -273,7 +287,7 @@ SUPER_PARTNER_CATALOG_SYNC_INTERVAL_HOURS=24
 
 - [BFCL](https://gorilla.cs.berkeley.edu/leaderboard.html)：官方 CSV 及排行榜的版本和更新日期；函数调用、多轮、搜索和记忆成绩。FC 和 Prompt 两种成绩分开保存。
 - [SuperCLUE](https://www.superclueai.com/)：公开网站使用的原始工作簿。导入器从网站的图表模块中找出当前评测月份，而不是写死某个月份的工作簿。只读取缓存的表格数值。网站结构变化或文件无效时，会显示同步错误，并保留上一次成功的结果。
-- [Artificial Analysis](https://artificialanalysis.ai/leaderboards/models)：没有密钥时，从公开排行榜渲染出的表格中导入 Intelligence Index 成绩，并从同一公开页面附带的图表数据中导入七项能力测量：SciCode、Terminal-Bench 4.0、HLE、CritPt、AA-LCR，以及 AA-Omniscience 的准确率和非幻觉率。公开 JSON 直接解码，不执行 JavaScript。单项评测的比例乘以 100 换算成百分比；综合 Intelligence Index 单独保存。分项成绩必须在模型页面标识、服务商、推理设置和四舍五入后的总分上都匹配。雷达图的坐标轴固定；缺失的轴显示 **暂无**，不画零点也不填充多边形。只有指数的模型仍会显示图框并附说明。导入器保留显示的总分精度、推理设置、模型链接和来源中的星号注释。缺失的成绩（`--`）保持缺失。页面没有标明评测版本或日期，所以这些字段明确标为未提供，而不是填成获取日期。不会执行任何页面脚本。在 `.env` 中设置可选的 `SUPER_PARTNER_ARTIFICIAL_ANALYSIS_API_KEY`（或导出 `ARTIFICIAL_ANALYSIS_API_KEY`）并重启后，会使用分页的[免费版 API](https://artificialanalysis.ai/data-api/docs)，在公开的单项测量之外补充 Coding 和 Agentic 指数。公开页面获取失败不会丢弃已成功获取的 API 指数。密钥只发送给 API，不会用于公开页面请求、其他来源或浏览器。成绩同步不会发起任何模型推理请求。
+- [Artificial Analysis](https://artificialanalysis.ai/leaderboards/models)：没有密钥时，从公开排行榜渲染出的表格中导入 Intelligence Index 成绩，并从同一公开页面附带的图表数据中导入七项能力测量：SciCode、Terminal-Bench 4.0、HLE、CritPt、AA-LCR，以及 AA-Omniscience 的准确率和非幻觉率。公开 JSON 直接解码，不执行 JavaScript。单项评测的比例乘以 100 换算成百分比；综合 Intelligence Index 单独保存。分项成绩必须在模型页面标识、服务商、推理设置和四舍五入后的总分上都匹配。雷达图的坐标轴固定；缺失的轴显示 **暂无**，不画零点也不填充多边形。只有指数的模型仍会显示图框并附说明。导入器保留显示的总分精度、推理设置、模型链接和来源中的星号注释。缺失的成绩（`--`）保持缺失。页面没有标明评测版本或日期，所以这些字段明确标为未提供，而不是填成获取日期。不会执行任何页面脚本。在 `.env` 中设置可选的 `FLUIDFORM_ARTIFICIAL_ANALYSIS_API_KEY`（或导出 `ARTIFICIAL_ANALYSIS_API_KEY`）并重启后，会使用分页的[免费版 API](https://artificialanalysis.ai/data-api/docs)，在公开的单项测量之外补充 Coding 和 Agentic 指数。公开页面获取失败不会丢弃已成功获取的 API 指数。密钥只发送给 API，不会用于公开页面请求、其他来源或浏览器。成绩同步不会发起任何模型推理请求。
 
 匹配要求服务商相同，且标识符在格式规范化后完全一致，或者显示名称唯一匹配。模型的快照日期和档次/版本数字都会保留。早于模型目录发布日期的评测不会关联到该模型。每条成绩保留自己的推理和工具配置；应用不会悄悄挑选最好的变体，也不会对不可比的评测取平均。这些来源没有覆盖的模型会继续显示没有公开成绩。滚动更新的 API 别名即使名字不变，背后的模型也可能变化，所以评测日期和配置仍然重要。
 
@@ -299,31 +313,31 @@ SUPER_PARTNER_CATALOG_SYNC_INTERVAL_HOURS=24
 
 规划任务的强模型会在同一个对话中一直负责这个任务，直到结束（设计文档：[`docs/design/supervisor.md`](design/supervisor.md)）。优先使用能保持会话的会员 CLI（Claude Code：`--session-id` 然后 `--resume`；Codex：`exec` 然后 `exec resume`），且为只读模式；否则使用最好的 API 规划模型，其对话历史随任务保存，每条消息都会重新发送。对话保存在任务上（`supervisor`），所以重启后可以继续。丢失的对话会用同一个模型根据任务记录重建；模型不可用时，任务会交给下一位负责人（`run.lead_changed`）。在任务视图中，**负责人** 面板显示负责人的每个决定及其理由和指示、它提出的问题（在这里回答），以及一个给它留言的输入框；`POST /api/tasks/{id}/lead` 会立即保存消息，负责人的回答随后出现在 `lead_messages` 中。下方的诊断面板只显示没有负责人参与时运行的诊断，或负责人派去修复问题的诊断。
 
-一次失败的尝试会连同证据（失败原因、这一步的回答和工具调用、之前的尝试、所有步骤的进展、能接手这一步的模型）交给负责人，而不是每次都新开一个诊断。负责人用一个决定加一条理由作答，显示为 `run.decision`：`retry`（附带指示）、`switch_model`、`accept`（检查不通过也接受结果）、`unable`、`ask_user`（像诊断问题一样显示，回答会送回负责人），或 `repair_environment` / `repair_platform`，按其说明运行修复会话。某一步超过 `SUPER_PARTNER_MAX_NODE_DECISIONS`（5）个决定，或整个任务超过 `SUPER_PARTNER_MAX_RUN_DECISIONS`（25）个决定时，任务暂停；继续执行会重新给一份额度。验证失败也会先交给负责人，再决定是否退回：它判断这些问题是真问题、任务从未要求的新需求，还是验证本身的错误，然后对它选定的步骤返工并说明要改什么（`rework`），或接受，或重新验证。没有负责人时，验证发现的问题会把所有被验证的步骤退回，最多 `SUPER_PARTNER_MAX_REWORK_ROUNDS` 轮。
+一次失败的尝试会连同证据（失败原因、这一步的回答和工具调用、之前的尝试、所有步骤的进展、能接手这一步的模型）交给负责人，而不是每次都新开一个诊断。负责人用一个决定加一条理由作答，显示为 `run.decision`：`retry`（附带指示）、`switch_model`、`accept`（检查不通过也接受结果）、`unable`、`ask_user`（像诊断问题一样显示，回答会送回负责人），或 `repair_environment` / `repair_platform`，按其说明运行修复会话。某一步超过 `FLUIDFORM_MAX_NODE_DECISIONS`（5）个决定，或整个任务超过 `FLUIDFORM_MAX_RUN_DECISIONS`（25）个决定时，任务暂停；继续执行会重新给一份额度。验证失败也会先交给负责人，再决定是否退回：它判断这些问题是真问题、任务从未要求的新需求，还是验证本身的错误，然后对它选定的步骤返工并说明要改什么（`rework`），或接受，或重新验证。没有负责人时，验证发现的问题会把所有被验证的步骤退回，最多 `FLUIDFORM_MAX_REWORK_ROUNDS` 轮。
 
-负责人还可以修改计划（`replan`）：添加步骤，删除或重写尚未完成的步骤（已完成和运行中的步骤保留；依赖必须保持无环；新步骤和规划时一样分配模型），显示为 `run.plan_changed`。所有步骤完成后，负责人会在任务结束前对照需求检查整体结果：`done`（完成）、对任意步骤 `rework` 并说明要改什么，或 `replan` 补上缺失的部分。没有负责人能做决定时，仍沿用旧规则（尝试次数、返工轮数、每次失败一次诊断）兜底，由下文的诊断处理失败。设置 `SUPER_PARTNER_LEAD_DECISIONS=false` 可关闭这一机制。
+负责人还可以修改计划（`replan`）：添加步骤，删除或重写尚未完成的步骤（已完成和运行中的步骤保留；依赖必须保持无环；新步骤和规划时一样分配模型），显示为 `run.plan_changed`。所有步骤完成后，负责人会在任务结束前对照需求检查整体结果：`done`（完成）、对任意步骤 `rework` 并说明要改什么，或 `replan` 补上缺失的部分。没有负责人能做决定时，仍沿用旧规则（尝试次数、返工轮数、每次失败一次诊断）兜底，由下文的诊断处理失败。设置 `FLUIDFORM_LEAD_DECISIONS=false` 可关闭这一机制。
 
 ## API 模型通过工具工作
 
 节点在 API 模型上运行时，模型会得到八个工具，并循环工作直到给出不调用工具的回答：`Bash`、`Read`、`Write`、`Edit`、`MultiEdit`、`Glob`、`Grep` 和 `LS`。循环使用各服务商自己的工具调用格式（OpenAI 兼容的 `tools`/`tool_calls`、Anthropic 的 `tool_use`/`tool_result`、Gemini 的 `functionCall`/`functionResponse`），所以 API 模型能像 CLI 一样修改项目、运行检查。
 
-每次请求都按目录中该模型自身的输出上限申请（目录没有给出时为 32768 token）。DeepSeek 推理模型的思考深度由 `SUPER_PARTNER_DEEPSEEK_REASONING_EFFORT` 决定（作为 `reasoning_effort` 发送；默认 `max`，最深；`none` 关闭思考）。思考越深越慢，消耗的输出 token 也越多。
+每次请求都按目录中该模型自身的输出上限申请（目录没有给出时为 32768 token）。DeepSeek 推理模型的思考深度由 `FLUIDFORM_DEEPSEEK_REASONING_EFFORT` 决定（作为 `reasoning_effort` 发送；默认 `max`，最深；`none` 关闭思考）。思考越深越慢，消耗的输出 token 也越多。
 
 - 文件工具会把每个路径解析到工作目录内（包括符号链接），拒绝任何越界访问。
 - `Bash` 在 bubblewrap 下运行：系统只读，home 目录被替换成一个空的内存目录，只挂载可写的工作目录，`/tmp` 是私有的，没有网络，环境变量被清空，所以 API 密钥永远不会进入命令。没有 `bwrap` 时不提供这个工具。
-- 本地服务（例如 EDA 许可证服务器）可以按端口逐个放行，其余一切仍然离线。`SUPER_PARTNER_SANDBOX_HOST_PORTS` 列出主机端口。每个端口通过挂载进沙箱的 Unix socket 提供服务，沙箱内由 `socat` 在同一端口监听。`SUPER_PARTNER_SANDBOX_ENV` 列出要复制进沙箱的主机环境变量；列出 `PATH` 会使用主机的 PATH。对于 Synopsys 工具，请在许可证文件中固定 vendor daemon 的端口（`VENDOR snpslmd port=27021`），并把它和 lmgrd 的端口一起列出：
+- 本地服务（例如 EDA 许可证服务器）可以按端口逐个放行，其余一切仍然离线。`FLUIDFORM_SANDBOX_HOST_PORTS` 列出主机端口。每个端口通过挂载进沙箱的 Unix socket 提供服务，沙箱内由 `socat` 在同一端口监听。`FLUIDFORM_SANDBOX_ENV` 列出要复制进沙箱的主机环境变量；列出 `PATH` 会使用主机的 PATH。对于 Synopsys 工具，请在许可证文件中固定 vendor daemon 的端口（`VENDOR snpslmd port=27021`），并把它和 lmgrd 的端口一起列出：
 
   ```
-  SUPER_PARTNER_SANDBOX_HOST_PORTS=[26585,27021]
-  SUPER_PARTNER_SANDBOX_ENV=["PATH","VCS_HOME","VERDI_HOME","SNPSLMD_LICENSE_FILE","VCS_ARCH_OVERRIDE"]
+  FLUIDFORM_SANDBOX_HOST_PORTS=[26585,27021]
+  FLUIDFORM_SANDBOX_ENV=["PATH","VCS_HOME","VERDI_HOME","SNPSLMD_LICENSE_FILE","VCS_ARCH_OVERRIDE"]
   ```
 
   只有 API 模型的命令能用这些端口；会员 CLI 的沙箱仍然离线。
 - 每次收到的用量报告都会立即计费，包括失败、换模型、取消或达到轮数上限之前的那些轮次。每次 API 请求前，执行、审查和诊断调用会按保守的输入估算和有上限的输出 token 数共享预算预留。调用会等待其他预留释放；剩余资金不足时任务暂停，且不消耗质量重试次数。最终回复也会被检查。服务商从未报告的用量无法还原。
-- **轮次与进度检查。** 一轮是一次模型请求，可以包含多个工具调用；提示词要求模型把互不依赖的调用合并在一轮，并一次写完整个文件。默认情况下，无论 API 模型还是会员 CLI，步骤都没有轮数上限，也没有固定超时。取而代之的是：一次尝试每进行 `SUPER_PARTNER_PROGRESS_CHECK_MINUTES`（10）分钟，就由另一个模型查看它在做什么（API 模型看最近的工具调用；CLI 看它修改的文件和运行的进程），判断它是否仍有进展。持续推进的长时间工作会继续；被判定卡住的尝试（重复自己、以同样方式失败、等待不会到来的东西、偏离这一步）会被停止，和其他失败的尝试一样处理，不会退回 API 模型。每次检查是一个 `node.progress_check` 事件。无法完成的检查会让尝试继续；任务预算仍然适用。`SUPER_PARTNER_API_AGENT_MAX_TURNS` 可设置一个可选上限（简单 ×1、一般 ×1.5、困难 ×2）：距上限五轮时，模型会被告知收尾；到达上限时，模型给出进度总结，该总结会被审查并带入下一次尝试。没人检查的工具循环（诊断）在 40 轮停止。`Read` 默认返回 2000 行（每次最多 5000 行）。
+- **轮次与进度检查。** 一轮是一次模型请求，可以包含多个工具调用；提示词要求模型把互不依赖的调用合并在一轮，并一次写完整个文件。默认情况下，无论 API 模型还是会员 CLI，步骤都没有轮数上限，也没有固定超时。取而代之的是：一次尝试每进行 `FLUIDFORM_PROGRESS_CHECK_MINUTES`（10）分钟，就由另一个模型查看它在做什么（API 模型看最近的工具调用；CLI 看它修改的文件和运行的进程），判断它是否仍有进展。持续推进的长时间工作会继续；被判定卡住的尝试（重复自己、以同样方式失败、等待不会到来的东西、偏离这一步）会被停止，和其他失败的尝试一样处理，不会退回 API 模型。每次检查是一个 `node.progress_check` 事件。无法完成的检查会让尝试继续；任务预算仍然适用。`FLUIDFORM_API_AGENT_MAX_TURNS` 可设置一个可选上限（简单 ×1、一般 ×1.5、困难 ×2）：距上限五轮时，模型会被告知收尾；到达上限时，模型给出进度总结，该总结会被审查并带入下一次尝试。没人检查的工具循环（诊断）在 40 轮停止。`Read` 默认返回 2000 行（每次最多 5000 行）。
 - **工具调用记录。** 一次尝试中的每个工具调用都会记录下来（轮次、工具、文件或命令、是否成功），在计划视图中折叠显示在该尝试下方；诊断会得到各工具的调用次数和最近一次尝试的调用记录。
 - **连续失败两次。** 同一个模型在某个节点上连续失败两次（被拒绝、验证失败、出错以及用完轮数都算，最后一种即使模型声称这一步无法完成也算；服务商限额、取消和未经验证的审查不算），下一次重试会交给其他最强的合格模型，包括会员 CLI，即使在 API 优先策略下也是如此。之后的重试不会再交回在该节点上失败过两次的模型。规则见 `server/src/recovery.ts`。
-- 标记为不支持工具的模型和离线演示模型只能用文字回答，不会被分配到项目节点。设置 `SUPER_PARTNER_API_AGENT=false` 可关闭工具。
+- 标记为不支持工具的模型和离线演示模型只能用文字回答，不会被分配到项目节点。设置 `FLUIDFORM_API_AGENT=false` 可关闭工具。
 
 规划和审查调用仍是不带工具的单次请求。
 
@@ -331,7 +345,7 @@ SUPER_PARTNER_CATALOG_SYNC_INTERVAL_HOURS=24
 
 依赖全部成功的节点会立即开始，受预算约束；`max_parallel_nodes` 可以限制同时运行的数量（默认 0，表示不限）。每个节点的提示词包含它的验收标准、需要修复的问题，以及每个直接依赖的结果——超过 `handoff_max_chars`（4000）时改为审查者对它的总结——和该依赖修改过的文件。计划视图会记录每个节点收到的是哪种形式。
 
-**验收审查。** 节点完成后，另一个模型会对照该节点的验收标准检查结果，回答通过或不通过，并给出原因和修改建议。审查者尽量不是完成这项工作的模型，并遵循配置的 API 优先策略。真实任务的恢复和审查不使用演示模型。对于项目任务，审查者还能看到被修改的已跟踪文件的 diff。审查者出错或回答无法解析时，会换另一个可用的审查者。如果没有任何审查者给出有效结论，结果保持“未验证”，进入有限次数的恢复流程，绝不会被当作通过。设置 `SUPER_PARTNER_REVIEW_NODES=false` 可跳过审查。
+**验收审查。** 节点完成后，另一个模型会对照该节点的验收标准检查结果，回答通过或不通过，并给出原因和修改建议。审查者尽量不是完成这项工作的模型，并遵循配置的 API 优先策略。真实任务的恢复和审查不使用演示模型。对于项目任务，审查者还能看到被修改的已跟踪文件的 diff。审查者出错或回答无法解析时，会换另一个可用的审查者。如果没有任何审查者给出有效结论，结果保持“未验证”，进入有限次数的恢复流程，绝不会被当作通过。设置 `FLUIDFORM_REVIEW_NODES=false` 可跳过审查。
 
 **重试。** 调用失败或结果被拒绝的节点会带着问题再运行一次，使用该能力上最强的可用模型，总共最多 `max_node_attempts`（3）次。重试和其他节点一样要经过预算检查，所以预算耗尽时任务会暂停而不是超支。审查调用和其他调用一样计费。
 
@@ -349,7 +363,7 @@ SUPER_PARTNER_CATALOG_SYNC_INTERVAL_HOURS=24
 
 所有诊断或修复平台的模型（CLI 或 API）都遵循同一套流程：[`skills/platform-repair/SKILL.md`](../skills/platform-repair/SKILL.md)，模块地图见 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)。修复提示词包含这两份文档；诊断会拿到它们在源码中的路径，并被告知这是关于 FluidForm 自身代码而非任务的。它们会被复制进修复源码，其中的 `AGENTS.md`（Codex 读取）和 `CLAUDE.md`（Claude Code 读取）指向它们。诊断用 `LOCATION: path:line` 行指出要修改的位置，修复从这些位置开始，而不是重新通读代码。
 
-对于在 systemd 用户管理器下用 `start.sh` 启动的可编辑源码检出，通过检查的修复会自动生效。新工作会等待正在运行的步骤和请求结束；一个独立的工作进程会检查是否有并发的源码修改，保存数据库备份，应用补丁，重启这份检出的 API 服务，并检查新进程的健康状态。激活失败时源文件会回滚。持久化的任务标记只允许被这次修复暂停的任务在激活成功后继续，且仍在原预算之内；已取消的任务、用户明确暂停的任务和尚未回答的诊断问题都保持停止。源码改动、检查结果和激活结果都会记录到所有项目共享的恢复历史中。相关开关是 `SUPER_PARTNER_PLATFORM_SELF_REPAIR`（默认 `true`），以及可选的 `SUPER_PARTNER_PLATFORM_ROOT`（源码检出位置）。其他安装方式或服务管理器布局需要提供受支持的可编辑检出，才能使用自动激活。仅凭模型的声称不会把平台修复标记为已生效。
+对于在 systemd 用户管理器下用 `start.sh` 启动的可编辑源码检出，通过检查的修复会自动生效。新工作会等待正在运行的步骤和请求结束；一个独立的工作进程会检查是否有并发的源码修改，保存数据库备份，应用补丁，重启这份检出的 API 服务，并检查新进程的健康状态。激活失败时源文件会回滚。持久化的任务标记只允许被这次修复暂停的任务在激活成功后继续，且仍在原预算之内；已取消的任务、用户明确暂停的任务和尚未回答的诊断问题都保持停止。源码改动、检查结果和激活结果都会记录到所有项目共享的恢复历史中。相关开关是 `FLUIDFORM_PLATFORM_SELF_REPAIR`（默认 `true`），以及可选的 `FLUIDFORM_PLATFORM_ROOT`（源码检出位置）。其他安装方式或服务管理器布局需要提供受支持的可编辑检出，才能使用自动激活。仅凭模型的声称不会把平台修复标记为已生效。
 
 保存的模型选择会在确认时和执行前再次检查。已停用或失去凭据的模型会按当前的分配规则替换。
 
@@ -370,7 +384,7 @@ API 步骤的命令会先 source 本机列出的脚本（`sandbox_profiles` 设�
 
 共享的环境修复在所有项目间串行执行。报告为 FIXED 的 `<data_dir>/tools` 下的改动会连同诊断、受影响的文件和验证报告一起记录；之后的诊断会拿到这份历史，在重复安装之前先检查已有的修复。项目专属的设置必须留在本地。`GET /api/recovery` 可查看这些记录、正在冷却的模型和已学到的错误特征。
 
-某一步用完尝试次数，或诊断无法运行时，任务也会带着报告暂停，而不是失败。**按此预算继续** 会带着新的尝试次数和建议重新运行失败的步骤。设置 `SUPER_PARTNER_AUTO_DIAGNOSE=false` 可关闭诊断：失败后照旧重试，用完尝试次数的步骤会导致任务失败。继续执行失败的任务时，也会把最新的建议交给失败的步骤。任务页面会显示这份报告和更早的报告。
+某一步用完尝试次数，或诊断无法运行时，任务也会带着报告暂停，而不是失败。**按此预算继续** 会带着新的尝试次数和建议重新运行失败的步骤。设置 `FLUIDFORM_AUTO_DIAGNOSE=false` 可关闭诊断：失败后照旧重试，用完尝试次数的步骤会导致任务失败。继续执行失败的任务时，也会把最新的建议交给失败的步骤。任务页面会显示这份报告和更早的报告。
 
 **额度用完。** 因额度而停止的模型（会员 CLI 达到使用/会话/每周/每日/每月上限，或 API 返回 429、402、余额不足）会被标记为已耗尽，直到其消息给出的重置时间（包括报告的时区），否则标记一小时（单纯的限速为五分钟）。它会从 `configured_models()` 中移除，所以所有选择都会跳过它：步骤会按常规分配规则换到备用模型（如果已经在重试，则选最强的），不计为失败尝试；规划时分配给它的后续步骤也一样；审查者、规划者和诊断者会换到下一个。没有备用模型时，任务以 `quota_exhausted` 暂停，可从 **按此预算继续** 恢复。控制台会列出已耗尽的模型及其重置时间，并提供 **恢复使用** 按钮（`GET`/`DELETE /api/models/quota`）；保存某个服务商的密钥会清除它的标记。上游 5xx 或网络故障在请求重试后也走同样的换模型流程，冷却五分钟，并使用单独的“服务故障”标签。冷却状态保存在应用数据库中，重启后仍然有效。识别出陌生额度或服务错误的诊断还会保存一条针对该模型的错误特征；其他项目再次遇到时会直接复用这个分类，无需再次诊断。清除冷却不会删除已学到的规则。每个替换模型仍要满足分配资格和预算限制。
 
@@ -397,7 +411,7 @@ API 步骤的命令会先 source 本机列出的脚本（`sandbox_profiles` 设�
 
 任务规划使用规划和可靠性评分最高的已配置模型，生成经过校验的 JSON 依赖图。模型给出的计划无效、模型不可用或计划有环时，退回到确定性规划器。规划出的每个节点各自分配给满足能力和上下文要求、价格最低的已启用模型，已登录的会员 CLI 保留优先权。
 
-规划可以用会员 CLI，但子任务及其审查优先交给 API 模型：只有没有任何已启用的 API 模型能做（达不到能力门槛，或都不能操作项目）时，才由 CLI 接手子任务。每个节点都会记录选择该模型的原因。设置 `SUPER_PARTNER_SUBTASKS_PREFER_API=false` 可恢复 CLI 优先的分配方式。启动时会安全地检测 Codex CLI、Claude Code、Gemini CLI 和 Qwen Code，不暴露账号信息。CLI 失败时，只有在对应 API 已配置密钥、该 API 模型已启用、且预估费用不超过剩余预算时，才会改用对应的 API。
+规划可以用会员 CLI，但子任务及其审查优先交给 API 模型：只有没有任何已启用的 API 模型能做（达不到能力门槛，或都不能操作项目）时，才由 CLI 接手子任务。每个节点都会记录选择该模型的原因。设置 `FLUIDFORM_SUBTASKS_PREFER_API=false` 可恢复 CLI 优先的分配方式。启动时会安全地检测 Codex CLI、Claude Code、Gemini CLI 和 Qwen Code，不暴露账号信息。CLI 失败时，只有在对应 API 已配置密钥、该 API 模型已启用、且预估费用不超过剩余预算时，才会改用对应的 API。
 
 七项调度评分全部来自 Artificial Analysis，没有手写的预设值。每项 AA 指标按排名换算：模型在所有有 AA 成绩的模型中的百分位，被线性映射到该能力固定的区间内（例如代码为 0.74–0.97），这样规划器的门槛含义保持不变。代码使用 AA 编程指数、SciCode 和 Terminal-Bench；规划使用智能指数和 HLE；调研使用知识准确率、AA-LCR 和 HLE；工具使用使用智能体指数和 Terminal-Bench；可靠性使用非幻觉率。AA 没有中文或结构化输出的评测，所以这两项跟随智能指数。一个模型匹配到多条 AA 记录时，使用最强的那条。
 

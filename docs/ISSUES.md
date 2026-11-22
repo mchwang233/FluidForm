@@ -1,4 +1,4 @@
-# Super Partner 已知问题
+# FluidForm 已知问题
 
 记录日期：2026-10-21。来源：当天对 API 模型工具调用的实测（与 Claude Code 对比）、数据库里的运行记录和事件，以及对当前代码的核对。
 没有逐行通读全部代码，只靠通读才能发现的问题不在这里。修好一条，就把它移到最后的「已修复」，并写上提交号。
@@ -61,9 +61,9 @@
 
 ## 已修复
 
-- 第 1b 条的 Codex 部分（2026-10-22）：Codex 执行步骤时能读到 `~/.ssh`、平台数据库和其他任务，`/tmp` 是整台机器共用的。没有把 Codex 套进平台的沙箱，而是用 Codex 自己的权限配置（它的 bubblewrap 执行）：步骤用 `super-partner-step`，主目录、平台数据目录、任务总目录里除了当前任务目录、Codex 程序及其临时目录、平台工具目录之外，逐条设为禁止读写；共用的 `/tmp` 禁用，每次调用给一个私有 `TMPDIR`，用完删除；任务允许联网时在配置里打开网络。负责人对话用只读的 `super-partner-lead`（同样读不到主目录和平台数据）。执行前检查用同一配置检查工具、联网，并确认读不到数据库和 Codex 登录凭据（`cli_channels.codex_step_permissions`、`private_tmp`、`preflight.cli_checks`）。实测：真实的 `codex exec` 步骤读不到 `~/.ssh` 和数据库，写自己的目录正常；负责人被拒绝读取。测试：`tests/test_preflight.py`（含真实 Codex 沙箱）、`tests/test_supervisor.py`。
+- 第 1b 条的 Codex 部分（2026-10-22）：Codex 执行步骤时能读到 `~/.ssh`、平台数据库和其他任务，`/tmp` 是整台机器共用的。没有把 Codex 套进平台的沙箱，而是用 Codex 自己的权限配置（它的 bubblewrap 执行）：步骤用 `fluidform-step`，主目录、平台数据目录、任务总目录里除了当前任务目录、Codex 程序及其临时目录、平台工具目录之外，逐条设为禁止读写；共用的 `/tmp` 禁用，每次调用给一个私有 `TMPDIR`，用完删除；任务允许联网时在配置里打开网络。负责人对话用只读的 `fluidform-lead`（同样读不到主目录和平台数据）。执行前检查用同一配置检查工具、联网，并确认读不到数据库和 Codex 登录凭据（`cli_channels.codex_step_permissions`、`private_tmp`、`preflight.cli_checks`）。实测：真实的 `codex exec` 步骤读不到 `~/.ssh` 和数据库，写自己的目录正常；负责人被拒绝读取。测试：`tests/test_preflight.py`（含真实 Codex 沙箱）、`tests/test_supervisor.py`。
 - 第 1d 条（2026-10-22）：执行前检查只检查 API 模型的沙箱。现在任务能用 Codex 时，同样的工具检查也在 Codex 自己的沙箱里、用步骤的权限配置跑一遍（`codex sandbox`，不调用模型；`preflight.cli_checks`），找不到的工具和 API 沙箱一样会让任务停下、先修复；任务允许联网时也检查联网。Claude Code 没有单独运行命令的方式，未覆盖。测试：`tests/test_preflight.py`。
-- 第 1e 条（2026-10-22）：任务目录在平台仓库里，Codex 和 Claude Code 会读到 Super Partner 自己的 `AGENTS.md`、`CLAUDE.md`。现在可在 `.env` 设 `SUPER_PARTNER_WORKSPACE_ROOT` 指向平台仓库之外的目录，`scripts/service.sh` 从环境或 `.env` 读取（没设才用仓库里的 `workspaces/`），原有任务目录已搬过去。
+- 第 1e 条（2026-10-22）：任务目录在平台仓库里，Codex 和 Claude Code 会读到 FluidForm 自己的 `AGENTS.md`、`CLAUDE.md`。现在可在 `.env` 设 `FLUIDFORM_WORKSPACE_ROOT` 指向平台仓库之外的目录，`scripts/service.sh` 从环境或 `.env` 读取（没设才用仓库里的 `workspaces/`），原有任务目录已搬过去。
 - 第 11b 条（2026-10-22）：问题只能按记录归类（模块名、程序名），同一原因分散在几个名字下。现在任务结束时，用最便宜的可用 API 模型按实际原因给每个问题起简短的名字，尽量沿用已有名字（`retrospect.name_problems`，设置 `problem_naming`）；跨任务按名字归类（`retrospect.topics`，接口 `/api/retrospectives/topics`），诊断时先列出同类问题的历史；新增「重复问题」页面。测试：`tests/test_retrospect.py`。
 - 第 25 条（2026-10-21）：步骤没有可用的 skill，每一步都从 `vcs -help` 开始自学工具（一个步骤前 20 轮都在读手册、搭小例子）；执行前检查明明跑通了 VCS 加覆盖率加 URG 的完整流程，却只记下「通过」。现在：skill 库（`skills.py`，通用的在 `skills/steps/`，本机的在数据目录 `skills/`）；执行前检查通过后，为任务要用的每个专业工具准备本机 skill（没有就让模型在步骤沙箱里实测后写出，已有就复用，`preflight._prepare_skills`）；每个步骤自动带上和它提到的工具相关的 skill。第一个通用 skill：`skills/steps/synopsys-vcs`（命令已在步骤沙箱实测）。测试：`tests/test_skills.py`。已补充：结项复盘会提取新经验，实际验证后保存为独立 Skill 版本，按适用范围注入后续任务，并记录效果；见 `docs/design/continuous-improvement.md`。
 - 第 26 条：同时运行的步骤数默认不再限制（`max_parallel_nodes=0`），改同一批文件的步骤仍会排队。
@@ -72,7 +72,7 @@
   - 开联网时，pasta 让步骤在沙箱里变成了 root（`uid=0`），模型会以为自己有 root 权限。现在会把身份映射回用户本人（`agent.maps_user`，在不能映射的嵌套环境里照旧）。执行前检查的沙箱自检也会检查这一点。测试：`test_a_step_allowed_the_internet_is_still_the_user_not_root`。
   - 诊断修复环境的 `/dev` 是最小版本，没有 `/dev/net/tun`，修复模型没法启动开联网的步骤沙箱来验证，于是误判平台坏了（2026-10-21 一次修错方向的平台自我修复就是这样来的）。现在修复环境用真实的 `/dev`。测试：`test_repairs_have_the_real_dev_so_they_can_start_a_steps_sandbox`。
   - 每种角色都如实知道自己在哪里：API 步骤（`AGENT_INSTRUCTIONS`：只读系统、主目录隐藏、不是 root、网络、缺东西时如实说明）；CLI 步骤（`quality.cli_environment`，包括 Codex 的命令审核）；修复（`HOST_INSTRUCTIONS`：不在步骤的沙箱里）；规划（`planner.WORK_RULES` 如实描述沙箱，任务允许联网时告诉主管，拆分大项时按当时的设置说明）。测试：`test_every_model_is_told_where_it_runs`。
-- 第 22 条：Codex 用平台自己的设置运行（`cli_channels.codex_settings`）：主管 `max` 强度（`lead_reasoning_effort`）和这台机器设置的快速档（`.env` 里的 `SUPER_PARTNER_CODEX_LEAD_SERVICE_TIER=fast`），步骤按难度、诊断 `high`；不加载用户的插件、应用和 MCP 服务。实测一次简单调用从 48 秒、16,429 token 降到 25 秒、1,568 token。主管的工作目录移到仓库外（`~/.cache/super-partner/leads/`，可读的名字），不再读到 Super Partner 自己的 `AGENTS.md`。测试：`test_codex_runs_with_the_platforms_effort_and_without_the_users_extras`、`tests/test_folders.py`。
+- 第 22 条：Codex 用平台自己的设置运行（`cli_channels.codex_settings`）：主管 `max` 强度（`lead_reasoning_effort`）和这台机器设置的快速档（`.env` 里的 `FLUIDFORM_CODEX_LEAD_SERVICE_TIER=fast`），步骤按难度、诊断 `high`；不加载用户的插件、应用和 MCP 服务。实测一次简单调用从 48 秒、16,429 token 降到 25 秒、1,568 token。主管的工作目录移到仓库外（`~/.cache/fluidform/leads/`，可读的名字），不再读到 FluidForm 自己的 `AGENTS.md`。测试：`test_codex_runs_with_the_platforms_effort_and_without_the_users_extras`、`tests/test_folders.py`。
 - 第 23 条：执行前检查把主管写的检查命令截断到 300 字符，把一条长检查命令截成了坏命令。现在 4000 字符以内原样保留，更长的整条丢弃。测试：`test_the_outline_names_the_commands_that_check_the_tools`。
 - 第 19 条（2026-10-21 新发现）：任务允许联网时，在服务里运行的步骤，Bash 对任何命令都返回「没有输出」。原因：uvicorn 用 uvloop 运行，它给子进程的输出管道其实是 socket，套在沙箱外面提供网络的 pasta 会把这种输出丢掉；在命令行里用 Python 自带的事件循环时复现不出来。13:05 的 FIFO 任务 154 次命令调用全部没有输出，模型只好先写文件再读，轮数翻倍。现在 Bash 把输出写进临时文件再读回（`agent.Workspace.bash`）。测试：`test_command_output_arrives_under_uvloop_as_in_the_service`。
 - 第 20 条：执行前检查（新模块 `preflight.py`）。第一个步骤开始前，按任务的实际设置开一个真实的步骤沙箱，检查：沙箱本身（输出、错误输出、退出码、写工作目录和 /tmp）；主管列出的工具检查命令（`TaskPlan.requires`）；步骤检查命令用到的程序（只警告）；允许联网时能否上网（只警告）；每个 API 模型能否调用（只警告）。会拦住任务的检查没通过时，先自动修一次环境，修完重新检查；还不行就暂停并列出缺什么，用户点「继续」后照常执行。检查通过一次之后，继续任务时不再重复。用设置 `preflight` 可以关闭。在 13:05 的 FIFO 任务上实测：沙箱、vcs、make 通过，并发现沙箱里找不到 `urg`（警告）。测试：`tests/test_preflight.py`。

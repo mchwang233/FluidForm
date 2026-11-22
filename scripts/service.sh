@@ -2,33 +2,75 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME_DIR="$PROJECT_DIR/.super-partner/runtime"
-LOG_DIR="$PROJECT_DIR/.super-partner/logs"
+# FluidForm's data. It was .super-partner: moved here (with a link from the old name) the first
+# time this version starts.
+DATA_DIR="$PROJECT_DIR/.fluidform"
+FORMER_DATA_DIR="$PROJECT_DIR/.super-partner"
+RUNTIME_DIR="$DATA_DIR/runtime"
+LOG_DIR="$DATA_DIR/logs"
 API_PID_FILE="$RUNTIME_DIR/api.pid"
 WEB_PID_FILE="$RUNTIME_DIR/web.pid"
 API_URL="http://127.0.0.1:8000"
-WEB_URL="http://127.0.0.1:5173"
-UNIT_PREFIX="super-partner-$(printf '%s' "$PROJECT_DIR" | cksum | cut -d ' ' -f 1)"
+# The web console is a capability package FluidForm serves itself (server/packages/web), at the API.
+WEB_URL="$API_URL/"
+UNIT_HASH="$(printf '%s' "$PROJECT_DIR" | cksum | cut -d ' ' -f 1)"
+UNIT_PREFIX="fluidform-$UNIT_HASH"
+# What its services were called before the rename: stopped too, so the new ones get the port.
+FORMER_UNIT_PREFIX="super-partner-$UNIT_HASH"
 USE_SYSTEMD=0
 if command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 \
   && systemctl --user show-environment >/dev/null 2>&1; then
   USE_SYSTEMD=1
 fi
 
-mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
-
-# A setting from the environment, else this machine's .env, else the default given.
+# A setting (FLUIDFORM_NAME, or the former SUPER_PARTNER_NAME) from the environment, else this
+# machine's .env, else the default given.
 setting() {
-  local name="$1" fallback="$2" value="${!1:-}"
-  if [[ -z "$value" && -f "$PROJECT_DIR/.env" ]]; then
-    value="$(sed -n "s/^${name}=//p" "$PROJECT_DIR/.env" | tail -n 1)"
-  fi
+  local name="$1" fallback="$2" value="" prefix
+  for prefix in FLUIDFORM_ SUPER_PARTNER_; do
+    local key="$prefix$name"
+    value="${!key:-}"
+    if [[ -z "$value" && -f "$PROJECT_DIR/.env" ]]; then
+      value="$(sed -n "s/^${key}=//p" "$PROJECT_DIR/.env" | tail -n 1)"
+    fi
+    [[ -n "$value" ]] && break
+  done
   echo "${value:-$fallback}"
 }
 
-# Where tasks' folders are: set SUPER_PARTNER_WORKSPACE_ROOT in .env to keep them outside the
+# Where tasks' folders are: set FLUIDFORM_WORKSPACE_ROOT in .env to keep them outside the
 # platform's repository (CLI agents there would read its AGENTS.md and CLAUDE.md).
-WORKSPACE_ROOT="$(setting SUPER_PARTNER_WORKSPACE_ROOT "$PROJECT_DIR/workspaces")"
+WORKSPACE_ROOT="$(setting WORKSPACE_ROOT "$PROJECT_DIR/workspaces")"
+
+# The data folder under its former name, moved to the new one and linked from the old (records
+# keep paths into it). Only once nothing runs from it.
+move_data() {
+  if [[ -d "$FORMER_DATA_DIR" && ! -L "$FORMER_DATA_DIR" && ! -e "$DATA_DIR" ]]; then
+    echo "[setup] Moving $FORMER_DATA_DIR to $DATA_DIR (FluidForm's new name)..."
+    mv "$FORMER_DATA_DIR" "$DATA_DIR"
+    ln -s "$DATA_DIR" "$FORMER_DATA_DIR"
+  fi
+  mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
+}
+
+# Services started under the former name, by a version before the rename.
+stop_former() {
+  local unit pid_file
+  if [[ "$USE_SYSTEMD" -eq 1 ]]; then
+    for unit in "$FORMER_UNIT_PREFIX-web.service" "$FORMER_UNIT_PREFIX-api.service"; do
+      if [[ "$(systemctl --user show "$unit" --property=ActiveState --value 2>/dev/null || true)" =~ ^(active|activating|reloading)$ ]]; then
+        echo "[stop] Stopping $unit (started before the rename)..."
+        systemctl --user stop "$unit"
+      fi
+    done
+  fi
+  for pid_file in "$FORMER_DATA_DIR/runtime/web.pid" "$FORMER_DATA_DIR/runtime/api.pid"; do
+    [[ -L "$FORMER_DATA_DIR" ]] && break
+    if [[ -f "$pid_file" ]] && [[ "$(<"$pid_file")" =~ ^[0-9]+$ ]] && kill -0 "$(<"$pid_file")" 2>/dev/null; then
+      kill "$(<"$pid_file")"
+    fi
+  done
+}
 
 unit_for() {
   if [[ "$1" == "$API_PID_FILE" ]]; then
@@ -66,7 +108,7 @@ launch_service() {
     # command arguments. --setenv=NAME reads the value from systemd-run's environment.
     while IFS= read -r name; do
       case "$name" in
-        PATH|LANG|LC_*|DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR|SSH_AUTH_SOCK|SUPER_PARTNER_*|*_API_KEY|GITHUB_TOKEN|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|VCS_HOME|VERDI_HOME|SNPSLMD_LICENSE_FILE|LM_LICENSE_FILE|LD_LIBRARY_PATH)
+        PATH|LANG|LC_*|DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR|SSH_AUTH_SOCK|FLUIDFORM_*|SUPER_PARTNER_*|*_API_KEY|GITHUB_TOKEN|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|VCS_HOME|VERDI_HOME|SNPSLMD_LICENSE_FILE|LM_LICENSE_FILE|LD_LIBRARY_PATH)
           inherited+=("--setenv=$name") ;;
       esac
     done < <(compgen -e)
@@ -112,39 +154,36 @@ prepare() {
     echo "[setup] Installing frontend dependencies..."
     npm install --prefix "$PROJECT_DIR/frontend"
   fi
+  # The web console package's page; FluidForm installs it again when it changed.
+  echo "[setup] Building the web console package..."
+  npm run --silent --prefix "$PROJECT_DIR/frontend" package >/dev/null
 }
 
 start() {
   local api_started=0
-  local web_started=0
+  stop_former
+  move_data
   prepare
+  # A web console run on its own by an earlier version: FluidForm serves it now.
+  stop_process "web console" "$WEB_PID_FILE"
   if ! is_running "$API_PID_FILE"; then
     echo "[start] Starting API..."
     local -a api=("$(command -v node)" --disable-warning=ExperimentalWarning "$PROJECT_DIR/server/dist/main.js" --host 127.0.0.1 --port 8000)
     launch_service "$API_PID_FILE" "$LOG_DIR/api.log" /usr/bin/env \
-      SUPER_PARTNER_DATA_DIR="$PROJECT_DIR/.super-partner" \
-      SUPER_PARTNER_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
+      FLUIDFORM_DATA_DIR="$DATA_DIR" \
+      FLUIDFORM_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
       "${api[@]}"
     api_started=1
-  fi
-  if ! is_running "$WEB_PID_FILE"; then
-    echo "[start] Starting web console..."
-    launch_service "$WEB_PID_FILE" "$LOG_DIR/web.log" \
-      "$PROJECT_DIR/frontend/node_modules/.bin/vite" "$PROJECT_DIR/frontend" \
-      --host 127.0.0.1 --port 5173 --strictPort
-    web_started=1
   fi
 
   local ready=0
   local deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
-    if ! is_running "$API_PID_FILE" || ! is_running "$WEB_PID_FILE"; then
+    if ! is_running "$API_PID_FILE"; then
       break
     fi
     if curl --noproxy '*' --connect-timeout 1 --max-time 2 \
-      --silent --fail "$API_URL/health" >/dev/null 2>&1 \
-      && curl --noproxy '*' --connect-timeout 1 --max-time 2 \
-        --silent --fail "$WEB_URL" >/dev/null 2>&1; then
+      --silent --fail "$API_URL/health" >/dev/null 2>&1; then
       ready=1
       break
     fi
@@ -152,12 +191,11 @@ start() {
   done
   if [[ "$ready" -ne 1 ]]; then
     echo "[error] Services did not become healthy. See $LOG_DIR"
-    [[ "$web_started" -eq 1 ]] && stop_process "web console" "$WEB_PID_FILE"
     [[ "$api_started" -eq 1 ]] && stop_process "API" "$API_PID_FILE"
     exit 1
   fi
   echo
-  echo "Super Partner is ready: $WEB_URL"
+  echo "FluidForm is ready: $WEB_URL (the web console, a capability; or the command line: fluidform --help)"
   echo "API: $API_URL"
   echo "Logs: $LOG_DIR"
   echo "Stop: ./stop.sh"
@@ -187,12 +225,13 @@ stop_process() {
 stop() {
   stop_process "web console" "$WEB_PID_FILE"
   stop_process "API" "$API_PID_FILE"
-  echo "Super Partner stopped."
+  stop_former
+  echo "FluidForm stopped."
 }
 
 status() {
   if is_running "$API_PID_FILE"; then echo "API: running ($( <"$API_PID_FILE"))"; else echo "API: stopped"; fi
-  if is_running "$WEB_PID_FILE"; then echo "Web: running ($( <"$WEB_PID_FILE"))"; else echo "Web: stopped"; fi
+  echo "Web console: $WEB_URL (served by the API, when its capability is enabled)"
 }
 
 case "${1:-start}" in

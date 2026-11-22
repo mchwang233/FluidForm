@@ -63,7 +63,7 @@ async function search(fetcher: Fetch, tools: string[], signal: AbortSignal): Pro
     const query = new URLSearchParams(Object.entries(params).map(([key, value]): [string, string] => [key, String(value)])).toString();
     const url = "https://api.github.com" + path + (query ? `?${query}` : "");
     // Fixed public host and no redirects: search results cannot redirect the host to local data.
-    const response = await fetcher(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Super-Partner-Skill-Discovery" },
+    const response = await fetcher(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "FluidForm-Skill-Discovery" },
       redirect: "manual", signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT * 1000)]) });
     if (response.status < 200 || response.status >= 300) {
       await response.body?.cancel();

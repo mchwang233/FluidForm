@@ -4,6 +4,7 @@
 // Here: choosing the lead, starting and continuing its conversation, and handing the task over to a
 // new conversation when the old one is lost or its model runs out of quota; the messages the lead is
 // sent about events, and reading its decisions.
+import { uses } from "./features.js";
 import * as chat from "./chat.js";
 import * as pricing from "./pricing.js";
 import { mkdirSync } from "node:fs";
@@ -255,7 +256,10 @@ export const SEPARATE_REPAIRS = ["repair_environment", "repair_platform", "reque
 /** The actions the lead is offered; every one in ACTIONS is still read (old decisions). */
 export function offeredActions(): string[] {
   const leftOut = settings.engineer_repairs ? SEPARATE_REPAIRS : ["call_engineer"];
-  return ACTIONS.filter((action) => !leftOut.includes(action));
+  // What needs another capability is offered only with it: the engineer's repairs and components,
+  // the plan's changes.
+  const missing = [...(uses.engineer() ? [] : [...SEPARATE_REPAIRS, "call_engineer"]), ...(uses.planning() ? [] : ["replan"])];
+  return ACTIONS.filter((action) => !leftOut.includes(action) && !missing.includes(action));
 }
 // What the lead may answer when every step has finished.
 export const FINAL_ACTIONS = ["done", "rework", "replan"];

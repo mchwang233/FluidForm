@@ -23,11 +23,11 @@
 可靠性；价格、API/CLI 通道及普通子任务的 API 优先策略不影响此选择。仍尊重模型启用状态、
 可用额度、任务的 CLI 许可和上下文容量。验证使用独立的空白会话；有同等能力的另一模型时优先
 交叉验证，否则仍使用最强模型，不为了换模型而降级。推理强度沿用诊断设置
-`SUPER_PARTNER_DIAGNOSIS_REASONING_EFFORT`（默认 high）。预算不足会暂停，不切换到便宜弱模型。
+`FLUIDFORM_DIAGNOSIS_REASONING_EFFORT`（默认 high）。预算不足会暂停，不切换到便宜弱模型。
 
 设置通过 `/api/improvements/settings` 持久化。没有持久化设置时读
-`SUPER_PARTNER_LEARNING_ENABLED`（默认 false）、`SUPER_PARTNER_LEARNING_BUDGET_USD`（默认 0.5）、
-`SUPER_PARTNER_LEARNING_AUTO_PLATFORM`（默认 true）。不需要新依赖或本机路径设置。
+`FLUIDFORM_LEARNING_ENABLED`（默认 false）、`FLUIDFORM_LEARNING_BUDGET_USD`（默认 0.5）、
+`FLUIDFORM_LEARNING_AUTO_PLATFORM`（默认 true）。不需要新依赖或本机路径设置。
 
 ## 结论和改进项
 

@@ -2,7 +2,7 @@
 
 ## 目标
 
-Only the 新建 box took files. Everywhere else you talk to Super Partner (a task's conversation
+Only the 新建 box took files. Everywhere else you talk to FluidForm (a task's conversation
 with its lead, an answer to the lead's question, the 平台 page, 需求变更, 转成任务, a reply to the
 platform engineer), a screenshot or a log had to be described in words. Every box now takes files:
 pasted, dropped, or picked with its paperclip.

@@ -1,16 +1,16 @@
 ---
 name: platform-repair
-description: How to diagnose and fix a defect in Super Partner itself (scheduler, retries, model routing, providers, sandbox, API, web UI) quickly and safely. Use it when a diagnosis ends with STATUS: PLATFORM_REPAIR, when you are editing Super Partner's own source in a platform-repair copy, or when asked to fix Super Partner's code.
+description: How to diagnose and fix a defect in FluidForm itself (scheduler, retries, model routing, providers, sandbox, API, web UI) quickly and safely. Use it when a diagnosis ends with STATUS: PLATFORM_REPAIR, when you are editing FluidForm's own source in a platform-repair copy, or when asked to fix FluidForm's code.
 ---
 
-# Repairing Super Partner
+# Repairing FluidForm
 
 Any model can follow this: it needs only file reading, search, editing and a shell.
-Super Partner gives it to every model that diagnoses or repairs the platform.
+FluidForm gives it to every model that diagnoses or repairs the platform.
 
 ## Rules
 
-- Change only Super Partner's source in the copy you were given. Do not touch task data,
+- Change only FluidForm's source in the copy you were given. Do not touch task data,
   credentials, Git history, the live source, or running services.
 - Keep unrelated existing changes. Never delete or weaken an existing test.
 - Every fix needs a regression test that fails without the fix and passes with it.

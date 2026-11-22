@@ -1,5 +1,6 @@
 // Runs a task's steps: scheduling, attempts, retries and step outcomes. The parts it is
 // made of are the classes it extends (executor-base.ts says how).
+import { uses } from "./features.js";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import * as activity from "./activity.js";
@@ -863,7 +864,7 @@ export class Executor extends Preflighting {
         this.emit(runId, "node.superseded", { node_id: node.id });
         return [null, outcome];
       }
-      const checked = verdict.verified && settings.acceptance && (settings.review_nodes || node.verifies.length > 0);
+      const checked = verdict.verified && uses.review() && (settings.review_nodes || node.verifies.length > 0);
       node.inputs = inputs as TaskNode["inputs"];
       node.review_passed = checked ? verdict.passed : null;
       node.review = verdict.reason;
@@ -890,7 +891,7 @@ export class Executor extends Preflighting {
         // The lead judges the findings before any work is sent back (leading.ts).
         if (this.canLead()) node.status = "running";
         else this.sendBack(run, node, verdict);
-      } else if (settings.auto_diagnose) {
+      } else if (uses.diagnosis()) {
         // Every failed attempt is diagnosed first; repairDone then retries or pauses.
         node.status = "running";
       } else if (outcome === "unable") {
@@ -902,9 +903,9 @@ export class Executor extends Preflighting {
         this.emit(runId, "approval.required", { reason: "budget_exceeded", actual_cost_usd: run.actual_cost_usd });
       }
       // A verification out of rework rounds is a failure too.
-      const diagnose = settings.auto_diagnose && !limited && (node.status === "running" || (outcome === "verify_failed" && node.status === "failed"));
+      const diagnose = uses.diagnosis() && !limited && (node.status === "running" || (outcome === "verify_failed" && node.status === "failed"));
       // A failed attempt held for recovery goes to the task's lead (leading.ts).
-      const lead = node.status === "running" && this.canLead() && (settings.auto_diagnose || limited || outcome === "verify_failed");
+      const lead = node.status === "running" && this.canLead() && (uses.diagnosis() || limited || outcome === "verify_failed");
       this.save(run);
       this.releaseLog(runId, nodeId);
       return [lead ? "lead" : diagnose ? "diagnose" : null, outcome];

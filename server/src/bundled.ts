@@ -1,7 +1,9 @@
 // Packages shipped with FluidForm (server/packages): installed and enabled the first time FluidForm
-// starts with capability packages allowed and a sandbox to run them, and brought up to date when a
-// newer version ships. One the user uninstalled stays uninstalled (what was offered is kept in
-// bundled.json). docs/design/chat-and-pricing-packages.md.
+// starts (one that runs a process, with capability packages allowed and a sandbox to run them; an
+// interface, a web page FluidForm serves, always), and brought up to date when what ships changes.
+// One the user uninstalled stays uninstalled (what was offered is kept in bundled.json).
+// docs/design/chat-and-pricing-packages.md.
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +34,8 @@ function offered(): Offered {
 /** Install what has not been offered yet (enabled) and update what is installed and older. Returns
  *  the packages installed or updated. */
 export async function offer(): Promise<Capability[]> {
-  if (!settings.capability_packages || sandbox.deps.missing() || !existsSync(deps.folder())) return [];
+  if (!existsSync(deps.folder())) return [];
+  const running = settings.capability_packages && !sandbox.deps.missing();
   const given = offered();
   const done: Capability[] = [];
   for (const entry of readdirSync(deps.folder(), { withFileTypes: true })) {
@@ -42,7 +45,8 @@ export async function offer(): Promise<Capability[]> {
     let id = entry.name;
     try {
       const manifest = JSON.parse(readFileSync(join(source, packages.MANIFEST), "utf8"));
-      [id, version] = [String(manifest.id), String(manifest.version ?? "")];
+      [id, version] = [String(manifest.id), `${manifest.version ?? ""}#${digest(source)}`];
+      if (manifest.kind !== "interface" && !running) continue;
     } catch {
       continue;
     }
@@ -51,7 +55,7 @@ export async function offer(): Promise<Capability[]> {
     // Uninstalled after it was offered: the user's choice stands. A task's own capability of that
     // name is left alone.
     if ((!fresh && !installed) || (installed && installed.source !== "upload")) continue;
-    if (!fresh && installed && installed.version === version) continue;
+    if (!fresh && installed && given[id] === version) continue;
     try {
       const capability = await packages.installFolder(source);
       if (fresh) carryOver(capability);
@@ -83,4 +87,18 @@ function carryOver(capability: Capability): void {
     mkdirSync(packages.dataFolder(capability.id), { recursive: true });
     renameSync(source, target);
   }
+}
+
+/** What a shipped package's files hold, so a changed build (the web console's) is installed again
+ *  although its version is the same. */
+function digest(folder: string): string {
+  const hash = createHash("sha256");
+  const walk = (parts: string[]) => {
+    for (const entry of readdirSync(join(folder, ...parts), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      if (entry.isDirectory()) walk([...parts, entry.name]);
+      else if (entry.isFile()) hash.update(`${[...parts, entry.name].join("/")}\0`).update(readFileSync(join(folder, ...parts, entry.name)));
+    }
+  };
+  walk([]);
+  return hash.digest("hex").slice(0, 16);
 }
