@@ -252,6 +252,8 @@ export function restoreLearning(host: LearningHost): void {
       skipCancelledLearning(host, run.id);
       continue;
     }
+    // With learning off it waits until that is on again.
+    if (!uses.learning()) continue;
     if (WORKING.has(review.status) && run && retrospect.FINISHED.has(run.status)) startLearning(host, run.id, { manual: !review.automatic });
   }
 }

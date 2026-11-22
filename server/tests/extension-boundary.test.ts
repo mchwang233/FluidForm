@@ -25,3 +25,17 @@ test("without the planning capability its code is not used", async () => {
     restore();
   }
 });
+
+test("loading an extension reads all of its code: nothing is left to read from a rebuilt disk", () => {
+  for (const id of ["planning", "lead", "engineer", "learning"]) {
+    const folder = join(SERVER, "packages", id, "src");
+    const read = new Set<string>();
+    const follow = (name: string) => {
+      if (read.has(name)) return;
+      read.add(name);
+      for (const match of readFileSync(join(folder, name), "utf8").matchAll(/^(?:import|export)\b[^;]*?["']\.\/([\w-]+)\.js["'];/gm)) follow(`${match[1]}.ts`);
+    };
+    follow("index.ts");
+    assert.deepEqual(readdirSync(folder).filter((name) => name.endsWith(".ts") && !read.has(name)), [], id);
+  }
+});

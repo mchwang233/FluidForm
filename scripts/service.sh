@@ -163,7 +163,8 @@ start() {
   local api_started=0
   stop_former
   move_data
-  prepare
+  # A running API keeps what it was built from: rebuilt only while it is stopped.
+  if ! is_running "$API_PID_FILE"; then prepare; fi
   # A web console run on its own by an earlier version: FluidForm serves it now.
   stop_process "web console" "$WEB_PID_FILE"
   if ! is_running "$API_PID_FILE"; then

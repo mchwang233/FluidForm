@@ -391,6 +391,8 @@ export class Api {
     let plan = !uses.planning() ? oneStep(request, background, projectDir)
       : parent || decided ? null : await this.quickPlan(body, request, background, configured, projectDir);
     try {
+      // Asked again: planning may have been switched off while the request was judged.
+      if (!plan && !uses.planning()) plan = oneStep(request, background, projectDir);
       plan ??= await this.deps.autonomousPlan(asked, Object.values(this.models), configured, this.providers,
         projectDir ? projectContext(projectDir) : null, session, brief);
     } catch (error) {

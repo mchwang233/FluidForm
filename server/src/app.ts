@@ -1,5 +1,6 @@
 // FluidForm's HTTP API, served by Fastify: the local-only guard, and
 // the routes the console uses. What they work with is the Api (api.ts).
+import * as extensions from "./extensions.js";
 import { uses } from "./features.js";
 import { createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -1168,8 +1169,15 @@ export function buildApp(api: Api): FastifyInstance {
     // others need from it keeps it on.
     const problem = body.enabled ? services.enableProblem(item) : item.status === "active" ? services.disableProblem(item) : null;
     if (problem) throw new HttpError(409, problem);
+    const extension = item.kind === extensions.KIND && extensions.byId(item.id) !== null;
+    if (extension && body.enabled) await extensions.load(item.id);
     item.status = body.enabled ? "active" : "disabled";
     capabilities.save(item);
+    if (extension && body.enabled) {
+      // What waited while it was off goes on.
+      if (item.id === "engineer") executor().engineerKick();
+      else if (item.id === "learning") executor().restoreLearning();
+    }
     if (runs && body.enabled && item.entry) runner().start(item);
     else if (runs) await runner().stop(item.id);
     if (item.kind === "service" && item.source === "upload") {

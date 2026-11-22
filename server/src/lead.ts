@@ -25,6 +25,9 @@ export interface LeadPackage {
   overrun(host: ReviewHost, run: ExecutionRun, node: TaskNode, modelId: string, expected: number, evidence: string, turns: number): Promise<string | null>;
 }
 
+/** The code for work already begun: switching the lead off lets that end as it would have. */
+const begun = () => extensions.load<LeadPackage>("lead");
+
 async function pack(name: "lead" | "review"): Promise<LeadPackage> {
   if (!available(name)) throw new Error("没有启用负责人能力。");
   return extensions.load<LeadPackage>("lead");
@@ -44,7 +47,7 @@ export const finalDecision: LeadPackage["finalDecision"] = async function (...ar
   return (await pack("lead")).finalDecision.call(this, ...args);
 };
 export const applyDecision: LeadPackage["applyDecision"] = async function (...args) {
-  return (await pack("lead")).applyDecision.call(this, ...args);
+  return (await begun()).applyDecision.call(this, ...args);
 };
 export const afterRepair: LeadPackage["afterRepair"] = async function (...args) {
   return (await pack("lead")).afterRepair.call(this, ...args);

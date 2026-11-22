@@ -21,6 +21,9 @@ export interface EngineerPackage {
   engineerEdit(this: Engineering, job: EngineerJob): Promise<void>;
 }
 
+/** The code for work already begun: switching the engineer off lets that end as it would have. */
+const begun = () => extensions.load<EngineerPackage>("engineer");
+
 async function pack(name: "diagnosis" | "engineer"): Promise<EngineerPackage> {
   if (!available(name)) throw new Error("没有启用平台工程师能力。");
   return extensions.load<EngineerPackage>("engineer");
@@ -30,13 +33,13 @@ export const repair: EngineerPackage["repair"] = async function (...args) {
   return (await pack("diagnosis")).repair.call(this, ...args);
 };
 export const diagnoseWith: EngineerPackage["diagnoseWith"] = async function (...args) {
-  return (await pack("diagnosis")).diagnoseWith.call(this, ...args);
+  return (await begun()).diagnoseWith.call(this, ...args);
 };
 export const runDiagnosis: EngineerPackage["runDiagnosis"] = async function (...args) {
   return (await pack("diagnosis")).runDiagnosis.call(this, ...args);
 };
 export const fixPlatform: EngineerPackage["fixPlatform"] = async function (...args) {
-  return (await pack("engineer")).fixPlatform.call(this, ...args);
+  return (await begun()).fixPlatform.call(this, ...args);
 };
 export const engineerPlan: EngineerPackage["engineerPlan"] = async function (...args) {
   return (await pack("engineer")).engineerPlan.call(this, ...args);

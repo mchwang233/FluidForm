@@ -330,7 +330,7 @@ class PlanningTimeout extends Error {
  *  ``session`` then holds. null if no lead can plan. */
 async function planAsLead(request: string, models: ModelProfile[], configured: Set<string>, providers: Planning, session: SupervisorSession,
   inProject: boolean, teamRequest = "", artifactWork = false): Promise<TaskPlan | null> {
-  const { planTasks } = await import("./task-planning.js");
+  const { planTasks } = await taskPlanning();
   let spent = 0;
   let roster: TaskPlan | null = null;
   let planningEffort: string = settings.planning_reasoning_effort;
@@ -426,7 +426,7 @@ export async function autonomousPlan(prompt: string, models: ModelProfile[], giv
     if (artifactWork && !candidate.nodes.some((item) => item.artifact_contract)) throw new contracts.ContractError("Requested artifact work has no declared artifact contracts");
     return candidate;
   };
-  const { PROMPT } = await import("./task-planning.js");
+  const { PROMPT } = await taskPlanning();
   let plan = await planAsLead(PROMPT + body, models, configured, providers, session ?? SupervisorSessionSchema.parse({}), inProject, body, artifactWork);
   if (plan) {
     plan.request = body;
@@ -490,4 +490,11 @@ export async function autonomousPlan(prompt: string, models: ModelProfile[], giv
     plan.planning_note = `Planner fallback: ${head(String((error as Error)?.message ?? error), 300)}`;
     return plan;
   }
+}
+
+// task-planning.ts and this module import each other, so it is imported late; once, as import()
+// looks at the disk again each time, and a running FluidForm must not (extensions.preload).
+let loadedTaskPlanning: Promise<typeof import("./task-planning.js")> | undefined;
+export function taskPlanning(): Promise<typeof import("./task-planning.js")> {
+  return (loadedTaskPlanning ??= import("./task-planning.js"));
 }

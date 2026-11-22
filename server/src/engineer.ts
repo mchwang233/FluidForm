@@ -180,6 +180,7 @@ export abstract class Engineering extends SelfRepair {
 
   /** The user answers a question, or asks for a plan or a change to be redone differently. */
   engineerReply(jobId: string, text: string, choice: string | null = null, attachments: Attachment[] = []): EngineerJob {
+    if (!uses.engineer()) throw new EngineerError("没有启用平台工程师能力：先启用它再回复。");
     const job = this.engineerJob(jobId);
     let said = [choice, (text || "").trim()].filter(Boolean).join("\n") || (attachments.length ? "（见附件）" : "");
     if (!said) throw new EngineerError("请写下你的回复。");
@@ -203,6 +204,7 @@ export abstract class Engineering extends SelfRepair {
 
   /** Approve a plan (the change is then made) or a checked change (it is then applied). */
   engineerApprove(jobId: string): EngineerJob {
+    if (!uses.engineer()) throw new EngineerError("没有启用平台工程师能力：先启用它再批准。");
     const job = this.engineerJob(jobId);
     if (job.status === "plan_ready") {
       job.messages.push(message({ role: "system", text: "你批准了方案，开始实施。" }));
@@ -257,6 +259,8 @@ export abstract class Engineering extends SelfRepair {
 
   /** Start the next queued job if the engineer is free and no change is waiting to apply. */
   engineerKick(): void {
+    // Switched off, its work waits.
+    if (!uses.engineer()) return;
     if ((this.engineerTask && !this.engineerTask.done) || this.platformPending) return;
     const queued = this.db.engineerJobs(200).filter((job) => job.status === "queued").sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
     if (!queued.length) return;

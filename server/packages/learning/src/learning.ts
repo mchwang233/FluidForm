@@ -1,5 +1,6 @@
 // Looking back on a finished task and keeping what it teaches. The records, and starting and stopping
 // a review, are FluidForm's (server/src/learning.ts).
+import { uses } from "../../../src/features.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -265,6 +266,7 @@ async function validateLesson(host: LearningHost, review: LearningReview, item: 
 /** Why a proposed change to FluidForm waits instead of going to the platform engineer, or "": the
  *  problem came up in too few tasks, or a change for it is already under way. */
 export function notForEngineer(db: Database, item: Improvement): string {
+  if (!uses.engineer()) return "没有启用平台工程师能力，先记下。";
   if (!item.problem_kind) return "没有对应到记录里的具体问题，先记下；同样的问题再出现时再请平台工程师。";
   const runs = retrospect.runsWith(db, item.problem_kind, item.problem_key);
   runs.add(item.run_id);

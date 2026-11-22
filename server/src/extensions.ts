@@ -44,8 +44,26 @@ export function on(extension: Extension, library: Capability[]): boolean {
 // Beside this module's folder, as source and as built: packages/<id>/src/index.
 const entry = (id: string) => fileURLToPath(new URL(`../packages/${id}/src/index${import.meta.url.endsWith(".ts") ? ".ts" : ".js"}`, import.meta.url));
 
+const loaded = new Map<string, Promise<any>>();
+
 /** The code of the shipped extension ``id``: never from the data folder, where only its switch is. */
 export async function load<T>(id: string): Promise<T> {
   if (!byId(id)) throw new Error(`no shipped extension ${id}`);
-  return (await import(pathToFileURL(entry(id)).href)) as T;
+  // Kept, not imported again: import() looks at the disk each time.
+  let loading = loaded.get(id);
+  if (!loading) {
+    loading = import(pathToFileURL(entry(id)).href).then(async (code) => {
+      await code.ready?.();
+      return code;
+    });
+    loaded.set(id, loading);
+    loading.catch(() => loaded.delete(id));
+  }
+  return (await loading) as T;
+}
+
+/** Read the code of every extension that is on, so that rebuilding the server under a running
+ *  FluidForm does not take it away or mix two versions: it runs what it started with. */
+export async function preload(library: Capability[]): Promise<void> {
+  for (const item of shipped) if (on(item, library)) await load(item.id);
 }

@@ -24,6 +24,9 @@ export interface LearningPackage {
   preflightRepair(this: Preflighting, runId: string, failed: PreflightCheck[], workspace: string): Promise<boolean>;
 }
 
+/** The code for work already begun: switching learning off lets that end as it would have. */
+const begun = () => extensions.load<LearningPackage>("learning");
+
 async function pack(name: "learning" | "preflight"): Promise<LearningPackage> {
   if (!provided(name)) throw new Error("没有启用经验能力。");
   return extensions.load<LearningPackage>("learning");
@@ -39,23 +42,23 @@ export const preflight: LearningPackage["preflight"] = async function (...args) 
   return (await pack("preflight")).preflight.call(this, ...args);
 };
 export const allChecks: LearningPackage["allChecks"] = async function (...args) {
-  return (await pack("preflight")).allChecks.call(this, ...args);
+  return (await begun()).allChecks.call(this, ...args);
 };
 export const prepareSkills: LearningPackage["prepareSkills"] = async function (...args) {
-  return (await pack("preflight")).prepareSkills.call(this, ...args);
+  return (await begun()).prepareSkills.call(this, ...args);
 };
 export const publicReference: LearningPackage["publicReference"] = async function (...args) {
-  return (await pack("preflight")).publicReference.call(this, ...args);
+  return (await begun()).publicReference.call(this, ...args);
 };
 export const available: LearningPackage["available"] = async function (...args) {
-  return (await pack("preflight")).available.call(this, ...args);
+  return (await begun()).available.call(this, ...args);
 };
 export const writeSkill: LearningPackage["writeSkill"] = async function (...args) {
-  return (await pack("preflight")).writeSkill.call(this, ...args);
+  return (await begun()).writeSkill.call(this, ...args);
 };
 export const modelChecks: LearningPackage["modelChecks"] = async function (...args) {
-  return (await pack("preflight")).modelChecks.call(this, ...args);
+  return (await begun()).modelChecks.call(this, ...args);
 };
 export const preflightRepair: LearningPackage["preflightRepair"] = async function (...args) {
-  return (await pack("preflight")).preflightRepair.call(this, ...args);
+  return (await begun()).preflightRepair.call(this, ...args);
 };

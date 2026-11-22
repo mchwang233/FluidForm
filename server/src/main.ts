@@ -4,6 +4,8 @@ import { Api } from "./api.js";
 import { buildApp } from "./app.js";
 import { settings } from "./config.js";
 import { log } from "./log.js";
+import * as extensions from "./extensions.js";
+import { current } from "./provided.js";
 import { migrate } from "./rename.js";
 import { hydrateProviderKeys } from "./secrets.js";
 
@@ -14,6 +16,7 @@ migrate();
 settings.prepare();
 settings.loadSavedProfile();
 await hydrateProviderKeys();
+await extensions.preload(current());
 const api = new Api();
 const app = buildApp(api);
 app.addHook("onClose", () => api.close());

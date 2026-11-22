@@ -86,7 +86,8 @@ export async function check(host: ReviewHost, run: ExecutionRun, node: TaskNode,
     text += `\n\nPlatform acceptance evidence: ${node.check}\n${output}`;
   }
   let result: quality.Verdict;
-  if (ownCheck) {
+  // Asked again: it may have been switched off while the check ran.
+  if (ownCheck || uses.ownCheckOnly()) {
     // Without the review capability its own check, passed above, is all of the acceptance.
     const claim = quality.unableClaim(given);
     result = claim ? quality.verdict({ passed: false, reason: `无法完成：${claim}`, fix: claim, unable: claim })
