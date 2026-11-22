@@ -23,7 +23,7 @@ import * as progress from "../src/progress.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as quality from "../src/quality.js";
 import { ModelUnavailable } from "../src/quota.js";
-import { criticalCheck } from "../src/review.js";
+import { criticalCheck } from "../packages/lead/src/overrun.js";
 import { spreadTo } from "../src/routing.js";
 import * as selfRepair from "../src/self-repair.js";
 import { stepKey } from "../src/review.js";
