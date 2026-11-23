@@ -13,7 +13,7 @@ import * as packages from "../src/capability-packages.js";
 import * as runners from "../src/capability-runner.js";
 import * as sandbox from "../src/capability-sandbox.js";
 import { settings } from "../src/config.js";
-import { type Capability, LeadMessageSchema, type SupervisorSession } from "../src/models.js";
+import { type Capability, folderId, LeadMessageSchema, type SupervisorSession } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
 import { remembering } from "./helpers/chat-package.js";
 import * as secrets from "../src/secrets.js";
@@ -152,7 +152,8 @@ async function botMessage(api: Api, runner: runners.Runner, text: string, conver
   return [reply, cost];
 }
 
-const tasks = (api: Api) => api.db.listRuns().filter((run) => run.kind === "task");
+// Oldest first.
+const tasks = (api: Api) => api.db.listRuns().filter((run) => run.kind === "task").sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
 
 test("uploaded, it is installed switched off, and a new version keeps its secrets", async () => {
   const { client, kept } = withPackages();
@@ -608,7 +609,7 @@ test("an automation's model does not change how its work is planned", async () =
   assert.equal((await chooseModel(client, OTHER.id)).status_code, 200);
   const [sent] = triaging(api, '{"kind": "chat"}', [ASK_FOR_WORK]);
   const [reply] = await botMessage(api, runner, "给商品接口加 Redis 缓存");
-  assert.ok(reply!.includes("等主人确认后开工"));
+  assert.ok(reply!.includes("回复「开始」就开工"));
   assert.ok(!reply!.includes("$"), "no amounts in the chat app");
   assert.deepEqual(sent.map((item) => item[0]), [OTHER.id]);
   const [task] = tasks(api);
@@ -648,7 +649,7 @@ test("work is asked for by the chat with the whole conversation, and its end is 
   const replies = await eventually(() => lines("replies.jsonl").length === 2 && lines("replies.jsonl"));
   // A fragment is answered in the chat; work is asked for by the chat's model, said plainly.
   assert.ok(replies[0].reply === "哪类接口？" && classified.length === 0);
-  assert.ok(replies[1].reply.startsWith("好，我让 FluidForm 排个计划。") && replies[1].reply.includes("等主人确认后开工"));
+  assert.ok(replies[1].reply.startsWith("好，我让 FluidForm 排个计划。") && replies[1].reply.includes("回复「开始」就开工"));
   assert.ok(!replies[1].reply.includes("TASK"));
   assert.ok(!replies[1].reply.includes("$"), "no amounts in the chat app");
   const [task] = tasks(api);
@@ -658,7 +659,7 @@ test("work is asked for by the chat with the whole conversation, and its end is 
   const chatId = runner.get("fake-bot").state.chats.c1;
   assert.deepEqual(task.origin, { message_id: "om_1", capability: "fake-bot", conversation: "c1", chat_run: chatId });
   const chat = api.db.getRun(chatId)!;
-  assert.ok(chat.lead_messages.at(-1)!.text.includes("排好了计划「加缓存」") && !chat.lead_messages.at(-1)!.text.includes("TASK"));
+  assert.ok(chat.lead_messages.at(-1)!.text.includes("计划「加缓存」排好了") && !chat.lead_messages.at(-1)!.text.includes("TASK"));
   // Its end: the automation hears it, the chat shows it, its model is told with the next message.
   Object.assign(task, { status: "succeeded", final_result: "缓存加好了，命中率 92%。" });
   api.db.saveRun(task);
@@ -986,4 +987,68 @@ test("while a picture is being talked about, the model is one that sees", async 
   await message(api, runner, { conversation: "c1", text: "（见附件）", attachments: [heron] });
   await message(api, runner, { conversation: "c1", text: "这是什么鸟" });
   assert.deepEqual(used, [BEST.id, BEST.id]);
+});
+
+/** A task planned in a conversation, as the chat's model asks for it. */
+async function planned(api: Api, runner: runners.Runner, fields: Record<string, unknown> = {}) {
+  triaging(api, '{"kind": "chat"}', [ASK_FOR_WORK, "好的。", "好的。", "好的。"]);
+  await message(api, runner, { conversation: "c1", text: "给商品接口加个缓存", ...fields });
+  return tasks(api).at(-1)!;
+}
+
+test("who asked for a task starts it, or calls it off, in the chat", async () => {
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  const task = await planned(api, runner);
+  assert.equal(task.status, "awaiting_confirmation");
+  const [started] = await message(api, runner, { conversation: "c1", text: "开始" });
+  assert.ok(started!.includes("开工") && ["queued", "running", "succeeded"].includes(api.db.getRun(task.id)!.status));
+  const next = await planned(api, runner);
+  const [called] = await message(api, runner, { conversation: "c1", text: "取消" });
+  assert.ok(called!.includes("不做了") && api.db.getRun(next.id)!.status === "cancelled");
+  // Without a task waiting, "开始" is said to the chat as anything else.
+  const [said] = await message(api, runner, { conversation: "c1", text: "开始" });
+  assert.equal(said, "好的。");
+});
+
+test("in a group only who asked for it can start it", async () => {
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  const task = await planned(api, runner, { sender: "甲", sender_id: "ou_a", origin: { chat_type: "group" } });
+  const [other] = await message(api, runner, { conversation: "c1", text: "开始", sender: "乙", sender_id: "ou_b", origin: { chat_type: "group" } });
+  assert.ok(other!.includes("甲") && api.db.getRun(task.id)!.status === "awaiting_confirmation");
+  await message(api, runner, { conversation: "c1", text: "开始", sender: "甲", sender_id: "ou_a", origin: { chat_type: "group" } });
+  assert.notEqual(api.db.getRun(task.id)!.status, "awaiting_confirmation");
+});
+
+test("what a task made is sent to the chat it came from, and no path of this machine is said", async () => {
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  const task = await planned(api, runner);
+  const folder = join(settings.workspace_root, folderId(task));
+  mkdirSync(join(folder, "face"), { recursive: true });
+  writeFileSync(join(folder, "face.zip"), "zip");
+  writeFileSync(join(folder, "face", "README.md"), "readme");
+  const run = api.db.getRun(task.id)!;
+  run.status = "succeeded";
+  run.final_result = `已打包：[下载 face.zip](${join(folder, "face.zip")})。按 [README](${join(folder, "face", "README.md")}) 安装；日志在 ${join(folder, "run.log")}。别处的 [x](/etc/passwd)`;
+  api.db.saveRun(run);
+  const events: any[] = [];
+  runner.notify = (_id, event) => events.push(event);
+  api.automations.taskEnded(task.id, "run.succeeded");
+  const [event] = events;
+  assert.equal(event.files.length, 2);
+  assert.ok(event.files.every((path: string) => path.startsWith("outbox/") && existsSync(join(packages.dataFolder("fake-bot"), path))));
+  assert.ok(!event.text.includes(settings.workspace_root) && !event.text.includes("/etc/passwd") && event.text.includes("face.zip"));
+});
+
+test("a task takes the files of the last turns, not every file the chat ever had", async () => {
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  triaging(api, '{"kind": "chat"}', ["好的。", "好的。", ASK_FOR_WORK]);
+  await message(api, runner, { conversation: "c1", text: "看看", attachments: [files.save("old.png", PNG)] });
+  for (const text of ["一", "二", "三", "四"]) await message(api, runner, { conversation: "c1", text });
+  triaging(api, '{"kind": "chat"}', [ASK_FOR_WORK]);
+  await message(api, runner, { conversation: "c1", text: "照这个做", attachments: [files.save("new.png", PNG)] });
+  assert.deepEqual(tasks(api).at(-1)!.attachments.map((item) => item.name), ["new.png"]);
 });

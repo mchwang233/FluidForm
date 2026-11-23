@@ -836,12 +836,13 @@ export function buildApp(api: Api): FastifyInstance {
     }
   };
 
-  app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/confirm", async (request) => {
-    const body = parse(ConfirmTask, request.body);
-    const run = api.getTask(request.params.run_id);
+  // Start a task waiting for confirmation (or go on with a paused one): the page's button, and "开始"
+  // said in a chat app by who asked for it (automations.ts).
+  const confirmTask = async (runId: string, given: number | null = null) => {
+    const run = api.getTask(runId);
     notWaiting(run);
     if (run.status !== "awaiting_confirmation" && run.status !== "paused") throw new HttpError(409, `Cannot confirm task in ${pyStatus(run.status)} status`);
-    const budgetUsd = body.budget_usd ?? run.budget_usd;
+    const budgetUsd = given ?? run.budget_usd;
     const configured = configuredForRun(run);
     const catalog = Object.values(api.models);
     const needsVision = run.attachments.some((item) => item.kind === "image");
@@ -873,6 +874,11 @@ export function buildApp(api: Api): FastifyInstance {
     db.addEvent(event(run.id, "run.confirmed", { budget_usd: run.budget_usd, reopened }));
     executor().start(run.id);
     return run;
+  };
+  api.confirmTask = (runId) => confirmTask(runId);
+  app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/confirm", async (request) => {
+    const body = parse(ConfirmTask, request.body);
+    return confirmTask(request.params.run_id, body.budget_usd);
   });
 
   // Stop starting new steps; steps already running finish and keep their results.

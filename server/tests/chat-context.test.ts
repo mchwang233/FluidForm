@@ -217,3 +217,10 @@ test("the words a group is framed with do not make every message work", () => {
   assert.equal(pkg.effortFor({ text: `${people}你好`, files: 0 }), "low");
   assert.equal(pkg.effortFor({ text: `${people}帮我写一段代码`, files: 0 }), "high");
 });
+
+test("it is told, with each message, which model answers and how hard it thinks; and how long pictures are kept", async () => {
+  const { body } = await asked([], "强度是多少", { attachments: [picture()], supervisor: { calls: 1 } });
+  assert.match(body.at(-1)!.content as any as string, /deepseek:deepseek-flash.*思考强度 (low|high)/s);
+  const withPicture = await asked([said("user", "（见附件）", { attachments: [picture()] }), said("lead", "苍鹭")], "能记多久", { supervisor: { calls: 1 } });
+  assert.match(withPicture.body[0].content, /8 turns/);
+});

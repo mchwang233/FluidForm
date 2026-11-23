@@ -49,7 +49,12 @@ export const CHAT_ROLE = "You are FluidForm's assistant, talking with people. Th
   + "last message says, directly and naturally, in Chinese unless they write in another language (a word like hello or ok is no reason to switch). What was "
   + "talked about earlier is background: do not bring an earlier subject up again unless they do, and "
   + "do not end each answer with a menu of what you could do.\n\n";
+// Pictures sent in the last turns are shown again each turn, where they were sent: this many, the latest.
+export const PICTURES_SHOWN = 2;
+export const PICTURE_TURNS = 8;
 export const PICTURES_GUIDE = "Pictures: you see the pictures in this conversation yourself, as they are shown to you. "
+  + `A picture stays shown for the next ${PICTURE_TURNS} turns of this conversation (the latest ${PICTURES_SHOWN}); a new `
+  + "conversation (after two idle hours, at 4:00, or on /new) has none until they send it again. "
   + "The file tool Read cannot show pictures: do not use it to look at one, and what it says of a picture is no sign that "
   + "you cannot see. If an earlier answer here said you cannot see pictures, it was wrong. Of a picture sent without words, "
   + "say in a sentence or two what it shows: only what is visible, no guess at the story behind it, and no question at the end.\n\n";
@@ -62,16 +67,16 @@ export const MAX_CHAT_HANDOVER_CHARS = 20_000;
 
 // What a chat an automation brings messages to is told about work.
 export const AUTOMATION_WORK = "Work: when they want real work done (files changed, a program built, an image or a document "
-  + "made, research written up), FluidForm plans it as a task that waits for its owner's "
-  + "confirmation, then reports here how it went. When you know enough to describe it, end your "
+  + "made, research written up), FluidForm plans it as a task that starts once they reply 开始 "
+  + "(it waits until then), then reports here how it went. When you know enough to describe it, end your "
   + "answer with one line:\n"
   + 'TASK: {"request": "the work, complete and self-contained"}\n'
   + "The request is all the planner sees besides this conversation: write in it everything it "
   + "depends on that was said or sent here (what, for whom, style, constraints, which pictures). In "
   + "your answer, say in a sentence what you are having planned. If it is unclear what they want, "
-  + "ask first and write no TASK line; never write one for what you can answer yourself. Starting such "
-  + "a task is yours to do: never tell them to open one in FluidForm's pages. Its plan is announced by "
-  + "FluidForm itself, under your answer: do not write that a plan is made unless you asked for it.\n\n";
+  + "ask first and write no TASK line; never write one for what you can answer yourself. Asking for such "
+  + "a task is yours to do: never tell them to open one in FluidForm's pages. FluidForm itself says under "
+  + "your answer that the plan is made and how to start it: do not say so yourself, and never say it started.\n\n";
 
 export const MEMORY_GUIDE =
   "Remembering: when someone tells you something lasting about themselves or how they want to be "
@@ -193,9 +198,6 @@ export const KEPT_MAX = 24_000;
 export const SENT_MAX = 40_000;
 export const MAX_TURN_CHARS = 6000;
 export const MAX_SUMMARY_CHARS = 2000;
-// Pictures sent in the last turns are shown again each turn, where they were sent: this many, the latest.
-export const PICTURES_SHOWN = 2;
-export const PICTURE_TURNS = 8;
 // A picture this many turns back is still what "这是什么" is about.
 export const PICTURE_TALK_TURNS = 3;
 
@@ -292,7 +294,10 @@ export function dialogue(ctx, memory, now, offset = 0) {
       + "they can do is not about you.\n\n" : "";
   const project = ctx.chat.project_dir && ctx.model?.channel !== "cli" ? `The user's project folder is ${ctx.chat.project_dir}; its files are not visible to you here.\n\n` : "";
   const seeing = sees && (shown.size || ctx.chat.asked?.pictures) ? PICTURES_GUIDE : "";
-  return { system: (role(ctx) + others + project + seeing).trimEnd(), messages, effort: effortFor(ctx.chat.asked, Math.min(Infinity, ...shown.values())), now: `（现在：${clock(now, offset)}）` };
+  const effort = effortFor(ctx.chat.asked, Math.min(Infinity, ...shown.values()));
+  // What it is asked about itself it is told here, with this message (the system prompt stays as it is).
+  return { system: (role(ctx) + others + project + seeing).trimEnd(), messages, effort,
+    now: `（现在：${clock(now, offset)}；这条回答：${ctx.model?.id ?? "?"}，思考强度 ${effort}）` };
 }
 
 // Work, or something to think about, rather than talk.

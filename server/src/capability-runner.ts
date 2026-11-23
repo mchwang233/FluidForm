@@ -10,7 +10,7 @@
 //   folder, which FluidForm takes (copies into its attachments, then removes); with ``"addressed": false``
 //   when it was not called on (a group message without @ it), and ``"sender"`` naming who said it, and
 //   ``"people"`` the names of the group's people (so an answer can @ them: the package turns "@name"
-//   into its app's mention); a person's messages are turns (chat-turns.ts): one answered by taking the
+//   into its app's mention), and ``"sender_id"`` who that is to the app (who may start what they asked for); a person's messages are turns (chat-turns.ts): one answered by taking the
 //   next along gets ``{"re": id, "reply": null, "superseded": true}``; /stop, /new and /status are the
 //   conversation's commands;
 // - it reads ``{"re": id, "reply": ..., "files": [...]}``, the answer and the files to send with it
@@ -92,6 +92,8 @@ export type Asked = {
   // only if the message is meant for it; ``sender`` names who said it there.
   addressed: boolean;
   sender: string;
+  // Who said it, as the app knows them (an id, not a name): who may start the task they asked for.
+  sender_id?: string;
   // In a group: its people's names, the ones an answer may @ (the package marks them).
   people: string[];
   // Aborted when it is stopped, or taken along by the next message (chat-turns.ts).
@@ -482,6 +484,7 @@ export class Runner {
       const question = asked({ conversation, text: turn.said.text,
         origin: payload.origin && typeof payload.origin === "object" && !Array.isArray(payload.origin) ? payload.origin as Record<string, unknown> : {},
         attachments: [...turn.said.attachments], addressed: turn.said.addressed, sender, people: groupPeople(payload.people),
+        sender_id: [...String(payload.sender_id || "")].slice(0, 100).join(""),
         signal: turn.signal, answered: () => turn.end(),
         on_text: (shown) => {
           if (turn.stopped) return;

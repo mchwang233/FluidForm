@@ -197,6 +197,8 @@ export class Api {
   /** The service packages: capabilities FluidForm itself uses (services.ts). */
   readonly services = new ServiceHost();
   /** What tests replace. */
+  /** Starts a task waiting for confirmation, as the page's button does (set by the app). */
+  confirmTask: ((runId: string) => Promise<ExecutionRun>) | null = null;
   readonly deps = { autonomousPlan, setProviderKey, classify: triage.classify, quick, addressed: triage.addressed };
   // Tasks being planned again with the user's choices (one replanning at a time per task).
   readonly replanning = new Set<string>();

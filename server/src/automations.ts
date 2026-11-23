@@ -12,8 +12,9 @@ import * as packages from "./capability-packages.js";
 import { type Asked, type Automation, CALLED_ONLY, type Handled, keepHeard, MAX_HEARD_FILES, Runner } from "./capability-runner.js";
 import { settings } from "./config.js";
 import { log } from "./log.js";
-import { type Capability, type ExecutionRun, folderId, LeadMessageSchema, type ModelProfile } from "./models.js";
+import { type Capability, EventSchema, type ExecutionRun, folderId, LeadMessageSchema, type ModelProfile } from "./models.js";
 import { briefWriter } from "./routing.js";
+import { pyStr } from "./py.js";
 import * as streaming from "./streaming.js";
 import * as supervisor from "./supervisor.js";
 import { Mutex, type Task } from "./tasks.js";
@@ -23,6 +24,13 @@ type Json = Record<string, any>;
 // How a task asked for through an automation ended, as the automation is told.
 export const TASK_ENDED: Record<string, string> = { "run.succeeded": "做完了", "run.incomplete": "只做完了一部分", "run.failed": "没能做完",
   "run.cancelled": "已取消" };
+// What starts, or calls off, the task waiting in a conversation, said alone by who asked for it.
+export const START_TASK = /^(开始|开工|确认|\/start)$/i;
+export const CANCEL_TASK = /^(取消|不做了|\/cancel)$/i;
+// The files of a task: those sent in this many of the chat's last messages from people.
+export const TASK_FILE_TURNS = 3;
+// What of a task's own folder its end sends to the chat app: at most this many files its result names.
+export const MAX_TASK_FILES = 5;
 // How long after its answer a reply from the same person is taken as a reply to it.
 export const FOLLOW_UP_SECONDS = 300;
 // Files an automation chat's answer may send (SEND lines): how many, each at most the attachment size.
@@ -135,6 +143,11 @@ export class CapabilityAutomations {
       return [String(alone.reply), judged];
     }
     signal?.throwIfAborted();
+    // "开始" or "取消" said by who asked for the task waiting here: done at once, without the model.
+    if (asked.conversation && (START_TASK.test(asked.text.trim()) || CANCEL_TASK.test(asked.text.trim()))) {
+      const done = await this.decideTask(capability, asked);
+      if (done !== null) return [done, judged];
+    }
     if (earlier.length) delete heard[asked.conversation];
     if (asked.conversation) delete notesByConversation[asked.conversation];
     if (filesBefore.length) {
@@ -297,6 +310,81 @@ export class CapabilityAutomations {
     return [text, cost, sent];
   }
 
+  /** "开始" or "取消" for the task waiting in this conversation: what to answer, or null when none
+   *  waits (it is then said to the chat as anything else). Only who asked for it decides; in a private
+   *  chat that is the one person there. */
+  private async decideTask(capability: Capability, asked: Asked): Promise<string | null> {
+    const waiting = this.api.db.listRuns().filter((run) => run.kind !== "chat" && run.status === "awaiting_confirmation"
+      && run.origin?.capability === capability.id && run.origin?.conversation === asked.conversation)
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    const group = (asked.origin.chat_type ?? waiting[0]?.origin?.chat_type) === "group";
+    const mine = waiting.filter((run) => (run.origin?.requester ? run.origin.requester === asked.sender_id : !group));
+    if (!waiting.length) return null;
+    const task = mine[0];
+    if (!task) {
+      const who = waiting[0].origin?.requester_name;
+      return `「${taskName(waiting[0])}」是${who ? ` ${who} ` : "别人"}让排的，要由${who ? "他" : "那个人"}来开始或取消。`;
+    }
+    let said: string;
+    if (START_TASK.test(asked.text.trim())) {
+      if (!this.api.confirmTask) throw new Error("FluidForm 现在不能开始任务");
+      await this.api.confirmTask(task.id);
+      said = `「${taskName(task)}」开工了，做完在这里告诉你。`;
+    } else {
+      await this.api.executor.locked(task.id, () => {
+        const latest = this.api.getTask(task.id);
+        latest.status = "cancelled";
+        this.api.db.saveRun(latest);
+      });
+      this.api.db.addEvent(EventSchema.parse({ run_id: task.id, kind: "run.cancelled", data: {} }));
+      said = `好，「${taskName(task)}」不做了。`;
+    }
+    this.automationNote(capability, `${asked.sender || "对方"}${START_TASK.test(asked.text.trim()) ? "开始了" : "取消了"}任务「${taskName(task)}」`);
+    // The chat knows of it, as of anything said there.
+    const chat = task.origin?.chat_run ? this.api.db.getRun(task.origin.chat_run) : null;
+    if (chat?.kind === "chat") {
+      await this.api.executor.locked(chat.id, () => {
+        const latest = this.api.getTask(chat.id);
+        latest.lead_messages.push(LeadMessageSchema.parse({ role: "user", text: asked.text.trim() }), LeadMessageSchema.parse({ role: "lead", text: said }));
+        this.api.db.saveRun(latest);
+      });
+    }
+    return said;
+  }
+
+  private automationNote(capability: Capability, line: string): void {
+    this.runner.get(capability.id).note(line);
+  }
+
+  /** The files of ``run``'s own folder its result names, copied for its automation to send. */
+  deliverables(run: ExecutionRun): string[] {
+    const capabilityId = pyStr(run.origin?.capability);
+    const folder = join(settings.workspace_root, folderId(run));
+    const named = [...new Set(pathsIn(run.final_result || ""))];
+    const outbox = join(packages.dataFolder(capabilityId), "outbox");
+    const sent: string[] = [];
+    let real: string;
+    try {
+      real = realpathSync(folder);
+    } catch {
+      return sent;
+    }
+    for (const path of named) {
+      if (sent.length >= MAX_TASK_FILES) break;
+      try {
+        if (lstatSync(path).isSymbolicLink() || !realpathSync(path).startsWith(real + sep) || !statSync(path).isFile()) continue;
+        if (statSync(path).size > files.MAX_ATTACHMENT_BYTES) continue;
+        mkdirSync(outbox, { recursive: true });
+        const target = join(outbox, `${randomUUID().replaceAll("-", "").slice(0, 8)}-${files.safeName(basename(path))}`);
+        copyFileSync(path, target);
+        sent.push(relative(join(outbox, ".."), target));
+      } catch {
+        // gone, or not one: named only
+      }
+    }
+    return sent;
+  }
+
   /** A stopped turn in its chat's records: one the next message took along leaves them (that message
    *  says it all); one the person stopped says so, and is no question still to answer. */
   private async withdraw(chatId: string, replyId: string, superseded: boolean): Promise<void> {
@@ -369,12 +457,14 @@ export class CapabilityAutomations {
     else {
       const context = "这个任务来自一段对话，对话内容如下（供参考，以需求为准）：\n" + await chats.transcript(chat);
       try {
-        const task = await this.api.newTask(CreateTask.parse({ prompt: request, attachments: chat.attachments.map((item) => item.id) }), null, context);
+        const task = await this.api.newTask(CreateTask.parse({ prompt: request, attachments: recentFiles(chat) }), null, context);
         const latest = this.api.getTask(task.id);
-        latest.origin = { ...origin, conversation: asked.conversation, chat_run: chat.id };
+        latest.origin = { ...origin, conversation: asked.conversation, chat_run: chat.id,
+          ...(asked.sender_id ? { requester: asked.sender_id } : {}), ...(asked.sender ? { requester_name: asked.sender } : {}) };
         latest.auto_routed = true;
         this.api.db.saveRun(latest);
-        shown = `${shown}\n\n我在 FluidForm 里排好了计划「${taskName(latest)}」，等主人确认后开工，做完在这里告诉你。`.trim();
+        const group = (origin.chat_type ?? "") === "group";
+        shown = `${shown}\n\n（计划「${taskName(latest)}」排好了：${group ? "@我 " : ""}回复「开始」就开工，回复「取消」就不做了；做完在这里告诉你。）`.trim();
         automation.note(`排了任务「${taskName(latest)}」`);
       } catch (error) {
         // The answer still goes out, saying planning failed.
@@ -393,8 +483,10 @@ export class CapabilityAutomations {
     const run = db.getRun(runId);
     if (!run || run.kind === "chat" || !run.origin?.capability) return;
     let text = `「${taskName(run)}」${TASK_ENDED[kind] ?? "结束了"}。`;
-    const body = (run.final_result || run.error || "").trim();
+    const automationFiles = this.deliverables(run);
+    const body = withoutPaths((run.final_result || run.error || "").trim());
     if (body) text += "\n\n" + body;
+    if (automationFiles.length) text += `\n\n（发了：${automationFiles.map((path) => basename(path).split("-").slice(1).join("-")).join("、")}）`;
     // Its conversation hears it too: the chat shows it, and its model is told with the next message.
     const conversation = run.origin.conversation;
     if (conversation) {
@@ -408,8 +500,35 @@ export class CapabilityAutomations {
       chat.lead_messages.push(LeadMessageSchema.parse({ role: "lead", text }));
       db.saveRun(chat);
     }
-    this.runner.notify(run.origin.capability, { event: "task_ended", origin: run.origin, outcome: kind, title: taskName(run), text });
+    this.runner.notify(run.origin.capability, { event: "task_ended", origin: run.origin, outcome: kind, title: taskName(run), text,
+      ...(automationFiles.length ? { files: automationFiles } : {}) });
   }
+}
+
+// Absolute paths in a result: a Markdown link's target, or one written out.
+const LINKED = /\]\((\/[^)\s]+)\)/g;
+const WRITTEN = /(?<![\w\]/(])(\/(?:[\w.@+-]+\/)+[\w.@+-]+)/g;
+
+function pathsIn(text: string): string[] {
+  return [...text.matchAll(LINKED), ...text.matchAll(WRITTEN)].map((found) => found[1]);
+}
+
+/** A result as people in a chat app read it: no path of this machine, a file by its name. */
+export function withoutPaths(text: string): string {
+  return text.replace(/\[([^\]]*)\]\((\/[^)\s]+)\)/g, (_all, label: string, path: string) => (label.includes(basename(path)) ? label : `${label}（${basename(path)}）`))
+    .replace(WRITTEN, (path: string) => basename(path));
+}
+
+/** A chat's files of its last messages from people: what a task it asks for is about. */
+function recentFiles(chat: ExecutionRun): string[] {
+  const asked = chat.lead_messages.filter((item) => item.role === "user");
+  const recent = new Set(asked.slice(-TASK_FILE_TURNS).map((item) => item.id));
+  const placed = new Set(chat.lead_messages.flatMap((item) => item.attachments.map((file) => file.id)));
+  const first = asked[0]?.id;
+  const ids = chat.lead_messages.filter((item) => recent.has(item.id)).flatMap((item) => item.attachments.map((file) => file.id));
+  // A chat's first files are kept on the chat, not on its first message.
+  if (first && recent.has(first)) ids.push(...chat.attachments.filter((file) => !placed.has(file.id)).map((file) => file.id));
+  return [...new Set(ids)];
 }
 
 /** Waits for ``task``, or until ``signal`` is aborted. */
