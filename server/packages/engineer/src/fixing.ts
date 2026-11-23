@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { settings } from "../../../src/config.js";
 import { parse as parseDiagnosis } from "../../../src/diagnosis.js";
 import type { Diagnosis, ExecutionRun, TaskNode } from "../../../src/models.js";
-import { RepairError, repairGuide } from "../../../src/platform-repair.js";
-import { pyDumps, pyRound, tail } from "../../../src/py.js";
+import { failureOutput, RepairError, repairGuide } from "../../../src/platform-repair.js";
+import { pyDumps, pyRound } from "../../../src/py.js";
 import { MAX_ENVIRONMENT_FIXES } from "../../../src/recovery.js";
 import type { SelfRepair } from "../../../src/self-repair.js";
 
@@ -81,7 +81,7 @@ export async function fixPlatform(this: SelfRepair, run: ExecutionRun, diagnosis
         break;
       } catch (error) {
         if (!(error instanceof RepairError) || attempt + 1 === settings.platform_repair_attempts) throw error;
-        feedback = `\nThe independent check failed. Fix it and recheck:\n${tail(error.message, 6000)}`;
+        feedback = `\nThe independent check failed. Fix it and recheck:\n${failureOutput(error.message, 6000)}`;
       }
     }
     let report = parseDiagnosis(result.text)[0];

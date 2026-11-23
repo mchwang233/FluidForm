@@ -15,7 +15,7 @@ import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as worker from "../src/repair-worker.js";
 import { conftest } from "./helpers/conftest.js";
 import { decision, leadDatabase, MODELS, Team } from "./helpers/lead-run.js";
-import { API, editCandidate, passingCheck, sourceCheckout } from "./helpers/source-checkout.js";
+import { API, editCandidate, passingCheck, prepareWithoutService, sourceCheckout } from "./helpers/source-checkout.js";
 
 const { folder } = conftest();
 const PLAN = "- 目标: 加一个导出按钮\n- 改动: frontend/x.tsx\n- 测试: 导出测试\n- 风险: 无\nSTATUS: PLAN";
@@ -135,6 +135,32 @@ test("an engineer's call gets the long regression budget", async () => {
   await idle(executor);
   assert.ok(providers.options.length && providers.options.every((item) => item.cli_timeout === settings.repair_call_minutes * 60));
   assert.ok(settings.repair_call_minutes * 60 > 2143.923);
+});
+
+test("an engineer retry keeps the failed test and its error from a long check report", async () => {
+  settings.platform_repair_attempts = 2;
+  const output = "not ok 1 - bot reply regression\n  ---\n  error: 'expected a reply, got none'\n  ...\n"
+    + "ok 2 - a later passing check\n".repeat(2000) + "# fail 1\n";
+  let checked = 0;
+  platform.SourceRepairs.prototype.checkCommand = async (command, cwd) => {
+    if (command.join(" ") === "npm test" && cwd === join(providers.prompts.at(-1)![1], "server") && checked++ === 0) {
+      return { returncode: 1, output: platform.failureOutput(output) };
+    }
+    return passingCheck();
+  };
+  const providers = new Engineer();
+  const executor = build(providers);
+  prepareWithoutService(executor.platform as platform.SourceRepairs);
+  const job = executor.engineerRequest("修复：机器人没有回复", "repair");
+  await idle(executor);
+  assert.equal(providers.prompts.length, 2);
+  const feedback = providers.prompts[1][0].split("The independent check failed. Fix it and recheck:\n")[1].split("\nBegin your reply")[0];
+  assert.match(feedback, /not ok 1 - bot reply regression/);
+  assert.match(feedback, /expected a reply, got none/);
+  assert.match(feedback, /# fail 1/);
+  assert.ok(feedback.trim().length <= 6000);
+  assert.equal(providers.prompts[0][1], providers.prompts[1][1], "retry uses the existing copy");
+  assert.equal(executor.db.getEngineerJob(job.id)!.status, "applying");
 });
 
 test("the user can send a plan back, and give a job up", async () => {

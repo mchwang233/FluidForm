@@ -1,9 +1,10 @@
 // test_platform_repair's source_checkout: a FluidForm checkout laid out as after the switch
 // (server/ and frontend/, regression tests in server/tests), with data, secrets and tasks that a
 // repair must not touch, and the service manager saying this process is its service.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as worker from "../../src/repair-worker.js";
+import type { SourceRepairs } from "../../src/platform-repair.js";
 
 export const API = "server/src/api.ts";
 
@@ -31,3 +32,23 @@ export function editCandidate(job: { folder: string }): void {
 }
 
 export const passingCheck = async () => ({ returncode: 0, output: "checks passed" });
+
+/** A prepared copy for retry tests; no service manager or subprocess is needed to test feedback. */
+export function prepareWithoutService(repairs: SourceRepairs): void {
+  repairs.prepare = async (runId, diagnosisId, { allowNetwork = false } = {}) => {
+    const id = "a".repeat(32);
+    const folder = join(repairs.directory, id);
+    const before = worker.sourceFiles(repairs.root!);
+    for (const name of Object.keys(before)) {
+      for (const part of ["before", "source"]) {
+        const target = join(folder, part, name);
+        mkdirSync(dirname(target), { recursive: true });
+        copyFileSync(join(repairs.root!, name), target);
+      }
+    }
+    const job = { id, folder, root: repairs.root, status: "editing", before, files: [], checks: [],
+      run_id: runId, diagnosis_id: diagnosisId, allow_network: allowNetwork };
+    repairs.save(job);
+    return job;
+  };
+}

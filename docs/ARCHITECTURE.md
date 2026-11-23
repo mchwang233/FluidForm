@@ -186,6 +186,13 @@ Restoring automatic chooses afresh, while unchanged automatic chats retain their
 Unavailable selections/call failures use the normal fallback and disclose the actual replying
 model; classification and task planning/execution keep their existing selection policies.
 
+The DingTalk text bot is a shipped automation in `server/packages/dingtalk-bot/`
+(`bot.py`, `transport.py`; `docs/design/dingtalk-bot.md`). It uses Stream callbacks and the
+capability CONNECT proxy; the existing runner and chat API own conversations, commands and
+task confirmation. Tokens/webhooks stay in memory; delayed results use nonsecret origin
+routing and the official send APIs. Installing this package needs no platform restart.
+Its offline check is `check.py`; integration tests are `server/tests/dingtalk-bot.test.ts`.
+
 ## Executor
 
 `Executor` (`executor.ts`) mixes in `Reviewing` (`review.ts`), `Leading` (`leading.ts`), `Diagnosing`

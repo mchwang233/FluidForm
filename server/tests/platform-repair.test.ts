@@ -16,7 +16,7 @@ import * as platform from "../src/platform-repair.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as worker from "../src/repair-worker.js";
 import { conftest } from "./helpers/conftest.js";
-import { API, editCandidate, passingCheck, sourceCheckout } from "./helpers/source-checkout.js";
+import { API, editCandidate, passingCheck, prepareWithoutService, sourceCheckout } from "./helpers/source-checkout.js";
 
 const { folder } = conftest();
 const savedWorker = { ...worker.deps };
@@ -290,6 +290,47 @@ test("a platform diagnosis edits a copy, and only then schedules applying it", a
     // The database's records are checked too: five checks.
     assert.deepEqual(permissions, Array(5).fill(networkAfter));
     assert.ok(readFileSync(join(checkout, API), "utf8").includes("broken"));
+  }
+});
+
+test("a task repair retry keeps the failed test and its error from a long check report", async () => {
+  Object.assign(settings, { platform_root: checkout, platform_self_repair: true, platform_repair_attempts: 2 });
+  const db = new Database(join(folder(), "feedback.db"));
+  try {
+    oneNodeRun(db);
+    const run = db.getRun("r")!;
+    const diagnosis = DiagnosisSchema.parse({ id: "d", trigger: "auto", node_id: "n" });
+    run.diagnoses.push(diagnosis);
+    db.saveRun(run);
+    const executor = new Executor(db, providers, MODELS);
+    prepareWithoutService(executor.platform as platform.SourceRepairs);
+    const prompts: string[] = [];
+    executor.diagnoseWith = async (_run, _diagnosis, _node, prompt, workspace) => {
+      prompts.push(prompt);
+      editCandidate({ folder: dirname(workspace) });
+      return [new ProviderResult("已修复。\nSTATUS: FIXED", 0, 0), "x:api", 0];
+    };
+    const output = "not ok 1 - task reply regression\n  ---\n  error: 'expected a reply, got none'\n  ...\n"
+      + "ok 2 - a later passing check\n".repeat(2000) + "# fail 1\n";
+    let checked = 0;
+    (executor.platform as platform.SourceRepairs).checkCommand = async (command, cwd, source) => {
+      if (command.join(" ") === "npm test" && cwd === join(source, "server") && checked++ === 0) {
+        return { returncode: 1, output: platform.failureOutput(output) };
+      }
+      return passing();
+    };
+    executor.activatePlatform = async () => undefined;
+    await executor.fixPlatform(run, diagnosis, run.plan.nodes[0], "回复丢失");
+    assert.equal(prompts.length, 2);
+    const feedback = prompts[1].split("The independent check failed. Fix it and recheck:\n")[1];
+    assert.match(feedback, /not ok 1 - task reply regression/);
+    assert.match(feedback, /expected a reply, got none/);
+    assert.match(feedback, /# fail 1/);
+    assert.ok(feedback.length <= 6000);
+    assert.ok(executor.platformPending);
+    await executor.maintenanceTask!.settled();
+  } finally {
+    db.close();
   }
 });
 

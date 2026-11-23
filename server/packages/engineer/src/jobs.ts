@@ -4,8 +4,8 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { settings } from "../../../src/config.js";
 import { EngineerMessageSchema, type EngineerJob } from "../../../src/models.js";
-import { COMPONENT_GUIDES, RepairError, REPAIR_GUIDES, repairGuide } from "../../../src/platform-repair.js";
-import { head, tail } from "../../../src/py.js";
+import { COMPONENT_GUIDES, failureOutput, RepairError, REPAIR_GUIDES, repairGuide } from "../../../src/platform-repair.js";
+import { head } from "../../../src/py.js";
 import { sleep } from "../../../src/tasks.js";
 import { plainLines, readReply, type Engineering } from "../../../src/engineer.js";
 
@@ -132,7 +132,7 @@ export async function engineerEdit(this: Engineering, job: EngineerJob): Promise
       break;
     } catch (error) {
       if (!(error instanceof RepairError) || attempt + 1 === settings.platform_repair_attempts) throw error;
-      feedback = `\nThe independent check failed. Fix it and recheck:\n${tail(error.message, 6000)}\n`;
+      feedback = `\nThe independent check failed. Fix it and recheck:\n${failureOutput(error.message, 6000)}\n`;
       job.status = "editing";
       this.engineerSave(job);
     }
