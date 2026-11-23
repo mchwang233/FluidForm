@@ -8,6 +8,7 @@ import * as extensions from "./extensions.js";
 import { current } from "./provided.js";
 import { migrate } from "./rename.js";
 import { hydrateProviderKeys } from "./secrets.js";
+import { stopOn } from "./shutdown.js";
 
 const { values } = parseArgs({ options: { host: { type: "string", default: "127.0.0.1" }, port: { type: "string", default: "8000" } } });
 
@@ -23,8 +24,4 @@ app.addHook("onClose", () => api.close());
 api.start();
 await app.listen({ host: values.host, port: Number(values.port) });
 log.info(`FluidForm API on http://${values.host}:${values.port}`);
-for (const signal of ["SIGTERM", "SIGINT"] as const) {
-  process.once(signal, () => {
-    void app.close().finally(() => process.exit(0));
-  });
-}
+stopOn(() => app.close());

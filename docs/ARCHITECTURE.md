@@ -345,7 +345,7 @@ its records still load. `src/model-schemas.ts` (the records) and
 killable child, `keyring-worker.ts`). The API: `api.ts` (what the routes share: database, the one
 model catalog, providers, executor, planning a task, starting a chat, the event stream; `api.deps`
 for tests), `automations.ts` (what a message to an automation package becomes), `app.ts` (Fastify
-routes, request checks as FastAPI makes them, the local-only guard); `main.ts` starts them.
+routes, request checks as FastAPI makes them, the local-only guard); `main.ts` starts them, and `shutdown.ts` stops them in at most 10 s (closing waits for background work).
 Modules are named as the Python ones were, with dashes (`cli_channels` → `src/cli-channels.ts`);
 `py.ts` reproduces Python's behaviour where stored records and old outputs need it (regexes,
 `round`, `json.dumps`, `shlex`, ContextVar). Model calls (`providers.ts`, `cli-channels.ts`) are

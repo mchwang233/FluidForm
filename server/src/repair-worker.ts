@@ -25,6 +25,9 @@ export const BUILT_DIRS = new Set(["server/packages/web/site"]);
 export const MAX_SOURCE_FILES = 5000;
 export const HEALTH_SECONDS = 60;
 export const BUILD_SECONDS = 600;
+// How long a restart may take: longer than systemd waits for the old process before killing it (90 s by
+// default), so a slow stop is a slow restart, not a failed repair.
+export const RESTART_SECONDS = 150;
 
 export class RepairError extends Error {
   constructor(message: string) {
@@ -188,7 +191,7 @@ export async function activate(jobPath: string): Promise<void> {
     applied = true;
     installFiles(job);
     build(job);
-    deps.run(["systemctl", "--user", "restart", job.unit], { timeout: 90 });
+    deps.run(["systemctl", "--user", "restart", job.unit], { timeout: RESTART_SECONDS });
     deps.waitHealthy(job);
     job.status = "activated";
   } catch (error) {
@@ -203,7 +206,7 @@ export async function activate(jobPath: string): Promise<void> {
         }
         installFiles(job, true);
         build(job);
-        deps.run(["systemctl", "--user", "restart", job.unit], { timeout: 90 });
+        deps.run(["systemctl", "--user", "restart", job.unit], { timeout: RESTART_SECONDS });
         deps.waitHealthy(job);
         job.status = "rolled_back";
       } catch (rollback) {

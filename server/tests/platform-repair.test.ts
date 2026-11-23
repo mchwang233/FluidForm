@@ -293,6 +293,21 @@ test("a platform diagnosis edits a copy, and only then schedules applying it", a
   }
 });
 
+test("a repair waits for a restart longer than systemd waits for the old process", async () => {
+  // Regression: the restart timed out at 90 s, exactly when systemd killed the old process that would
+  // not stop, and a good repair (a DingTalk bot) was rolled back.
+  const [repairs, job] = await candidate();
+  job.status = "scheduled";
+  repairs.save(job);
+  const timeouts: number[] = [];
+  worker.deps.run = (args, options) => {
+    if (args[1] === "--user" && args[2] === "restart") timeouts.push(options?.timeout ?? 0);
+  };
+  worker.deps.waitHealthy = () => undefined;
+  await worker.activate(join(job.folder, "job.json"));
+  assert.ok(timeouts.length && timeouts.every((seconds) => seconds > 90 + 30), String(timeouts));
+});
+
 test("a restart resumes only the held runs with budget left", () => {
   const db = new Database(join(folder(), "test.db"));
   oneNodeRun(db);
