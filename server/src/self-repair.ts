@@ -26,7 +26,7 @@ export abstract class SelfRepair extends Diagnosing {
   abstract recordPlatformRepair(run: ExecutionRun, diagnosis: Diagnosis, node: TaskNode | null, problem: string, copy: RepairJob): EngineerJob;
   abstract engineerSave(job: EngineerJob): void;
   abstract engineerEnd(job: EngineerJob): void;
-  abstract engineerFinished(record: RepairJob): void;
+  abstract engineerFinished(record: RepairJob, applied?: string): void;
   abstract engineerKick(): void;
 
   holdForPlatform(run: ExecutionRun, force = false): void {

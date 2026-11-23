@@ -84,6 +84,16 @@ export async function offer(): Promise<Capability[]> {
   return done;
 }
 
+/** ``source`` (server/packages/<id>) as installed now by other means (the platform engineer's change):
+ *  the next start does not install it again, nor switch it on as new. */
+export function mark(source: string): void {
+  const manifest = JSON.parse(readFileSync(join(source, packages.MANIFEST), "utf8"));
+  const given = offered();
+  given[String(manifest.id)] = `${manifest.version ?? ""}#${digest(source)}`;
+  mkdirSync(settings.data_dir, { recursive: true });
+  writeFileSync(store(), JSON.stringify(given, null, 2));
+}
+
 // What FluidForm kept itself before a package took it over, by package: moved into its data folder
 // when it is first installed, so nothing is lost (old records must load).
 export const CARRIED: Record<string, string[]> = { chat: ["memory.json"] };

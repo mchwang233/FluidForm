@@ -437,3 +437,82 @@ test("work a restart cut off goes on from its changes", async () => {
   assert.ok(providers.prompts.at(-1)![0].includes("The copy already has your earlier changes to:"));
   assert.equal(job.status, "ready");
 });
+
+/** Adds a capability package (and its test and doc), touching nothing that runs in FluidForm. */
+class PackageEngineer extends Engineer {
+  constructor(readonly kind = "automation", readonly also: string | null = null) {
+    super();
+  }
+
+  override async complete(modelId: string, prompt: string, options: CompleteOptions = {}): Promise<ProviderResult> {
+    if (prompt.startsWith("[[fluidform:platform-engineer:plan]]")) return new ProviderResult(PLAN, 0, 0, modelId);
+    const source = join(options.workspace!, "..", "source");
+    mkdirSync(join(source, "server/packages/demo-bot"), { recursive: true });
+    writeFileSync(join(source, "server/packages/demo-bot/capability.json"), JSON.stringify({ id: "demo-bot", kind: this.kind, version: "1.0.0" }));
+    writeFileSync(join(source, "server/packages/demo-bot/bot.py"), "print('hi')\n");
+    writeFileSync(join(source, "server/tests/demo-bot.test.ts"), "// its test\n");
+    writeFileSync(join(source, "docs/ARCHITECTURE.md"), "# FluidForm architecture map\n- demo-bot\n");
+    if (this.also) writeFileSync(join(source, this.also), "export {};\n// changed\n");
+    return new ProviderResult("加了 demo-bot 能力包。\nSTATUS: FIXED", 0, 0, modelId);
+  }
+}
+
+async function readyPackage(providers: Engineer, install: (source: string) => Promise<any>) {
+  const executor = build(providers);
+  const calls: [string, string][] = [];
+  executor.packageHooks = {
+    install: async (source) => { calls.push(["install", source]); return install(source); },
+    remove: async (id) => { calls.push(["remove", id]); },
+  };
+  engineer.deps.commit = () => "abc1234567";
+  let job = executor.engineerRequest("加一个演示机器人");
+  await idle(executor);
+  executor.engineerApprove(job.id);
+  await idle(executor);
+  job = executor.db.getEngineerJob(job.id)!;
+  assert.equal(job.status, "ready");
+  executor.engineerApprove(job.id);
+  await executor.maintenanceTask?.settled();
+  return { executor, calls, job: executor.db.getEngineerJob(job.id)! };
+}
+
+test("adding a capability package installs it, without restarting FluidForm", async () => {
+  // Regression: a DingTalk bot (a package, its test, a doc) was applied by a restart that took the
+  // service down, then timed out and was rolled back.
+  const { executor, calls, job } = await readyPackage(new PackageEngineer(), async () => ({ id: "demo-bot", status: "active" }));
+  assert.equal(activated.length, 0);
+  assert.deepEqual(calls, [["install", join(root, "server/packages/demo-bot")]]);
+  assert.ok(job.status === "applied" && job.messages.some((item) => item.text.includes("服务没有重启")), JSON.stringify(job.messages.at(-1)));
+  assert.ok(existsSync(join(root, "server/packages/demo-bot/bot.py")) && readFileSync(join(root, "docs/ARCHITECTURE.md"), "utf8").includes("demo-bot"));
+  assert.ok(!executor.packageApplying && !executor.platformPending);
+});
+
+test("a package that fails its check is taken out again, and its files put back", async () => {
+  const { calls, job } = await readyPackage(new PackageEngineer(), async () => ({ id: "demo-bot", status: "failed", check_output: "ImportError: no module" }));
+  assert.deepEqual(calls.map(([what]) => what), ["install", "remove"]);
+  assert.ok(job.status === "failed" && job.error!.includes("ImportError"));
+  assert.ok(!existsSync(join(root, "server/packages/demo-bot/bot.py")));
+  assert.equal(readFileSync(join(root, "docs/ARCHITECTURE.md"), "utf8"), "# FluidForm architecture map\n");
+});
+
+test("a change that also touches FluidForm's own code, or an extension, is applied by a restart", async () => {
+  for (const providers of [new PackageEngineer("automation", "server/src/main.ts"), new PackageEngineer("extension")]) {
+    activated = [];
+    const { calls, job } = await readyPackage(providers, async () => ({ status: "active" }));
+    assert.ok(calls.length === 0 && activated.length === 1 && job.status === "applying", job.kind);
+  }
+});
+
+test("which changes are one package's alone", () => {
+  const where = join(folder(), "pkgs");
+  for (const [id, kind] of [["bot", "automation"], ["ext", "extension"], ["site", "interface"]]) {
+    mkdirSync(join(where, "server/packages", id), { recursive: true });
+    writeFileSync(join(where, "server/packages", id, "capability.json"), JSON.stringify({ id, kind }));
+  }
+  assert.equal(engineer.packageOnly(where, ["server/packages/bot/bot.py", "server/tests/bot.test.ts", "docs/x.md", "skills/s/SKILL.md"]), "bot");
+  assert.equal(engineer.packageOnly(where, ["server/packages/bot/bot.py", "server/src/api.ts"]), null);
+  assert.equal(engineer.packageOnly(where, ["server/packages/ext/index.mjs"]), null);
+  assert.equal(engineer.packageOnly(where, ["server/packages/site/site/index.html"]), null);
+  assert.equal(engineer.packageOnly(where, ["docs/x.md"]), null);
+  assert.equal(engineer.packageOnly(where, ["server/packages/bot/a", "server/packages/gone/b"]), null);
+});

@@ -31,6 +31,9 @@ FluidForm gives it to the platform engineer for every component it plans or buil
 1. Read `docs/ARCHITECTURE.md`. Search (`grep -n`) for the names involved and read only those
    line ranges, not whole large files.
 2. Find the closest existing example and follow it:
+   - something people or other apps use through FluidForm (a chat app's bot, an integration with an
+     outside service, a background service): a capability package, as
+     `skills/capability-package/SKILL.md` says. Kept inside its folder, it goes live without a restart;
    - a model or channel: `server/src/catalog.ts` (models), `providers.ts` (API), `cli-channels.ts` (`CLI_SPECS`);
    - a tool for API models: `agent.ts` (`Workspace`, its tool list and sandbox);
    - a skill: a folder under `skills/` with a `SKILL.md`;
@@ -42,7 +45,9 @@ FluidForm gives it to the platform engineer for every component it plans or buil
    in the plan with its source and licence; the user's approval of the plan is their agreement to it. A web UI change names the
    existing piece of UI it follows (see Web UI below). Keep it small enough to
    build and check in one go, within the job's budget: about five files and one layer's worth
-   of new tests. If it is bigger, plan the first useful part and name the rest.
+   of new tests. If it is bigger, plan the first useful part and name the rest. Say in the plan
+   whether it goes live by installing a package (no downtime) or by a restart (FluidForm is offline
+   for a few seconds, tasks wait).
 4. Ask the user (QUESTION / OPTIONS / STATUS: NEEDS_INPUT) only for a choice that is theirs:
    cost, credentials, behaviour they must decide.
 

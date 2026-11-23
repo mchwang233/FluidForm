@@ -3,12 +3,13 @@
 // planning a task, starting a chat, and the answers the console reads.
 import { uses } from "./features.js";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import * as files from "./attachments.js";
 import { BenchmarkCatalog } from "./benchmarks.js";
 import * as capabilities from "./capabilities.js";
+import * as packages from "./capability-packages.js";
 import { CapabilityAutomations } from "./automations.js";
 import { CatalogSync, seedCatalog } from "./catalog-sync.js";
 import * as cliQuota from "./cli-quota.js";
@@ -39,6 +40,7 @@ import * as supervisor from "./supervisor.js";
 import * as bundled from "./bundled.js";
 import { chosenFor, configuredFor } from "./model-choice.js";
 import * as chat from "./chat.js";
+import * as services from "./services.js";
 import { ServiceHost } from "./services.js";
 import { sleep, Task } from "./tasks.js";
 import * as team from "./team.js";
@@ -261,6 +263,32 @@ export class Api {
         if (item.kind === "service" && item.status === "active") this.services.start(item);
       }
     }));
+    // The platform engineer's change to one package is installed without a restart.
+    executor.packageHooks = {
+      install: async (source) => {
+        const id = String(JSON.parse(readFileSync(join(source, packages.MANIFEST), "utf8")).id);
+        const before = capabilities.load(id);
+        await this.automations.runner.stop(id);
+        await this.services.stop(id);
+        const item = await packages.installFolder(source);
+        bundled.mark(source);
+        // Approving the change is the confirmation an upload asks for; new, it is on (as features are).
+        if (item.status !== "failed" && (!before || before.status === "active") && !services.enableProblem(item)) {
+          item.status = "active";
+          capabilities.save(item);
+          if (item.kind === "service" && item.entry) this.services.start(item);
+          else if (item.kind === "automation" && item.entry) this.automations.runner.start(item);
+        }
+        return item;
+      },
+      remove: async (id) => {
+        const item = capabilities.load(id);
+        await this.automations.runner.stop(id);
+        this.automations.runner.forget(id);
+        await this.services.stop(id);
+        if (item?.source === "upload") await packages.uninstall(item);
+      },
+    };
     executor.restorePlatform();
     executor.restoreEngineer();
     executor.restoreLearning();

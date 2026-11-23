@@ -12,7 +12,11 @@ import { settings } from "./config.js";
 import { interaction, OPTIONS_LINES, QUESTION_LINES } from "./diagnosis.js";
 import { nowIso } from "./lax.js";
 import { type Attachment, type Diagnosis, ENGINEER_DONE, ENGINEER_WAITING, type EngineerJob, EngineerJobSchema, EngineerMessageSchema, type ExecutionRun, type TaskNode, isPlatformScope } from "./models.js";
+import type { Capability } from "./models.js";
 import { RepairError, type RepairJob } from "./platform-repair.js";
+import * as worker from "./repair-worker.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ProviderResult, SpendOk } from "./providers.js";
 import { AsyncEvent, fixed, head, pyRegex, pyRound, splitlines, tail } from "./py.js";
 import * as quality from "./quality.js";
@@ -108,7 +112,39 @@ export const deps = { commit: (root: string, files: string[], text: string) => c
 export type EngineerRequestOptions = { runId?: string | null; nodeId?: string | null; decisionId?: string | null; budgetUsd?: number | null;
   improvementId?: string | null; threadId?: string | null; attachments?: Attachment[] };
 
+/** What the platform engineer's change to one capability package is installed with, without a restart
+ *  (set by the API): ``install`` the package in ``source`` (server/packages/<id>) as an upload is, running
+ *  it as it ran before (a new one: on); ``remove`` one installed so. */
+export type PackageHooks = { install(source: string): Promise<Capability>; remove(id: string): Promise<void> };
+
+// What a change may touch besides its package and still be applied without a restart: nothing of it runs
+// in FluidForm's process (docs, skills read when asked, tests).
+const BESIDE_PACKAGE = /^(docs|skills|server\/tests)\//;
+
+/** The one capability package a change (``changed``, paths in the source at ``root``) is about, when
+ *  nothing else it changes runs in FluidForm: then it is installed, not restarted for. Extensions run in
+ *  FluidForm's process and interfaces are built from frontend/: those still restart. */
+export function packageOnly(root: string, changed: string[]): string | null {
+  const ids = new Set<string>();
+  for (const name of changed) {
+    const found = /^server\/packages\/([^/]+)\//.exec(name);
+    if (found) ids.add(found[1]);
+    else if (!BESIDE_PACKAGE.test(name)) return null;
+  }
+  if (ids.size !== 1) return null;
+  const [id] = ids;
+  try {
+    const manifest = JSON.parse(readFileSync(join(root, "server", "packages", id, "capability.json"), "utf8"));
+    return ["extension", "interface"].includes(manifest.kind) ? null : id;
+  } catch {
+    return null; // removed, or no package: a restart decides
+  }
+}
+
 export abstract class Engineering extends SelfRepair {
+  packageHooks: PackageHooks | null = null;
+  // A package change being installed (packageOnly): one at a time, and none while a restart waits.
+  packageApplying: string | null = null;
   abstract syncImprovements(): void;
 
   // --- what the user and the API see ------------------------------------------------------------
@@ -261,7 +297,7 @@ export abstract class Engineering extends SelfRepair {
   engineerKick(): void {
     // Switched off, its work waits.
     if (!uses.engineer()) return;
-    if ((this.engineerTask && !this.engineerTask.done) || this.platformPending) return;
+    if ((this.engineerTask && !this.engineerTask.done) || this.platformPending || this.packageApplying) return;
     const queued = this.db.engineerJobs(200).filter((job) => job.status === "queued").sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
     if (!queued.length) return;
     this.engineerJobId = queued[0].id;
@@ -393,7 +429,7 @@ export abstract class Engineering extends SelfRepair {
 
   /** Apply a checked change by a restart (SelfRepair.activatePlatform). */
   engineerApply(job: EngineerJob): EngineerJob {
-    if (this.platformPending) throw new EngineerError("已有一项平台改动正在等待生效，请等它完成后再应用。");
+    if (this.platformPending || this.packageApplying) throw new EngineerError("已有一项平台改动正在等待生效，请等它完成后再应用。");
     const copy = this.platform.load(job.repair_id);
     if (!copy || copy.status !== "validated") throw new EngineerError("这份改动还没有通过检查，不能应用。");
     if (this.platform.stale(copy)) {
@@ -406,6 +442,15 @@ export abstract class Engineering extends SelfRepair {
       return job;
     }
     Object.assign(copy, { report: job.report || "", model_id: job.model_id, engineer_job_id: job.id });
+    const only = this.packageHooks ? packageOnly(join(copy.folder, "source"), copy.files) : null;
+    if (only) {
+      job.status = "applying";
+      job.messages.push(message({ role: "system", text: `开始生效：只改了能力包 ${only}，直接安装它，不重启服务。` }));
+      this.engineerSave(job);
+      this.packageApplying = copy.id;
+      this.maintenanceTask = new Task(() => this.applyPackage(copy, only));
+      return job;
+    }
     job.status = "applying";
     job.messages.push(message({ role: "system", text: "开始生效：等进行中的模型调用结束后重启服务。" }));
     this.engineerSave(job);
@@ -415,15 +460,49 @@ export abstract class Engineering extends SelfRepair {
     return job;
   }
 
+  /** A change to one capability package: its files written into the source, then the package installed
+   *  from there (packageHooks) and run as before. On failure the files are put back, and the version
+   *  before reinstalled (a new package removed). */
+  async applyPackage(copy: RepairJob, id: string): Promise<void> {
+    const source = join(copy.root, "server", "packages", id);
+    const existed = `server/packages/${id}/capability.json` in (copy.before ?? {});
+    let placed = false;
+    try {
+      if (this.platform.stale(copy)) throw new RepairError("FluidForm 的源码在这期间有了更新，没有应用。");
+      worker.installFiles(copy as worker.Job);
+      placed = true;
+      const installed = await this.packageHooks!.install(source);
+      if (installed.status === "failed") throw new RepairError(`能力包 ${id} 的检查没通过：${tail(installed.check_output || "", 600)}`);
+      copy.status = "activated";
+    } catch (error) {
+      Object.assign(copy, { status: "failed", error: (error as Error)?.message ?? String(error) });
+      if (placed) {
+        try {
+          worker.installFiles(copy as worker.Job, true);
+          if (existed) await this.packageHooks!.install(source);
+          else await this.packageHooks!.remove(id);
+          copy.status = "rolled_back";
+        } catch (rollback) {
+          copy.error += `；回滚：${(rollback as Error)?.message ?? rollback}`;
+        }
+      }
+    } finally {
+      this.platform.save(copy);
+      this.packageApplying = null;
+      this.engineerFinished(copy, `已生效：能力包 ${id} 装好了，服务没有重启。`);
+      this.engineerKick();
+    }
+  }
+
   /** A platform change has been applied or not (SelfRepair.finishPlatform): update the job it belongs
    *  to, and commit an applied change. */
-  engineerFinished(record: RepairJob): void {
+  engineerFinished(record: RepairJob, applied = "已生效，服务健康检查通过。"): void {
     const job = this.db.getEngineerJob(record.engineer_job_id || "");
     if (!job || ENGINEER_DONE.has(job.status)) return;
     job.files = record.files?.length ? record.files : job.files;
     if (record.status === "activated") {
       job.status = "applied";
-      let note = "已生效，服务健康检查通过。";
+      let note = applied;
       if (settings.engineer_commit && job.files.length) {
         try {
           job.commit = deps.commit(record.root, job.files, `${job.title || "平台改动"}\n\nMade by FluidForm's platform engineer (job ${job.id}).`);

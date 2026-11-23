@@ -28,7 +28,7 @@ export const CODE_DIRS = ["server/src/", "server/packages/", "frontend/", "scrip
 // How to diagnose and repair the platform, and where its code is; given to every model that does.
 export const REPAIR_GUIDES = ["skills/platform-repair/SKILL.md", "docs/ARCHITECTURE.md", "skills/platform-rules/SKILL.md"];
 // How the platform engineer adds a component (engineer.ts).
-export const COMPONENT_GUIDES = ["skills/platform-engineer/SKILL.md", "docs/ARCHITECTURE.md", "skills/platform-rules/SKILL.md"];
+export const COMPONENT_GUIDES = ["skills/platform-engineer/SKILL.md", "skills/capability-package/SKILL.md", "docs/ARCHITECTURE.md", "skills/platform-rules/SKILL.md"];
 
 /** The repair skill (or another of ``names``) and the architecture map from ``root``, without the
  *  skill's front matter, so that a model of any kind follows the same procedure. */
