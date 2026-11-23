@@ -206,7 +206,8 @@ export type CompleteOptions = {
   effort?: string | null; overrun?: [number, progress.Watch] | null; tool_trace?: string | null; signal?: AbortSignal;
 };
 
-export type ChatTools = { folder: string; turns: number; network: boolean; log?: Json[] | null; actions?: string[]; seconds: number };
+// ``made``: what the tasks the chat asked for made, in its folder (tasks/<task>/<file>), to send again when asked.
+export type ChatTools = { folder: string; turns: number; network: boolean; log?: Json[] | null; actions?: string[]; seconds: number; made?: string[] };
 
 const openaiImage = (item: Attachment) => ({ type: "image_url", image_url: { url: `data:${item.media_type};base64,${files.imageData(item)}` } });
 const anthropicImage = (item: Attachment) => ({ type: "image", source: { type: "base64", media_type: item.media_type, data: files.imageData(item) } });

@@ -299,7 +299,7 @@ export function dialogue(ctx, memory, now, offset = 0) {
   const effort = effortFor(ctx.chat.asked, Math.min(Infinity, ...shown.values()));
   // What it is asked about itself it is told here, with this message (the system prompt stays as it is).
   return { system: (role(ctx) + others + project + seeing).trimEnd(), messages, effort,
-    now: `（现在：${clock(now, offset)}；这条回答：${ctx.model?.id ?? "?"}，思考强度 ${effort}）` };
+    now: `（现在：${clock(now, offset)}；这条回答：${ctx.model?.id ?? "?"}，思考强度 ${effort}）${madeNote(ctx)}` };
 }
 
 // Work, or something to think about, rather than talk.
@@ -326,6 +326,13 @@ export function effortFor(asked, pictureBack = Infinity) {
 const FILES_ONLY = "（见附件）";
 const NAMES_PICTURE = /图|照片|截图|picture|photo|image|screenshot/iu;
 const ASKS_OF_PICTURE = /这|那[只个张是边里]|什么|是谁|哪|认|几[只个条人]|多少|颜色|写的|写着|看|what|who|which/iu;
+
+/** The files the tasks asked for here made, named with each message: they are there whatever was said
+ *  of them before, and are sent by these names. */
+function madeNote(ctx) {
+  const made = ctx.model && ctx.model.channel !== "cli" && ctx.chat.automation ? ctx.tools?.made ?? [] : [];
+  return made.length ? `\n（这段聊天排过的任务做出的文件，都在你的文件夹里，要时照这个名字用 SEND 发：${made.join("、")}）` : "";
+}
 
 /** What the person said themselves, without what it is framed with for the model (frame). */
 function ownWords(given) {

@@ -4,6 +4,7 @@
 // Here: choosing the lead, starting and continuing its conversation, and handing the task over to a
 // new conversation when the old one is lost or its model runs out of quota; the messages the lead is
 // sent about events, and reading its decisions.
+import * as taskFiles from "./task-files.js";
 import * as chat from "./chat.js";
 import * as pricing from "./pricing.js";
 import { mkdirSync } from "node:fs";
@@ -125,7 +126,8 @@ export async function chatTools(run: ExecutionRun): Promise<ChatTools | null> {
   if (run.kind !== "chat" || !settings.chat_tools || run.project_dir) return null;
   const folder = join(settings.workspace_root, folderId(run));
   mkdirSync(folder, { recursive: true });
-  const tools: ChatTools = { folder, network: settings.chat_tools_network, turns: settings.chat_tool_turns, seconds: settings.chat_tool_seconds, actions: [] };
+  const tools: ChatTools = { folder, network: settings.chat_tools_network, turns: settings.chat_tool_turns, seconds: settings.chat_tool_seconds, actions: [],
+    made: taskFiles.kept(folder) };
   tools.actions = (await chat.ask("chat.actions", { ctx: chat.context(run, null, tools) })).names ?? [];
   return tools;
 }

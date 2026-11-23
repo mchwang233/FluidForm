@@ -57,7 +57,7 @@ export async function order(models: ModelProfile[], automation = false): Promise
 }
 
 /** What the package needs to know of a chat to say what its model is told. */
-export function context(run: ExecutionRun, model: ModelProfile | null, tools: { folder: string; network: boolean; turns: number; seconds: number } | null): Json {
+export function context(run: ExecutionRun, model: ModelProfile | null, tools: { folder: string; network: boolean; turns: number; seconds: number; made?: string[] } | null): Json {
   const origin = (run.origin || {}) as Json;
   const automation = Boolean(origin.capability);
   return {
@@ -67,7 +67,7 @@ export function context(run: ExecutionRun, model: ModelProfile | null, tools: { 
       session: run.supervisor ? { model_id: run.supervisor.model_id, previous: run.supervisor.previous, calls: run.supervisor.calls } : null,
       messages: run.lead_messages.map((item) => ({ role: item.role, text: item.text, status: item.status })) },
     model: model ? { id: model.id, display_name: model.display_name, channel: model.channel, vision: model.supports_vision !== false } : null,
-    tools: tools ? { folder: tools.folder, network: tools.network, turns: tools.turns, seconds: tools.seconds } : null,
+    tools: tools ? { folder: tools.folder, network: tools.network, turns: tools.turns, seconds: tools.seconds, made: tools.made ?? [] } : null,
     settings: { user_memory: settings.user_memory, chat_action_tools: settings.chat_action_tools },
     guide: automation ? packageGuide(pyStr(origin.capability)) : "",
     capabilities: capabilities.section(),

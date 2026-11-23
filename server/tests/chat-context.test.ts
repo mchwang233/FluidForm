@@ -1,14 +1,14 @@
 // What a chat's API model is sent, each turn (docs/design/chat-context.md): asserted on the request
 // itself, through the real provider adapters.
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as files from "../src/attachments.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { Executor } from "../src/executor.js";
-import { ExecutionRunSchema, LeadMessageSchema, ModelProfileSchema } from "../src/models.js";
+import { ExecutionRunSchema, folderId, LeadMessageSchema, ModelProfileSchema } from "../src/models.js";
 // @ts-expect-error: the package is plain JavaScript, with no types
 import * as pkg from "../packages/chat/chat.mjs";
 import { deepseek, isolated, registryWith } from "./helpers/providers.js";
@@ -19,7 +19,7 @@ const said = (role: string, text: string, fields: Record<string, unknown> = {}) 
 
 /** The bodies sent for ``text`` asked in a chat that went as ``messages``. */
 async function asked(messages: any[], text: string, { attachments = [] as any[], supervisor = {} as any, origin = { capability: "bot", chat_type: "p2p" } as any,
-  summary = null as any, replies = ["好"] } = {}) {
+  summary = null as any, replies = ["好"], before = null as null | ((db: Database) => void) } = {}) {
   process.env.DEEPSEEK_API_KEY = "test";
   Object.assign(settings, { chat_tools: true, workspace_root: join(folder(), "workspaces") });
   const model = ModelProfileSchema.parse({ id: ID, provider: "deepseek", display_name: "Flash", context_window: 128000,
@@ -31,6 +31,7 @@ async function asked(messages: any[], text: string, { attachments = [] as any[],
   db.saveRun(ExecutionRunSchema.parse({ id: "c", prompt: "你好", kind: "chat", status: "draft", budget_usd: 1, origin, attachments,
     ...(summary ? { chat_summary: summary } : {}), supervisor: { model_id: ID, cwd: join(folder(), "lead"), ...supervisor },
     plan: { summary: "聊天", nodes: [] }, lead_messages: messages }));
+  before?.(db);
   const executor = new Executor(db, registry as any, { [ID]: model });
   executor.startLeadChat("c", text);
   await executor.leadTasks.get("c")!.settled();
@@ -223,4 +224,17 @@ test("it is told, with each message, which model answers and how hard it thinks;
   assert.match(body.at(-1)!.content as any as string, /deepseek:deepseek-flash.*思考强度 (low|high)/s);
   const withPicture = await asked([said("user", "（见附件）", { attachments: [picture()] }), said("lead", "苍鹭")], "能记多久", { supervisor: { calls: 1 } });
   assert.match(withPicture.body[0].content, /8 turns/);
+});
+
+test("what its tasks made is named with each message, whatever it said of it before, so it sends it", async () => {
+  // Regression: told the PPT was in tasks/, it answered "那份 PPT 的文件没留下来" without looking.
+  const before = (db: Database) => {
+    const task = ExecutionRunSchema.parse({ id: "t1", prompt: "做 PPT", status: "succeeded", budget_usd: 1, origin: { capability: "bot", chat_run: "c" },
+      plan: { title: "经济PPT", summary: "经济PPT", nodes: [] }, final_result: "交付完成。`deck.pptx` 已生成。" });
+    db.saveRun(task);
+    mkdirSync(join(settings.workspace_root, folderId(task)), { recursive: true });
+    writeFileSync(join(settings.workspace_root, folderId(task), "deck.pptx"), "pptx");
+  };
+  const { body } = await asked([said("user", "发送给我"), said("lead", "上一轮生成的成品没有保留下来。")], "ppt发个我", { before });
+  assert.match(body.at(-1)!.content as any as string, /tasks\/经济PPT\/deck\.pptx/);
 });

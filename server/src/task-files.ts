@@ -1,6 +1,6 @@
 // The files a task made, as its result names them (docs/design/chat-context.md): sent to the chat app it
 // came from when it ends, and kept in its chat's folder so the chat can send them again.
-import { constants, copyFileSync, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, sep } from "node:path";
 import * as files from "./attachments.js";
 import { settings } from "./config.js";
@@ -69,6 +69,19 @@ export function copyInto(folder: string, paths: string[]): string[] {
 
 /** Where a chat keeps what the tasks it asked for made, in its folder. */
 export const IN_CHAT = "tasks";
+
+/** What a chat keeps of its tasks' files (``IN_CHAT`` in its ``folder``): their paths there, at most ``most``. */
+export function kept(folder: string, most = 20): string[] {
+  const root = join(folder, IN_CHAT);
+  try {
+    return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory())
+      .flatMap((task) => readdirSync(join(root, task.name), { withFileTypes: true }).filter((entry) => entry.isFile())
+        .map((file) => [IN_CHAT, task.name, file.name].join("/")))
+      .slice(0, most);
+  } catch {
+    return [];
+  }
+}
 
 /** A result as a chat app shows it: its opening words, before any heading or table. */
 export function opening(result: string, most = 400): string {
