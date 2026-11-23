@@ -241,7 +241,7 @@ class Host:
         self.send({"op": "status", "text": text})
 
     async def ask(self, conversation: str, text: str, origin: dict, attachments: tuple = (),
-                  heard=None, addressed: bool = True, sender: str = "", people=()) -> tuple[Optional[str], list, bool]:
+                  heard=None, addressed: bool = True, sender: str = "", people=(), sender_id: str = "") -> tuple[Optional[str], list, bool]:
         """FluidForm's answer, the files to send with it (paths in the data folder), and whether the
         message was taken along by a later one instead (then nothing is said under it); ``heard``
         hears the answer as it is being written; ``people``: the names of the group's people, so
@@ -256,6 +256,9 @@ class Host:
             message["addressed"] = False
         if sender:
             message["sender"] = sender
+        if sender_id:
+            # Who said it (Feishu's open_id): only they may start or call off the task they asked for.
+            message["sender_id"] = sender_id
         if people:
             message["people"] = list(people)
         self.send(message)
@@ -422,14 +425,14 @@ def main() -> None:
         (data / relative).write_bytes(body)
         return relative
 
-    async def answer(chat_id: str, chat_type: str, sender: str, piece: Piece, place) -> None:
+    async def answer(chat_id: str, chat_type: str, sender: str, piece: Piece, place, sender_id: str = "") -> None:
         before, mine = place
         try:
-            await answering(chat_id, chat_type, sender, piece, before, mine)
+            await answering(chat_id, chat_type, sender, piece, before, mine, sender_id)
         finally:
             order.left(chat_id, mine)
 
-    async def answering(chat_id: str, chat_type: str, sender: str, piece: Piece, before, mine) -> None:
+    async def answering(chat_id: str, chat_type: str, sender: str, piece: Piece, before, mine, sender_id: str = "") -> None:
         group = chat_type == "group"
         known = await people(chat_id) if group and not COMMAND.match(piece.text) else {}
         mark = marker(known)
@@ -445,7 +448,7 @@ def main() -> None:
         reply = Reply(channel, chat_id, piece.message_id, mark)
         origin = {"message_id": piece.message_id, "chat_id": chat_id, **({"chat_type": chat_type} if chat_type else {})}
         asking = asyncio.ensure_future(host.ask(chat_id, piece.text, origin, tuple(names), reply.heard, piece.addressed, sender,
-                                                sorted(name for name in known if name not in EVERYONE and not re.fullmatch(r"成员\d+", name))))
+                                                sorted(name for name in known if name not in EVERYONE and not re.fullmatch(r"成员\d+", name)), sender_id))
         await asyncio.sleep(0)  # it is sent
         order.left(chat_id, mine)
         result, files, superseded = await asking
@@ -464,7 +467,7 @@ def main() -> None:
         place = order.take(chat_id)
         try:
             sender = (name or aliases.name_of(chat_id, open_id)) if chat_type == "group" and open_id else ""
-            await answer(chat_id, chat_type, sender, merged(pieces), place)
+            await answer(chat_id, chat_type, sender, merged(pieces), place, open_id)
         finally:
             order.left(chat_id, place[1])
             await typing.stop([piece.message_id for piece in pieces])
@@ -501,7 +504,13 @@ def main() -> None:
         """From the thread reading FluidForm: replied on the SDK's loop (channel.schedule)."""
         origin = payload.get("origin") or {}
         if origin.get("message_id") and origin.get("chat_id"):
-            channel.schedule(send_text(origin["chat_id"], origin["message_id"], str(payload.get("text") or "")))
+            files = [str(item) for item in payload.get("files") or [] if isinstance(item, str)]
+
+            async def tell() -> None:
+                await send_text(origin["chat_id"], origin["message_id"], str(payload.get("text") or ""))
+                # What the task made, under the same message.
+                await send_files(origin["chat_id"], origin["message_id"], files)
+            channel.schedule(tell())
 
     host = Host(task_ended)
     channel.on("message", on_message)
