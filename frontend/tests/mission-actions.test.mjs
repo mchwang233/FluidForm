@@ -2978,3 +2978,22 @@ test("without the task capabilities the page does not offer what needs them", as
   await settle();
   assert.ok(!labels(".result-tabs button").includes("复盘与改进"));
 });
+
+test("the platform's side list says an automation that runs is running, not waiting to be switched on", async t => {
+  const { state, document, click, act } = await setup(t, [], [], { openComposer: false });
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  state.capabilities = [
+    { ...FEISHU, id: "feishu-bot", name: "飞书机器人", kind: "automation", source: "upload", status: "active" },
+    { ...FEISHU, id: "other-bot", name: "别的机器人", kind: "automation", source: "upload", status: "active" },
+    { ...FEISHU, id: "off-bot", name: "停着的", kind: "automation", source: "upload", status: "disabled" },
+  ];
+  state.capabilityRuntime = { available: true, missing: "", capabilities: {
+    "feishu-bot": { secrets: { FEISHU_APP_ID: true }, status: "running", text: "已连接" },
+    "other-bot": { secrets: { TOKEN: false }, status: "off" },
+    "off-bot": { secrets: {}, status: "off" } } };
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await settle();
+  const said = [...document.querySelectorAll(".platform-side .platform-ability-status")].map(node => node.textContent);
+  assert.deepEqual(said.slice(0, 3), ["已连接", "待配置", "已停用"]);
+  assert.ok(!said.includes("待开启"));
+});

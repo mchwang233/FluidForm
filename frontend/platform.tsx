@@ -29,6 +29,21 @@ const CHECKS: Record<string, string> = {
 
 /** A job's name for the user: its plain headline, or for older jobs the first phrase of its title
  * (or of what was asked). */
+type AbilityRuntime = { status?: string; text?: string; error?: string; secrets?: Record<string, boolean> };
+
+/** How a capability is doing, as the side list says it: an automation by whether it runs (what its
+ *  program says of itself, such as 已连接), not only by being switched on. */
+export function abilityState(item: { status: string; kind: string }, runtime?: AbilityRuntime): { label: string; tone: string; title?: string } {
+  if (item.status === "disabled") return { label: "已停用", tone: "muted" };
+  if (item.status !== "active") return { label: "检查未通过", tone: "failed" };
+  if (item.kind !== "automation") return { label: "可用", tone: "active" };
+  if (runtime?.secrets && Object.values(runtime.secrets).some(given => !given)) return { label: "待配置", tone: "muted" };
+  if (runtime?.status === "running") return { label: runtime.text || "运行中", tone: "active" };
+  if (runtime?.status === "error") return { label: "出错", tone: "failed", title: runtime.error || runtime.text };
+  if (runtime?.status === "starting" || runtime?.status === "restarting") return { label: "启动中", tone: "muted" };
+  return { label: runtime ? "未运行" : "已启用", tone: "muted" };
+}
+
 export function headlineOf(job: Pick<EngineerJob, "headline" | "title" | "request">): string {
   if (job.headline) return job.headline;
   const text = (job.title || job.request || "").replace(/[*_`#>]+/g, "").replace(/^@平台工程师\s*/, "").trim();
@@ -105,8 +120,10 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   const { jobs, act, available } = useEngineerJobs(apiBase, null, "", true);
   const engineerOn = has(useProvided(), "engineer");
   const [capabilities, setCapabilities] = useState<Capability[]>([]), [skills, setSkills] = useState<Skill[]>([]);
+  const [running, setRunning] = useState<Record<string, AbilityRuntime>>({});
   useEffect(() => {
     fetch(`${apiBase}/api/capabilities`).then(r => r.ok ? r.json() : []).then(list => Array.isArray(list) && setCapabilities(list)).catch(() => {});
+    fetch(`${apiBase}/api/capabilities/runtime`).then(r => r.ok ? r.json() : null).then(found => found?.capabilities && setRunning(found.capabilities)).catch(() => {});
     fetch(`${apiBase}/api/skills`).then(r => r.ok ? r.json() : []).then(list => Array.isArray(list) && setSkills(list)).catch(() => {});
   }, [apiBase]);
   const waiting = jobs.filter(job => ENGINEER_WAITING.has(job.status));
@@ -141,7 +158,7 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
           <button type="button" onClick={onCapabilities}>
             <span className="platform-ability-icon"><Icon name={item.kind === "automation" ? "activity" : "wrench"} size={15} /></span>
             <span className="platform-ability-text"><b>{item.name}</b><small>{item.summary}</small></span>
-            <span className={`platform-ability-status ${item.status}`}>{item.status === "active" ? (item.kind === "automation" ? "待开启" : "可用") : item.status === "disabled" ? "已停用" : "检查未通过"}</span>
+            {(state => <span className={`platform-ability-status ${state.tone}`} title={state.title}>{state.label}</span>)(abilityState(item, running[item.id]))}
           </button>
         </li>)}
         {!capabilities.length && <li className="muted">还没有。任务做出可复用的代码后，在结果页「固化」，它就带着说明书出现在这里。</li>}
