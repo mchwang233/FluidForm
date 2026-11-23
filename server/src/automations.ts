@@ -3,7 +3,7 @@
 // owner's confirmation, and the conversation hears how it ended.
 import * as chats from "./chat.js";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { copyFileSync, lstatSync, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, sep } from "node:path";
 import { type Api, CHAT_TITLE_CHARS, CreateTask, HttpError, round6 } from "./api.js";
 import * as files from "./attachments.js";
@@ -17,6 +17,7 @@ import { briefWriter } from "./routing.js";
 import { pyStr } from "./py.js";
 import * as streaming from "./streaming.js";
 import * as supervisor from "./supervisor.js";
+import * as taskFiles from "./task-files.js";
 import { Mutex, type Task } from "./tasks.js";
 
 type Json = Record<string, any>;
@@ -356,32 +357,25 @@ export class CapabilityAutomations {
     this.runner.get(capability.id).note(line);
   }
 
-  /** The files of ``run``'s own folder its result names, copied for its automation to send. */
-  deliverables(run: ExecutionRun): string[] {
-    const capabilityId = pyStr(run.origin?.capability);
-    const folder = join(settings.workspace_root, folderId(run));
-    const named = [...new Set(pathsIn(run.final_result || ""))];
-    const outbox = join(packages.dataFolder(capabilityId), "outbox");
+  /** What ``run`` made, copied for its automation to send, with the whole result as a file of its own
+   *  when what is said in the chat is only its opening. */
+  deliverables(run: ExecutionRun, full: string | null = null): string[] {
+    const outbox = join(packages.dataFolder(pyStr(run.origin?.capability)), "outbox");
     const sent: string[] = [];
-    let real: string;
-    try {
-      real = realpathSync(folder);
-    } catch {
-      return sent;
-    }
-    for (const path of named) {
-      if (sent.length >= MAX_TASK_FILES) break;
+    mkdirSync(outbox, { recursive: true });
+    const add = (write: (target: string) => void, name: string) => {
+      const target = join(outbox, `${randomUUID().replaceAll("-", "").slice(0, 8)}-${files.safeName(name)}`);
+      write(target);
+      sent.push(relative(join(outbox, ".."), target));
+    };
+    for (const path of taskFiles.named(run)) {
       try {
-        if (lstatSync(path).isSymbolicLink() || !realpathSync(path).startsWith(real + sep) || !statSync(path).isFile()) continue;
-        if (statSync(path).size > files.MAX_ATTACHMENT_BYTES) continue;
-        mkdirSync(outbox, { recursive: true });
-        const target = join(outbox, `${randomUUID().replaceAll("-", "").slice(0, 8)}-${files.safeName(basename(path))}`);
-        copyFileSync(path, target);
-        sent.push(relative(join(outbox, ".."), target));
+        add((target) => copyFileSync(path, target), basename(path));
       } catch {
-        // gone, or not one: named only
+        // gone meanwhile: named only
       }
     }
+    if (full) add((target) => writeFileSync(target, full), "结果说明.md");
     return sent;
   }
 
@@ -483,8 +477,11 @@ export class CapabilityAutomations {
     const run = db.getRun(runId);
     if (!run || run.kind === "chat" || !run.origin?.capability) return;
     let text = `「${taskName(run)}」${TASK_ENDED[kind] ?? "结束了"}。`;
-    const automationFiles = this.deliverables(run);
-    const body = withoutPaths((run.final_result || run.error || "").trim());
+    const whole = withoutPaths((run.final_result || run.error || "").trim());
+    // People in a chat app read its opening; the whole result goes along as a file.
+    const shown = taskFiles.opening(whole);
+    const automationFiles = this.deliverables(run, shown !== whole ? `# ${taskName(run)}\n\n${whole}\n` : null);
+    const body = shown;
     if (body) text += "\n\n" + body;
     if (automationFiles.length) text += `\n\n（发了：${automationFiles.map((path) => basename(path).split("-").slice(1).join("-")).join("、")}）`;
     // Its conversation hears it too: the chat shows it, and its model is told with the next message.
@@ -497,7 +494,8 @@ export class CapabilityAutomations {
     }
     const chat = run.origin.chat_run ? db.getRun(run.origin.chat_run) : null;
     if (chat?.kind === "chat") {
-      chat.lead_messages.push(LeadMessageSchema.parse({ role: "lead", text }));
+      // The chat keeps all of it, and its model can send the files again (they are in its folder).
+      chat.lead_messages.push(LeadMessageSchema.parse({ role: "lead", text: whole && whole !== shown ? text.replace(shown, whole) : text }));
       db.saveRun(chat);
     }
     this.runner.notify(run.origin.capability, { event: "task_ended", origin: run.origin, outcome: kind, title: taskName(run), text,
@@ -505,13 +503,8 @@ export class CapabilityAutomations {
   }
 }
 
-// Absolute paths in a result: a Markdown link's target, or one written out.
-const LINKED = /\]\((\/[^)\s]+)\)/g;
+// An absolute path written out in a result.
 const WRITTEN = /(?<![\w\]/(])(\/(?:[\w.@+-]+\/)+[\w.@+-]+)/g;
-
-function pathsIn(text: string): string[] {
-  return [...text.matchAll(LINKED), ...text.matchAll(WRITTEN)].map((found) => found[1]);
-}
 
 /** A result as people in a chat app read it: no path of this machine, a file by its name. */
 export function withoutPaths(text: string): string {

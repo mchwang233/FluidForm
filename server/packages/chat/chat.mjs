@@ -146,7 +146,9 @@ export function toolsNote(ctx) {
     + `${names.join(", ")}: they do the same, and nothing you write as a line is needed.` : "";
   return "Quick jobs you do yourself, right away, without asking. "
     + "You have tools (Bash, Read, Write, Edit, Glob, Grep, LS) in this chat's own folder, "
-    + `${tools.folder}.${online} Only that folder and /tmp can be written. Use them for what takes a minute: look something up online (the `
+    + `${tools.folder}.${online} Only that folder and /tmp can be written. What the tasks asked for here made is `
+    + "in tasks/<the task>/ there (look with LS): it is not lost, and when they ask for it, send it rather than make it again. "
+    + "Use them for what takes a minute: look something up online (the "
     + "weather: curl -s 'wttr.in/Beijing?format=3&lang=zh'; an exchange rate; a page they link), "
     + "calculate, convert, read or make a small file. One message gets at most "
     + `${tools.turns} tool calls and ${formatG(tools.seconds)} seconds: keep it small, and answer with `

@@ -1037,7 +1037,7 @@ test("what a task made is sent to the chat it came from, and no path of this mac
   runner.notify = (_id, event) => events.push(event);
   api.automations.taskEnded(task.id, "run.succeeded");
   const [event] = events;
-  assert.equal(event.files.length, 2);
+  assert.equal(event.files.length, 2); // a short result goes as it is, without a copy of itself
   assert.ok(event.files.every((path: string) => path.startsWith("outbox/") && existsSync(join(packages.dataFolder("fake-bot"), path))));
   assert.ok(!event.text.includes(settings.workspace_root) && !event.text.includes("/etc/passwd") && event.text.includes("face.zip"));
 });
@@ -1051,4 +1051,34 @@ test("a task takes the files of the last turns, not every file the chat ever had
   triaging(api, '{"kind": "chat"}', [ASK_FOR_WORK]);
   await message(api, runner, { conversation: "c1", text: "照这个做", attachments: [files.save("new.png", PNG)] });
   assert.deepEqual(tasks(api).at(-1)!.attachments.map((item) => item.name), ["new.png"]);
+});
+
+test("a result that names its files as the PPT task did sends them, briefly, and the chat can send them again", async () => {
+  // Regression: `china_economy_2026.pptx` in a table was not found, the whole report went to the chat, and
+  // asked to send it the chat said it was lost and planned it again.
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  const task = await planned(api, runner);
+  const folder = join(settings.workspace_root, folderId(task));
+  mkdirSync(join(folder, "output"), { recursive: true });
+  for (const name of ["china_economy_2026.pptx", "数据来源清单.md", "output/china_economy_2026.pdf", "build_deck.py", "make_charts.py", "data.py"]) writeFileSync(join(folder, name), name);
+  const run = api.db.getRun(task.id)!;
+  run.status = "succeeded";
+  run.final_result = "交付完成。`china_economy_2026.pptx` 已生成并通过校验，放在项目文件夹根目录。\n\n## 交付物\n\n| 文件 | 说明 |\n|---|---|\n"
+    + "| `china_economy_2026.pptx` | 13 页 |\n| `数据来源清单.md` | 来源 |\n| `output/china_economy_2026.pdf` | 校验用 |\n| `build_deck.py` / `make_charts.py` / `data.py` | 脚本 |\n\n## 校验结果\n\n- 13 页";
+  api.db.saveRun(run);
+  const events: any[] = [];
+  runner.notify = (_id, event) => events.push(event);
+  api.automations.taskEnded(task.id, "run.succeeded");
+  const names = events[0].files.map((path: string) => path.split("/").at(-1)!.split("-").slice(1).join("-"));
+  assert.deepEqual(names, ["china_economy_2026.pptx", "数据来源清单.md", "china_economy_2026.pdf", "build_deck.py", "make_charts.py", "结果说明.md"]);
+  assert.ok(!events[0].text.includes("##") && !events[0].text.includes("| 文件") && events[0].text.length < 700);
+  // Asked for it later, the chat has it in its folder.
+  settings.chat_tools = true;
+  triaging(api, '{"kind": "chat"}', ["好的。"]);
+  const chat = api.db.getRun(run.origin!.chat_run)!;
+  await message(api, runner, { conversation: "c1", text: "发送给我" });
+  const kept = join(settings.workspace_root, folderId(chat), "tasks");
+  const [taskFolder] = readdirSync(kept);
+  assert.ok(readdirSync(join(kept, taskFolder)).includes("china_economy_2026.pptx"));
 });
