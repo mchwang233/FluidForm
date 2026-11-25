@@ -9,7 +9,7 @@ import { type Api, CHAT_TITLE_CHARS, CreateTask, HttpError, round6 } from "./api
 import * as files from "./attachments.js";
 import * as capabilities from "./capabilities.js";
 import * as packages from "./capability-packages.js";
-import { type Asked, type Automation, CALLED_ONLY, type Handled, keepHeard, MAX_HEARD_FILES, Runner } from "./capability-runner.js";
+import { type Asked, type Automation, CALLED_ONLY, type Handled, keepHeard, MAX_HEARD_FILES, permanentIn, Runner } from "./capability-runner.js";
 import { settings } from "./config.js";
 import { log } from "./log.js";
 import { type Capability, EventSchema, type ExecutionRun, folderId, LeadMessageSchema, type ModelProfile } from "./models.js";
@@ -189,7 +189,8 @@ export class CapabilityAutomations {
     await this.opening.get(opening)!.run(async () => {
       if (signal?.aborted) return;
       // A conversation left for hours, or since yesterday, begins a new chat; the old one stays to be read.
-      const held = asked.conversation ? state.chats[asked.conversation] : null;
+      // With the conversation's permanent memory on (/memory on), it goes on: only /new begins one.
+      const held = asked.conversation && !permanentIn(state, asked.conversation) ? state.chats[asked.conversation] : null;
       const last = held ? db.getRun(held)?.lead_messages.filter((item) => item.role === "user").at(-1)?.created_at : null;
       if (last) {
         const found = await chats.ask("chat.session", { ...chats.clock(), last_at: Date.parse(last) / 1000, text: asked.text });

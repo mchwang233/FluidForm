@@ -11,7 +11,7 @@
 //   when it was not called on (a group message without @ it), and ``"sender"`` naming who said it, and
 //   ``"people"`` the names of the group's people (so an answer can @ them: the package turns "@name"
 //   into its app's mention), and ``"sender_id"`` who that is to the app (who may start what they asked for); a person's messages are turns (chat-turns.ts): one answered by taking the
-//   next along gets ``{"re": id, "reply": null, "superseded": true}``; /stop, /new, /status and /help are the
+//   next along gets ``{"re": id, "reply": null, "superseded": true}``; /stop, /new, /status, /help and /memory are the
 //   conversation's commands;
 // - it reads ``{"re": id, "reply": ..., "files": [...]}``, the answer and the files to send with it
 //   (paths in its data folder, which it may remove once sent), and ``{"event": "task_ended", "origin":
@@ -57,11 +57,18 @@ export const STOP_COMMAND = /^(\/stop|停止|停下)$/i;
 export const NEW_COMMAND = /^(\/new|\/reset|新对话)$/i;
 export const STATUS_COMMAND = /^\/status$/i;
 export const HELP_COMMAND = /^(\/help|帮助)$/i;
+/** A conversation's permanent memory: switched on (2), off (3, 4), or asked about. */
+export const MEMORY_COMMAND = /^(?:\/memory(?:\s+(on|off))?|(打开|开启)永久记忆|(关闭|关掉)永久记忆|永久记忆)$/i;
+/** When a conversation begins afresh, as a chat app's people are told it. */
+const renewal = (permanent: boolean) => permanent ? "这段对话开了永久记忆，不会自动开新的" : "闲置 2 小时、每天 4 点也会自动开新的";
+/** Whether a conversation keeps its chat however long it is left (only /new begins another). */
+export const permanentIn = (state: State, conversation: string) => !!conversation && state.permanent_memory?.[conversation] === true;
 /** What /help answers: every command a chat app's conversation knows (「开始」「取消」 are automations.ts's). */
-export const HELP_TEXT = ["能用的命令（单独发一条，群里要 @ 我）：",
+export const helpText = (permanent = false) => ["能用的命令（单独发一条，群里要 @ 我）：",
   "/stop（或「停止」「停下」）：停下正在回答的",
-  "/new（或 /reset、「新对话」）：开新对话（闲置 2 小时、每天 4 点也会自动开新的）",
+  `/new（或 /reset、「新对话」）：开新对话（${renewal(permanent)}）`,
   "/status：看状态和回答用的模型",
+  `/memory on 或 off（或「打开永久记忆」「关闭永久记忆」）：这段对话一直接着聊、不自动开新的，或者照常；现在是${permanent ? "开" : "关"}着的`,
   "/start（或「开始」「开工」「确认」）：开始我为你排好的任务",
   "/cancel（或「取消」「不做了」）：不做我为你排好的任务",
   "/help（或「帮助」）：看这些命令"].join("\n");
@@ -193,7 +200,9 @@ export const deps = { takeFiles };
 export class Fatal extends Error {}
 
 type State = { spent: Record<string, number>; chats: Record<string, any>; handled: number;
-  model_id: string | null; chat_preferences: Record<string, any>; [key: string]: any };
+  model_id: string | null; chat_preferences: Record<string, any>;
+  /** The conversations whose chat never begins afresh by itself (idle, a new day); /new still does. */
+  permanent_memory?: Record<string, true>; [key: string]: any };
 
 /** One automation: its process, state, log and what it spent today. */
 export class Automation {
@@ -473,7 +482,7 @@ export class Runner {
     }
     const conversation = [...String(payload.conversation || "")].slice(0, 200).join("");
     const sender = [...String(payload.sender || "")].slice(0, 40).join("");
-    if (addressed && conversation && !attached.length && (STOP_COMMAND.test(text) || STATUS_COMMAND.test(text) || HELP_COMMAND.test(text))) {
+    if (addressed && conversation && !attached.length && (STOP_COMMAND.test(text) || STATUS_COMMAND.test(text) || HELP_COMMAND.test(text) || MEMORY_COMMAND.test(text))) {
       await this.send(item, { re: request, reply: this.command(item, capability, conversation, sender, text) });
       return;
     }
@@ -548,9 +557,25 @@ export class Runner {
     }
   }
 
-  /** /stop, /status and /help, answered at once, without a model. */
+  /** /stop, /status, /help and /memory, answered at once, without a model. */
   private command(item: Automation, capability: Capability, conversation: string, sender: string, text: string): string {
-    if (HELP_COMMAND.test(text)) return HELP_TEXT;
+    const memory = MEMORY_COMMAND.exec(text);
+    if (memory) {
+      const on = memory[1] ? memory[1].toLowerCase() === "on" : memory[2] ? true : memory[3] ? false : null;
+      if (on === null) return permanentIn(item.state, conversation)
+        ? "这段对话开着永久记忆：一直接着聊，不会自动开新的。发 /memory off 关掉。"
+        : "这段对话没开永久记忆：闲置 2 小时、每天 4 点会自动开新的。发 /memory on 打开。";
+      const kept = { ...(item.state.permanent_memory ?? {}) };
+      if (on) kept[conversation] = true;
+      else delete kept[conversation];
+      item.state.permanent_memory = kept;
+      item.save();
+      item.note(on ? "一段对话开了永久记忆" : "一段对话关了永久记忆");
+      return on ? "开了永久记忆：这段对话会一直接着聊，不再自动开新的；要重新开始就发 /new。"
+        : "关了永久记忆：这段对话闲置 2 小时、或过了每天 4 点，会自动开新的。";
+    }
+    const permanent = permanentIn(item.state, conversation);
+    if (HELP_COMMAND.test(text)) return helpText(permanent);
     const under = this.turns.of(capability.id, conversation, sender);
     if (STOP_COMMAND.test(text)) {
       for (const turn of under) turn.stop("stopped");
@@ -558,7 +583,7 @@ export class Runner {
     }
     return [under.length ? `正在回答你的消息（${under.length} 条）。` : "在线，现在没有在回答的。",
       `回答用的模型：${item.state.model_id ?? "自动选择"}`,
-      "/stop 停下正在回答的；/new 开新对话（闲置 2 小时、每天 4 点也会自动开新的）；/help 看全部命令。"].join("\n");
+      `/stop 停下正在回答的；/new 开新对话（${renewal(permanent)}）；/help 看全部命令。`].join("\n");
   }
 
   /** Passes an answer being written on to the automation, at most every PROGRESS_SECONDS. Written

@@ -852,6 +852,55 @@ test("idle two hours, a conversation goes on in a new chat", async () => {
   assert.ok(!sent.at(-1)![2].includes("看看这个日志。"));
 });
 
+test("/memory on keeps an idle conversation in the same chat; /new still begins one; /memory off as before", async () => {
+  const { api, sent, held, say, asking, item, prompts } = await live();
+  await say("m", "/memory on");
+  assert.ok(sent.m.reply.includes("开了永久记忆") && prompts.length === 0 && item.state.permanent_memory?.c1 === true);
+  await say("q", "永久记忆");
+  assert.ok(sent.q.reply.includes("开着永久记忆"));
+  const idle = async (id: string, text: string, count: number) => {
+    const chat = api.db.getRun(item.state.chats.c1)!;
+    for (const message of chat.lead_messages) message.created_at = new Date(Date.now() - 30 * 3600_000).toISOString();
+    api.db.saveRun(chat);
+    const answered = say(id, text);
+    await asking(count);
+    held[count - 1].finish("好。");
+    await answered;
+  };
+  const first = say("a", "看看这个日志。");
+  await asking(1);
+  held[0].finish("看了。");
+  await first;
+  const chat = item.state.chats.c1;
+  await idle("b", "接着说", 2);
+  assert.equal(item.state.chats.c1, chat);
+  // Another conversation is not touched by it.
+  assert.ok(!item.state.permanent_memory?.c2);
+  await say("n", "/new");
+  assert.ok(!item.state.chats.c1 && item.state.permanent_memory?.c1 === true);
+  await say("o", "关闭永久记忆");
+  assert.ok(sent.o.reply.includes("关了永久记忆") && !item.state.permanent_memory?.c1);
+  const third = say("c", "新的问题");
+  await asking(3);
+  held[2].finish("嗯。");
+  await third;
+  const renewed = item.state.chats.c1;
+  await idle("d", "隔了很久", 4);
+  assert.notEqual(item.state.chats.c1, renewed);
+});
+
+test("/help and /status say whether this conversation begins afresh by itself", async () => {
+  const { sent, say } = await live();
+  await say("h", "/help");
+  assert.ok(sent.h.reply.includes("闲置 2 小时") && sent.h.reply.includes("/memory"));
+  await say("m", "打开永久记忆");
+  await say("k", "/help");
+  await say("s", "/status");
+  assert.ok(!sent.k.reply.includes("闲置 2 小时") && sent.k.reply.includes("永久记忆"));
+  assert.ok(sent.s.reply.includes("永久记忆"));
+  assert.ok(!runners.MEMORY_COMMAND.test("/memory 一下") && !runners.MEMORY_COMMAND.test("永久记忆是什么"));
+});
+
 /** Messages as they arrive from the app, and what is sent back for each; a model that answers when let. */
 async function live() {
   const given = withPackages();
@@ -946,7 +995,7 @@ test("/help lists every command in the chat, without asking a model", async () =
   const { sent, say, prompts } = await live();
   await say("h", "/help");
   await say("z", "帮助");
-  for (const command of ["/stop", "/new", "/status", "/help", "开始", "取消"]) assert.ok(sent.h.reply.includes(command), command);
+  for (const command of ["/stop", "/new", "/status", "/memory", "/help", "开始", "取消"]) assert.ok(sent.h.reply.includes(command), command);
   assert.equal(sent.z.reply, sent.h.reply);
   assert.ok(sent.h.reply.includes("/help") && sent.h.reply.split("\n").length > 3 && prompts.length === 0);
   await say("s", "/status");
