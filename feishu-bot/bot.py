@@ -53,9 +53,9 @@ TYPES = {"text", "post", "image", "file"}
 # so it is off and this keeps each person's messages apart.
 GATHER_SECONDS = 0.8
 # A conversation's commands, passed on at once (FluidForm knows them; server/src/capability-runner.ts).
-COMMAND = re.compile(r"^(/stop|停止|停下|/new|/reset|新对话|/status|/help|帮助)$", re.I)
-# Commands that only answer: what still waits is not stopped by them.
-ASKING = ("/status", "/help", "帮助")
+COMMAND = re.compile(r"^(/stop|停止|停下|/new|/reset|新对话|/status|/help|帮助|/memory(?:\s+(?:on|off))?|(?:打开|开启|关闭|关掉)?永久记忆)$", re.I)
+# Commands that only answer or set something: what still waits is not stopped by them.
+ASKING = re.compile(r"^(/status|/help|帮助|/memory.*|.*永久记忆)$", re.I)
 # Where a picture or a file sits in a message's text (the SDK's rendering), taken out: the
 # picture or file itself goes along as an attachment.
 MEDIA_MARK = re.compile(r"!\[image\]\([^)]*\)|<(?:file|audio|video|media|sticker|folder)\b[^>]*/>|\[(?:image|file)\]")
@@ -493,7 +493,7 @@ def main() -> None:
         key = (msg.chat_id, msg.chat_type, msg.sender_id or "", msg.sender_name or "")
         piece = Piece(msg.message_id, text, resources, addressed)
         if addressed and not resources and COMMAND.match(text):
-            if text.lower() not in ASKING:
+            if not ASKING.match(text):
                 # What still waited is stopped with it: never asked.
                 asyncio.ensure_future(typing.stop([waited.message_id for waited in gather.drop(key)]))
             asyncio.ensure_future(gathered(key, [piece]))
@@ -611,6 +611,9 @@ def check() -> None:
     # Commands are passed on at once, and only as the whole message.
     assert COMMAND.match("/stop") and COMMAND.match("新对话") and COMMAND.match("/STATUS")
     assert COMMAND.match("/help") and COMMAND.match("/HELP") and COMMAND.match("帮助") and not COMMAND.match("帮助我写个报告")
+    assert COMMAND.match("/memory on") and COMMAND.match("/memory") and COMMAND.match("打开永久记忆") and COMMAND.match("永久记忆")
+    assert not COMMAND.match("/memory 一下") and not COMMAND.match("永久记忆是什么")
+    assert ASKING.match("/memory off") and ASKING.match("关闭永久记忆") and not ASKING.match("/stop") and not ASKING.match("新对话")
     assert not COMMAND.match("停止服务怎么做") and not COMMAND.match("/stop 一下")
 
     # A chat's messages are passed on in the order they were said.

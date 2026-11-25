@@ -2,7 +2,7 @@
   "id": "feishu-bot",
   "name": "飞书机器人",
   "kind": "automation",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "requires": ["chat"],
   "summary": "在飞书里私聊它，或在群里 @ 它：问题直接回答；要动手的事在 FluidForm 里排好计划，主人确认后才开工，做完把结果发回飞书。",
   "usage": "由 FluidForm 在后台运行：python bot.py",
