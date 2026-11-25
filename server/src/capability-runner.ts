@@ -11,7 +11,7 @@
 //   when it was not called on (a group message without @ it), and ``"sender"`` naming who said it, and
 //   ``"people"`` the names of the group's people (so an answer can @ them: the package turns "@name"
 //   into its app's mention), and ``"sender_id"`` who that is to the app (who may start what they asked for); a person's messages are turns (chat-turns.ts): one answered by taking the
-//   next along gets ``{"re": id, "reply": null, "superseded": true}``; /stop, /new and /status are the
+//   next along gets ``{"re": id, "reply": null, "superseded": true}``; /stop, /new, /status and /help are the
 //   conversation's commands;
 // - it reads ``{"re": id, "reply": ..., "files": [...]}``, the answer and the files to send with it
 //   (paths in its data folder, which it may remove once sent), and ``{"event": "task_ended", "origin":
@@ -56,6 +56,15 @@ export const PICTURE_WORDS = new RegExp("这张(?![表卡票纸单桌床])|这�
 export const STOP_COMMAND = /^(\/stop|停止|停下)$/i;
 export const NEW_COMMAND = /^(\/new|\/reset|新对话)$/i;
 export const STATUS_COMMAND = /^\/status$/i;
+export const HELP_COMMAND = /^(\/help|帮助)$/i;
+/** What /help answers: every command a chat app's conversation knows (「开始」「取消」 are automations.ts's). */
+export const HELP_TEXT = ["能用的命令（单独发一条，群里要 @ 我）：",
+  "/stop（或「停止」「停下」）：停下正在回答的",
+  "/new（或 /reset、「新对话」）：开新对话（闲置 2 小时、每天 4 点也会自动开新的）",
+  "/status：看状态和回答用的模型",
+  "/start（或「开始」「开工」「确认」）：开始我为你排好的任务",
+  "/cancel（或「取消」「不做了」）：不做我为你排好的任务",
+  "/help（或「帮助」）：看这些命令"].join("\n");
 export const STOPPED_NOTE = "（已停下）";
 // How long a line from an automation may be.
 export const LINE_LIMIT = 1 << 20;
@@ -464,7 +473,7 @@ export class Runner {
     }
     const conversation = [...String(payload.conversation || "")].slice(0, 200).join("");
     const sender = [...String(payload.sender || "")].slice(0, 40).join("");
-    if (addressed && conversation && !attached.length && (STOP_COMMAND.test(text) || STATUS_COMMAND.test(text))) {
+    if (addressed && conversation && !attached.length && (STOP_COMMAND.test(text) || STATUS_COMMAND.test(text) || HELP_COMMAND.test(text))) {
       await this.send(item, { re: request, reply: this.command(item, capability, conversation, sender, text) });
       return;
     }
@@ -539,8 +548,9 @@ export class Runner {
     }
   }
 
-  /** /stop and /status, answered at once, without a model. */
+  /** /stop, /status and /help, answered at once, without a model. */
   private command(item: Automation, capability: Capability, conversation: string, sender: string, text: string): string {
+    if (HELP_COMMAND.test(text)) return HELP_TEXT;
     const under = this.turns.of(capability.id, conversation, sender);
     if (STOP_COMMAND.test(text)) {
       for (const turn of under) turn.stop("stopped");
@@ -548,7 +558,7 @@ export class Runner {
     }
     return [under.length ? `正在回答你的消息（${under.length} 条）。` : "在线，现在没有在回答的。",
       `回答用的模型：${item.state.model_id ?? "自动选择"}`,
-      "/stop 停下正在回答的；/new 开新对话（闲置 2 小时、每天 4 点也会自动开新的）。"].join("\n");
+      "/stop 停下正在回答的；/new 开新对话（闲置 2 小时、每天 4 点也会自动开新的）；/help 看全部命令。"].join("\n");
   }
 
   /** Passes an answer being written on to the automation, at most every PROGRESS_SECONDS. Written

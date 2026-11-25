@@ -942,6 +942,17 @@ test("/new stops what is being answered; /status and an idle /stop ask no model"
   assert.ok(sent.n.reply.includes("开了新对话") && sent.a.superseded);
 });
 
+test("/help lists every command in the chat, without asking a model", async () => {
+  const { sent, say, prompts } = await live();
+  await say("h", "/help");
+  await say("z", "帮助");
+  for (const command of ["/stop", "/new", "/status", "/help", "开始", "取消"]) assert.ok(sent.h.reply.includes(command), command);
+  assert.equal(sent.z.reply, sent.h.reply);
+  assert.ok(sent.h.reply.includes("/help") && sent.h.reply.split("\n").length > 3 && prompts.length === 0);
+  await say("s", "/status");
+  assert.ok(sent.s.reply.includes("/help"));
+});
+
 test("one person's message does not stop another's in a group", async () => {
   const { sent, held, say, asking } = await live();
   const first = say("a", "甲的问题", { sender: "甲" });
