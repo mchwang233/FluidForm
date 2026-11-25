@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { settings } from "../src/config.js";
-import { type ExecutionRun, ExecutionRunSchema, type TaskNode } from "../src/models.js";
+import * as contracts from "../src/contracts.js";
+import { DiagnosisSchema, type ExecutionRun, ExecutionRunSchema, type TaskNode } from "../src/models.js";
 import { changePlan, PlanError } from "../packages/planning/src/replan.js";
 import { coverageNodes } from "./helpers/artifacts.js";
 import { conftest } from "./helpers/conftest.js";
@@ -43,6 +44,47 @@ test("an artifact replan cannot copy a used-up deliverable with fresh limits", a
   current.plan.nodes[0].contract_turns = 3;
   await assert.rejects(changePlan(current, { add: [{ ...raw(nodes[0]), key: "fresh" }] }, Object.values(MODELS), CONFIGURED), /duplicate artifact producer/);
   assert.ok(current.plan.nodes.length === 3 && current.plan.nodes[0].contract_turns === 3);
+});
+
+// The user took the VDB out of the delivery (a VCS license the sandbox cannot reach): the producer was
+// accepted by the lead without evidence, the report consuming it was blocked before any model ran.
+const narrowedRun = (answered: boolean): ExecutionRun => {
+  const current = plan(...coverageNodes());
+  current.plan.nodes[0].status = "succeeded";
+  current.diagnoses = [DiagnosisSchema.parse({ id: "d1", trigger: "lead", node_id: "vdb", question: "VCS 不可用，怎么办？", choices: ["移除代码覆盖率"],
+    messages: answered ? [{ text: "", choice: "移除代码覆盖率" }] : [] })];
+  return current;
+};
+const WAIVE = { waive: [{ path: "coverage.vdb", reason: "用户授权：VCS 不可用" }], update: [{ id: "report", acceptance_criteria: "只按仿真回归与功能覆盖率陈述" }] };
+
+test("without the user's answer an artifact cannot be waived and the gates stay", async () => {
+  const current = narrowedRun(false);
+  const before = JSON.stringify(current);
+  for (const change of [WAIVE, { waive: ["coverage.vdb"] }, { remove: ["report"] }, { update: [{ id: "report", acceptance_criteria: "relaxed" }] }]) {
+    await assert.rejects(changePlan(current, change, Object.values(MODELS), CONFIGURED), PlanError, JSON.stringify(change));
+  }
+  assert.equal(JSON.stringify(current), before);
+  assert.throws(() => contracts.accepted(current, current.plan.nodes[0]), contracts.ArtifactBlocked);
+  assert.throws(() => contracts.prepare(current, current.plan.nodes[1]), /缺少目录产物：coverage\.vdb/);
+});
+
+test("an artifact the user took out of the delivery leaves the contracts and their checks", async () => {
+  const current = narrowedRun(true);
+  await changePlan(current, WAIVE, Object.values(MODELS), CONFIGURED);
+  const [vdb, report, audit] = current.plan.nodes;
+  assert.deepEqual(current.plan.artifact_waivers.map((item) => [item.path, item.diagnosis_id, item.reason]), [["coverage.vdb", "d1", "用户授权：VCS 不可用"]]);
+  assert.deepEqual(report.artifact_contract!.inputs, []);
+  assert.equal(report.acceptance_criteria, "只按仿真回归与功能覆盖率陈述");
+  assert.equal(report.artifact_contract!.max_turns, 3);
+  assert.deepEqual(vdb.artifact_contract!.outputs.map((item) => item.path), ["coverage.vdb"]); // finished steps stay as they were
+  assert.equal(vdb.artifact_evidence, null); // nothing is made up as its evidence
+  contracts.accepted(current, vdb); // the lead's accept and the final review no longer stop on it
+  contracts.prepare(current, report); // the report starts without the VDB
+  assert.deepEqual(report.artifact_inputs, {});
+  assert.equal(audit.artifact_contract!.inputs.length, 1);
+  // A step the waiver does not touch keeps its acceptance.
+  await assert.rejects(changePlan(current, { update: [{ id: "audit", acceptance_criteria: "Trust the claim" }] }, Object.values(MODELS), CONFIGURED),
+    /artifact acceptance criteria must be preserved/);
 });
 
 test("the lead splits a step that is too big", async () => {

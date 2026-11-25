@@ -273,6 +273,17 @@ export const PlanChoiceFields = {
 export const PlanChoiceSchema = model("PlanChoice", PlanChoiceFields);
 export type PlanChoice = z.output<typeof PlanChoiceSchema>;
 
+// A declared artifact the user took out of the delivery (an answered question, `diagnosis_id`): it is no
+// longer required, fingerprinted or compared, and never counts as evidence (contracts.waived).
+export const ArtifactWaiverFields = {
+  path: z.string().min(1),
+  reason: z.string().default(() => ("" as const)),
+  diagnosis_id: z.string(),
+  created_at: lax.datetime().default(nowIso),
+};
+export const ArtifactWaiverSchema = model("ArtifactWaiver", ArtifactWaiverFields);
+export type ArtifactWaiver = z.output<typeof ArtifactWaiverSchema>;
+
 export const TaskPlanFields = {
   summary: z.string(),
   nodes: z.array(TaskNodeSchema),
@@ -290,6 +301,7 @@ export const TaskPlanFields = {
   planning_cost_usd: lax.number().default(() => (0.0)),
   planning_note: z.string().nullable().default(() => (null)),
   choices: z.array(PlanChoiceSchema).default(() => []),
+  artifact_waivers: z.array(ArtifactWaiverSchema).default(() => []),
 };
 export const TaskPlanSchema = model("TaskPlan", TaskPlanFields);
 export type TaskPlan = z.output<typeof TaskPlanSchema>;

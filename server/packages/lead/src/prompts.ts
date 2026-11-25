@@ -118,7 +118,11 @@ export function blockedNote(): string {
     + "instructions saying exactly what to add or fix, which redoes them and then this step; "
     + `${repair} when the machine or FluidForm is at fault; retry when `
     + "something has changed; accept when what it delivered is enough for the request; ask_user when "
-    + "only the user can decide (for example whether a target can be relaxed); unable to stop.";
+    + "only the user can decide (for example whether a target can be relaxed); unable to stop. "
+    + "Once the user has answered that a declared artifact is out of the delivery, replan with "
+    + "\"waive\": [{\"path\": \"the artifact\", \"reason\": \"the user's decision\"}] in \"plan\": it leaves "
+    + "the contracts, and steps that have not finished may restate their acceptance_criteria; never "
+    + "make up the artifact or claim a tool ran.";
 }
 
 export const MAX_ENGINEER_LOOKS = 3;
@@ -310,7 +314,7 @@ export function parseDecision(text: string | null | undefined, modelIds: Set<str
   }
   if (clean.action === "replan") {
     const plan = payload.plan;
-    if (!plan || typeof plan !== "object" || Array.isArray(plan) || !["add", "remove", "update"].some((key) => truthy(plan[key]))) return null;
+    if (!plan || typeof plan !== "object" || Array.isArray(plan) || !["add", "remove", "update", "waive"].some((key) => truthy(plan[key]))) return null;
     clean.plan = plan;
   }
   return clean as Decision;

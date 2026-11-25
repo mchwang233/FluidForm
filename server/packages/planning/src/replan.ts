@@ -7,7 +7,7 @@ import { settings } from "../../../src/config.js";
 import * as contracts from "../../../src/contracts.js";
 import { newId } from "../../../src/lax.js";
 import { MAX_TASKS } from "./lead-planning.js";
-import { type ExecutionRun, folderId, type ModelProfile, type TaskNode, TaskNodeSchema } from "../../../src/models.js";
+import { type ArtifactWaiver, ArtifactWaiverSchema, type ExecutionRun, folderId, type ModelProfile, type TaskNode, TaskNodeSchema } from "../../../src/models.js";
 import { difficulty, packageOf } from "./planner.js";
 import { head, pyDumps, pyStr, truthy } from "../../../src/py.js";
 import { NoEligibleModelError, routeNode } from "../../../src/routing.js";
@@ -37,6 +37,20 @@ export async function changePlan(run: ExecutionRun, change: Json, models: ModelP
     if (SETTLED.has(item.status) && item.id !== deciding) throw new PlanError(`${what}: step ${nodeId} (${item.title}) is ${item.status}; finished or running steps stay`);
     return item;
   };
+  const waivers = waive(run, change, [...nodes.values()]);
+  // What the user took out of the delivery leaves the contracts of steps not yet finished; finished
+  // steps keep theirs, and contracts.accepted leaves the waived artifacts out of their checks.
+  const paths = new Set([...run.plan.artifact_waivers, ...waivers].map((item) => item.path));
+  const narrowedIds = new Set<string>();
+  for (const item of nodes.values()) {
+    if (item.status === "succeeded" || !contracts.touches(item, paths)) continue;
+    item.artifact_contract = contracts.narrowed(item.artifact_contract!, paths);
+    for (const path of paths) {
+      delete item.artifact_inputs[path];
+      delete item.artifact_baseline[path];
+    }
+    narrowedIds.add(item.id);
+  }
   const removed = ((change.remove || []) as unknown[]).map((item) => changeable(pyStr(item), "remove"));
   if (removed.some((item) => item.artifact_contract)) throw new PlanError("artifact contract steps cannot be removed to bypass delivery or stop limits");
   if (removed.some((item) => item.delegation_parent_id || [...nodes.values()].some((child) => child.delegation_parent_id === item.id))) {
@@ -85,7 +99,10 @@ export async function changePlan(run: ExecutionRun, change: Json, models: ModelP
       if ("artifact_contract" in raw && pyDumps(raw.artifact_contract, false, true) !== pyDumps(item.artifact_contract, false, true)) {
         throw new PlanError("artifact contracts and stop limits cannot be weakened by replanning");
       }
-      if ("acceptance_criteria" in raw && raw.acceptance_criteria !== item.acceptance_criteria) throw new PlanError("artifact acceptance criteria must be preserved");
+      // The user narrowing the delivery is the one thing that may restate what this step must meet.
+      if ("acceptance_criteria" in raw && raw.acceptance_criteria !== item.acceptance_criteria && !narrowedIds.has(item.id)) {
+        throw new PlanError("artifact acceptance criteria must be preserved");
+      }
     } else if ("artifact_contract" in raw) {
       item.artifact_contract = (contracts.declarations(raw) as Json).artifact_contract;
     }
@@ -107,8 +124,9 @@ export async function changePlan(run: ExecutionRun, change: Json, models: ModelP
     item.verifies = item.verifies.filter((id) => !gone.has(id));
   }
   checkAcyclic(remaining);
+  const artifactWaivers = [...run.plan.artifact_waivers, ...waivers];
   try {
-    contracts.validate({ ...run.plan, nodes: remaining }, { partial: true });
+    contracts.validate({ ...run.plan, nodes: remaining, artifact_waivers: artifactWaivers }, { partial: true });
   } catch (error) {
     if (error instanceof contracts.ContractError) throw new PlanError(error.message);
     throw error;
@@ -128,8 +146,36 @@ export async function changePlan(run: ExecutionRun, change: Json, models: ModelP
     }
   }
   run.plan.nodes = remaining;
+  run.plan.artifact_waivers = artifactWaivers;
   await pricing.reestimate(run);
   return { added: added.map((item) => item.title), removed: removed.map((item) => item.title), updated: updated.map((item) => item.title) };
+}
+
+/** The artifacts ``change.waive`` takes out of the delivery ({path, reason} or a path), each bound
+ *  to the question the user answered (``change.diagnosis_id``, else the latest answered one). Only
+ *  the user can narrow a delivery: without an answer the contracts stay as they are. */
+export function waive(run: ExecutionRun, change: Json, nodes: TaskNode[]): ArtifactWaiver[] {
+  const asked = change.waive ?? [];
+  if (!Array.isArray(asked)) throw new PlanError("waive must be a list of artifacts");
+  if (!asked.length) return [];
+  const answered = run.diagnoses.filter((item) => item.question && item.messages.some((message) => message.text.trim() || message.choice));
+  const wanted = change.diagnosis_id ? pyStr(change.diagnosis_id) : null;
+  const answer = wanted ? answered.find((item) => item.id === wanted) : answered.at(-1);
+  if (!answer) {
+    throw new PlanError("waive: only the user can take an artifact out of the delivery; ask_user first, then replan with their answer");
+  }
+  const declared = new Set(nodes.flatMap((item) => item.artifact_contract ? [...item.artifact_contract.inputs, ...item.artifact_contract.outputs].map((artifact) => artifact.path) : []));
+  const already = new Set(run.plan.artifact_waivers.map((item) => item.path));
+  const found: ArtifactWaiver[] = [];
+  for (const raw of asked) {
+    const path = pyStr(typeof raw === "string" ? raw : raw?.path ?? "").trim();
+    if (!declared.has(path)) throw new PlanError(`waive: ${path || "(empty)"} is not an artifact declared in the plan`);
+    if (already.has(path)) continue;
+    already.add(path);
+    const reason = head(pyStr(typeof raw === "string" ? "" : raw.reason ?? "").trim(), 1000);
+    found.push(ArtifactWaiverSchema.parse({ path, reason, diagnosis_id: answer.id }));
+  }
+  return found;
 }
 
 export function checkAcyclic(nodes: TaskNode[]): void {

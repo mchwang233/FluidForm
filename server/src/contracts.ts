@@ -130,7 +130,9 @@ export function stages(node: TaskNode): Set<string> {
   return found;
 }
 
-export function nodeProblems(node: TaskNode, { coverage = false }: { coverage?: boolean } = {}): string[] {
+/** What is wrong with ``node``'s contract. ``waived`` are the artifacts the user took out of the
+ *  delivery: with a VDB among them, a stage no longer has to produce or consume one. */
+export function nodeProblems(node: TaskNode, { coverage = false, waived = new Set<string>() }: { coverage?: boolean; waived?: Set<string> } = {}): string[] {
   const contract = node.artifact_contract;
   const jobs = stages(node);
   if (!coverage && jobs.size === 1 && jobs.has("delivery_audit") && !contract) return [];
@@ -145,11 +147,12 @@ export function nodeProblems(node: TaskNode, { coverage = false }: { coverage?: 
   if (contract.inputs.some((item) => !node.reads.includes(item.path))) errors.push("list every input in reads");
   if (!node.acceptance_criteria.trim()) errors.push("retain concrete acceptance_criteria");
   const vdb = (item: Artifact) => item.kind === "directory" && item.path.endsWith(".vdb");
-  if (contract.stage === "coverage_vdb" && !contract.outputs.some(vdb)) {
+  const noVdb = [...waived].some((path) => path.replace(/\/+$/, "").endsWith(".vdb"));
+  if (contract.stage === "coverage_vdb" && !contract.outputs.some(vdb) && !noVdb) {
     errors.push("coverage_vdb must deliver a VDB directory (kind=directory, path ending in .vdb)");
   }
   if (contract.stage === "urg_report") {
-    if (!contract.inputs.some(vdb)) errors.push("urg_report must consume a VDB directory (kind=directory, path ending in .vdb)");
+    if (!contract.inputs.some(vdb) && !noVdb) errors.push("urg_report must consume a VDB directory (kind=directory, path ending in .vdb)");
     if (!contract.outputs.some((item) => item.kind === "file")) errors.push("urg_report must deliver a text report file");
   }
   if (contract.stage === "delivery_audit" && !contract.inputs.some((item) => item.kind === "file")) {
@@ -228,8 +231,9 @@ export function planProblems(plan: TaskPlan, { partial = false }: { partial?: bo
   const coverage = plan.nodes.some((node) => [...stages(node)].some((stage) => stage === "coverage_vdb" || stage === "urg_report"));
   const problems: string[] = [];
   const delivered = new Map<string, string>();
+  const waivedPaths = new Set((plan.artifact_waivers ?? []).map((item) => item.path));
   for (const node of plan.nodes) {
-    problems.push(...nodeProblems(node, { coverage }));
+    problems.push(...nodeProblems(node, { coverage, waived: waivedPaths }));
     const contract = node.artifact_contract;
     if (!contract) {
       if (coverage && node.verifies.length && ancestors(node, plan.nodes).some((item) => item.artifact_contract)) {
@@ -416,12 +420,56 @@ export function outputSnapshot(root: string, node: TaskNode): Record<string, str
 const sameRecord = (a: Record<string, string>, b: Record<string, string>) =>
   Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([key, value]) => b[key] === value);
 
+/** The paths the user took out of the delivery (`TaskPlan.artifact_waivers`, granted by `waive` on a
+ *  replan after the user answered a question). A waived artifact is not required, fingerprinted or
+ *  compared anywhere; nothing is recorded as its evidence. */
+export function waived(run: ExecutionRun): Set<string> {
+  return new Set((run.plan.artifact_waivers ?? []).map((item) => item.path));
+}
+
+/** Whether ``node``'s contract declares one of ``paths``. */
+export function touches(node: TaskNode, paths: Set<string>): boolean {
+  const contract = node.artifact_contract;
+  return Boolean(contract) && [...contract!.inputs, ...contract!.outputs].some((item) => paths.has(item.path));
+}
+
+const quoted = (text: string) => (/^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.split("'").join(`'"'"'`)}'`);
+
+/** ``contract`` without the waived inputs and outputs and the acceptance commands naming them; null
+ *  when no output is left to deliver. When outputs are left but no command, each remaining output is
+ *  checked to exist and not be empty. Limits stay as they are. */
+export function narrowed(contract: NonNullable<TaskNode["artifact_contract"]>, paths: Set<string>): TaskNode["artifact_contract"] {
+  const outputs = contract.outputs.filter((item) => !paths.has(item.path));
+  if (!outputs.length) return null;
+  let commands = contract.acceptance_commands.filter((command) => ![...paths].some((path) => command.includes(path)));
+  if (!commands.length) commands = outputs.map((item) => `test -${item.kind === "directory" ? "d" : "s"} ${quoted(item.path)}`);
+  return ArtifactContractSchema.parse({ ...contract, inputs: contract.inputs.filter((item) => !paths.has(item.path)), outputs, acceptance_commands: commands });
+}
+
 /** Revalidate a saved acceptance before a consumer or lead can rely on it; nothing to revalidate
- *  when the platform does not accept steps (settings.acceptance off). */
+ *  when the platform does not accept steps (settings.acceptance off). A finished step whose contract
+ *  the user narrowed (a waived artifact) cannot have evidence for the whole contract: what is left of
+ *  it must still be there, unchanged if it was accepted, and its remaining inputs still valid. */
 export function accepted(run: ExecutionRun, node: TaskNode, seen: Set<string> | null = null): void {
   const evidence = node.artifact_evidence;
   const contract = node.artifact_contract;
   if (!contract || !uses.review()) return;
+  const paths = waived(run);
+  if (touches(node, paths)) {
+    const visited = seen ?? new Set<string>();
+    if (visited.has(node.id)) throw new ArtifactBlocked("产物依赖形成循环");
+    visited.add(node.id);
+    const root = workspace(run, node);
+    for (const item of contract.outputs.filter((output) => !paths.has(output.path))) {
+      const value = fingerprint(root, item);
+      if (evidence?.accepted && item.path in evidence.outputs && evidence.outputs[item.path] !== value) {
+        throw new ArtifactBlocked(`${node.title} 的已验收产物已变化或过期`);
+      }
+    }
+    inputSnapshot(run, node, visited);
+    visited.delete(node.id);
+    return;
+  }
   if (!evidence || !evidence.accepted || evidence.generation !== node.generation
     || JSON.stringify(evidence.checks.map((check) => (check as Record<string, unknown>).command ?? null)) !== JSON.stringify(contract.acceptance_commands)
     || !evidence.checks.every((check) => (check as Record<string, unknown>).ok)) {
@@ -436,18 +484,25 @@ export function accepted(run: ExecutionRun, node: TaskNode, seen: Set<string> | 
 }
 
 /** Each input's fingerprint; a dependency's must match what its producer had accepted. With
- *  acceptance off nothing was accepted: a finished producer is enough. */
+ *  acceptance off nothing was accepted: a finished producer is enough. Waived inputs are left out;
+ *  a producer the user narrowed is compared where it has accepted evidence for the input. */
 export function inputSnapshot(run: ExecutionRun, node: TaskNode, seen: Set<string> | null = null): Record<string, string> {
   const before = ancestors(node, run.plan.nodes);
+  const paths = waived(run);
   const found: Record<string, string> = {};
   for (const item of node.artifact_contract!.inputs) {
+    if (paths.has(item.path)) continue;
     const value = fingerprint(workspace(run, node), item);
     if (item.source === "dependency") {
       const owners = producers(item, before);
       if (owners.length !== 1 || owners[0].status !== "succeeded") throw new ArtifactBlocked(`${item.path} 缺少已完成且已验收的上游步骤`);
       const producer = owners[0];
       accepted(run, producer, seen);
-      if (uses.review() && producer.artifact_evidence!.outputs[item.path] !== value) throw new ArtifactBlocked(`${item.path} 与上游验收的产物不一致`);
+      const recorded = producer.artifact_evidence?.accepted ? producer.artifact_evidence.outputs[item.path] : undefined;
+      const narrowedProducer = touches(producer, paths);
+      if (uses.review() && (narrowedProducer ? recorded !== undefined && recorded !== value : recorded !== value)) {
+        throw new ArtifactBlocked(`${item.path} 与上游验收的产物不一致`);
+      }
     }
     found[item.path] = value;
   }
@@ -457,7 +512,7 @@ export function inputSnapshot(run: ExecutionRun, node: TaskNode, seen: Set<strin
 /** Only inputs are prerequisites; outputs form a baseline for this generation's work. */
 export function prepare(run: ExecutionRun, node: TaskNode): void {
   if (!node.artifact_contract) return;
-  const problems = nodeProblems(node);
+  const problems = nodeProblems(node, { waived: waived(run) });
   if (problems.length) throw new ArtifactBlocked(problems.join("; "));
   const inputs = inputSnapshot(run, node);
   if (node.contract_generation === node.generation) {

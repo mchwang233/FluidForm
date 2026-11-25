@@ -264,7 +264,12 @@ artifact acceptance is rechecked before a consumer starts and again in the ordin
 Missing prerequisites or an explicit `BLOCKED` result also block; a
 limit without accepted delivery records `Outcome.STOPPED`. `stopContract` preserves the attempt,
 logs, charges and a deterministic task diagnosis, blocks consumers and ends incomplete without
-automatic diagnosis/retry. Lead acceptance and replanning cannot erase these gates or limits.
+automatic diagnosis/retry. Lead acceptance and replanning cannot erase these gates or limits,
+except what the user took out of the delivery: after an answered question, a replan's `waive`
+(`replan.waive`) records `TaskPlan.artifact_waivers` (path, reason, diagnosis_id); unfinished
+contracts lose those artifacts (`contracts.narrowed`, limits kept) and may restate their
+acceptance criteria, and `inputSnapshot`/`accepted`/`nodeProblems` leave them out (`contracts.waived`)
+without recording any evidence for them.
 Legacy records have no contract and retain their existing execution policy.
 
 Artifact-stage inference distinguishes a report's input wording (such as "from VDB generate
