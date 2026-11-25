@@ -8,7 +8,9 @@ and everything sent to Feishu for that message is sent from there; from elsewher
 ``channel.schedule``. What is left here is FluidForm's side: for each message it answers it asks
 FluidForm over stdin/stdout (JSON lines): ``{"op": "message", ...}`` out, ``{"re": ..., "reply":
 ...}`` back, the answer as it is written as ``{"progress": ...}``. When a task it asked for ends,
-FluidForm sends ``{"event": "task_ended", ...}`` and the result is replied under the message.
+FluidForm sends ``{"event": "task_ended", ...}`` and the result is replied under the message; a task's
+question (``{"event": "task_question", ...}``) is replied there the same way, and the answer is the
+next message of who asked for it.
 How to chat is FluidForm's chat capability (``requires: ["chat"]``).
 
 The only way out of the sandbox is the proxy in HTTPS_PROXY, which reaches only the hosts in
@@ -43,6 +45,9 @@ REPLY_WAIT = 1800
 INBOX = "inbox"
 # Where FluidForm puts the files it sends with an answer, in the data folder.
 OUTBOX = "outbox"
+# What FluidForm tells of a task it was asked for: how it ended, what it asks. Each is replied under the
+# message that asked for it.
+TOLD = ("task_ended", "task_question")
 # What FluidForm takes with one message.
 MAX_FILES = 10
 # The kinds of message answered.
@@ -287,7 +292,7 @@ class Host:
                 loop, _, heard = self.pending[payload["progress"]]
                 if heard:
                     loop.call_soon_threadsafe(heard, str(payload.get("text") or ""))
-            elif payload.get("event") == "task_ended":
+            elif payload.get("event") in TOLD:
                 self.on_event(payload)
         os._exit(0)  # FluidForm has gone
 
@@ -608,6 +613,9 @@ def check() -> None:
         loop.call_soon_threadsafe(lambda: answered.set_result(("你好！", ["outbox/a.png"], False)))
     result, heard, loop = asyncio.run(asking())
     assert result == ("你好！", ["outbox/a.png"], False) and heard == [("你", loop)]
+    # A task's question is replied where it was asked for, as its end is.
+    assert "task_question" in TOLD and "task_ended" in TOLD
+
     # Commands are passed on at once, and only as the whole message.
     assert COMMAND.match("/stop") and COMMAND.match("新对话") and COMMAND.match("/STATUS")
     assert COMMAND.match("/help") and COMMAND.match("/HELP") and COMMAND.match("帮助") and not COMMAND.match("帮助我写个报告")
