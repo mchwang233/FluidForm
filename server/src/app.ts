@@ -1044,9 +1044,10 @@ export function buildApp(api: Api): FastifyInstance {
   });
 
   // A choice and/or free text is persisted before starting the next diagnosis.
-  app.post<{ Params: { run_id: string; diagnosis_id: string } }>("/api/tasks/:run_id/diagnoses/:diagnosis_id/reply", async (request) => {
-    const body = parse(DiagnosisReply, request.body);
-    const { run_id: runId, diagnosis_id: diagnosisId } = request.params;
+  app.post<{ Params: { run_id: string; diagnosis_id: string } }>("/api/tasks/:run_id/diagnoses/:diagnosis_id/reply", async (request) =>
+    replyToQuestion(request.params.run_id, request.params.diagnosis_id, parse(DiagnosisReply, request.body)));
+  /** The user's answer to what a task asked (the page, or a chat app it was asked for in). */
+  const replyToQuestion = async (runId: string, diagnosisId: string, body: z.infer<typeof DiagnosisReply>) => {
     const [run, following] = await executor().locked(runId, () => {
       const latest = api.getTask(runId);
       const previous = latest.diagnoses.find((item) => item.id === diagnosisId);
@@ -1090,7 +1091,9 @@ export function buildApp(api: Api): FastifyInstance {
     });
     if (following) executor().startDiagnosis(runId, following);
     return run;
-  });
+  };
+  api.answerQuestion = (runId, diagnosisId, answer) =>
+    replyToQuestion(runId, diagnosisId, { text: answer.text, choice: answer.choice ?? null, attachments: answer.attachments ?? [] });
 
   // Continue a failed, cancelled or incomplete task from where it stopped: finished nodes keep their
   // results; the others run again with fresh attempts and rework rounds.

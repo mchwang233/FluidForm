@@ -75,3 +75,14 @@ API 模型的对话原来把"发过的原文"存下来，每轮拍平成一条�
 - 思考强度按关键词判断，会有判错的：判低了答得浅，判高了慢一点。
 - 会员 CLI 不流式，答完之前都算"还没开始"，期间来新消息会打断它。
 - 打断时已经发出的请求可能照样计费，用量不一定记得到。
+
+## 负责人的问题在聊天里问、在聊天里答（2026-11-25）
+
+- 起因：飞书群里排的 PPT 任务，负责人问「没开网络，要不要联网补齐」，问题只出现在网页上；用飞书的人不知道，只能去网页确认。
+- 任务要问人时（负责人的 `ask_user`，或诊断的 `needs_input`，都发 `run.diagnosis_question`），`Executor.questionListeners` 让
+  `CapabilityAutomations.taskAsked` 把问题和带编号的选项发到原来那条消息下面（事件 `task_question`，机器人包照任务结束的样子回复），
+  也记进这段聊天和它的上下文。
+- 问题没答之前，让它排任务的人（群里按 open_id 认，`origin.requester`；私聊就是那个人）下一条叫到机器人的消息就是回答
+  （`answerTask`）：回编号或选项原文算选了那一项，别的话原样交给负责人；带的图片和文件一起交过去。走的是网页回答的同一条路
+  （`Api.answerQuestion`），选「允许联网」照样当场开网络。别人说话、群里没 @ 它的话照常聊天。
+- 测试：`api-packages.test.ts` 的「what a task's lead asks is told in the chat…」和「in a group only who asked for the task answers…」。

@@ -84,6 +84,13 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("网页", self.sent[0][1])
         self.assertNotIn("unused-file", self.sent[0][1])
 
+    def test_a_tasks_question_is_sent_where_it_was_asked(self):
+        self.bridge.receive(message())
+        origin = self.messages[0]["origin"]
+        self.bridge.reply({"event": "task_question", "origin": origin, "text": "负责人想问你：要不要联网？\n\n1. 允许联网"})
+        self.assertEqual(self.sent[-1][0]["conversation_id"], "conversation")
+        self.assertIn("要不要联网", self.sent[-1][1])
+
     def test_invalid_data_is_bounded_and_failures_are_not_acknowledged(self):
         for bad in [None, [], {}, message(msgId=""), message(senderStaffId="", senderId="")]:
             self.bridge.receive(bad)

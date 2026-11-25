@@ -177,7 +177,7 @@ class Bridge:
             if route is None or event.get("reply") is None or event.get("superseded"):
                 return
             text = string(event.get("reply"), MAX_BYTES)
-        elif event.get("event") == "task_ended" and isinstance(event.get("origin"), dict):
+        elif event.get("event") in ("task_ended", "task_question") and isinstance(event.get("origin"), dict):
             # No saved webhook needed: notifications survive an adapter restart.
             origin = event["origin"]
             route = {key: string(origin.get(key)) for key in ("chat_type", "conversation_id", "user_id")}

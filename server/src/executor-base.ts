@@ -80,6 +80,8 @@ export abstract class ExecutorBase {
   readonly capabilityTasks = new Map<string, Task<void>>();
   // Called with (run id, end event) whenever a task ends (emit).
   readonly endListeners: ((runId: string, kind: string) => void)[] = [];
+  // Called with (run id, the event's data) whenever a task asks the user something (run.diagnosis_question).
+  readonly questionListeners: ((runId: string, data: Json) => void)[] = [];
   // Steps working in one folder at once (scopes.ts).
   readonly folderLocks = new Map<string, scopes.FolderLock>();
   // Files a step changed outside its own that a step alongside it reads (Scope.intrusions).
@@ -139,6 +141,16 @@ export abstract class ExecutorBase {
 
   emit(runId: string, kind: string, data: Json = {}): void {
     this.db.addEvent(EventSchema.parse({ run_id: runId, kind, data }));
+    if (kind === "run.diagnosis_question") {
+      // A chat app it was asked for in hears the question, to answer it there.
+      for (const listener of this.questionListeners) {
+        try {
+          listener(runId, data);
+        } catch (error) {
+          log.error(`a question listener failed for ${runId}: ${(error as Error).stack ?? error}`);
+        }
+      }
+    }
     if (retrospect.END_EVENTS.has(kind)) {
       // Told whenever a task ends (the Feishu bot sends its result back where it was asked).
       for (const listener of this.endListeners) {

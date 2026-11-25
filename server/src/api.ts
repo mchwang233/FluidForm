@@ -201,6 +201,8 @@ export class Api {
   /** What tests replace. */
   /** Starts a task waiting for confirmation, as the page's button does (set by the app). */
   confirmTask: ((runId: string) => Promise<ExecutionRun>) | null = null;
+  /** Answers what a task asked the user, as the page's reply does (set by the app). */
+  answerQuestion: ((runId: string, diagnosisId: string, answer: { text: string; choice?: string | null; attachments?: string[] }) => Promise<ExecutionRun>) | null = null;
   readonly deps = { autonomousPlan, setProviderKey, classify: triage.classify, quick, addressed: triage.addressed };
   // Tasks being planned again with the user's choices (one replanning at a time per task).
   readonly replanning = new Set<string>();
@@ -295,6 +297,8 @@ export class Api {
     for (const runId of resuming) executor.start(runId);
     // Automation packages, when switched on: tasks asked for through them hear how they ended.
     executor.endListeners.push((runId, kind) => this.automations.taskEnded(runId, kind));
+    // ...and what such a task asks them, to answer there.
+    executor.questionListeners.push((runId, data) => this.automations.taskAsked(runId, data));
     this.automations.startAll();
     // Keys saved in a keyring that was locked at startup: load them once it is unlocked.
     this.background.push(new Task((signal) => keepLoadingKeys((loaded) => loaded.forEach((item) => this.providers.quota.clearProvider(item)), undefined, undefined, undefined, signal)));

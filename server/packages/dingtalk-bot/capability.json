@@ -2,7 +2,7 @@
   "id": "dingtalk-bot",
   "name": "钉钉机器人",
   "kind": "automation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "summary": "在钉钉单聊或群聊中与 FluidForm 对话、确认任务并接收文字结果。",
   "usage": "填写企业应用的 Client ID 和 Client Secret，在钉钉启用机器人并选择 Stream 模式。支持新对话、停止回复和任务确认，暂只收发文字。",
   "requires": ["chat"],

@@ -149,6 +149,9 @@ export class CapabilityAutomations {
       const done = await this.decideTask(capability, asked);
       if (done !== null) return [done, judged];
     }
+    // What a task asked who asked for it: their next message here is the answer.
+    const toTask = await this.answerTask(capability, asked);
+    if (toTask !== null) return [toTask, judged];
     if (earlier.length) delete heard[asked.conversation];
     if (asked.conversation) delete notesByConversation[asked.conversation];
     if (filesBefore.length) {
@@ -352,6 +355,69 @@ export class CapabilityAutomations {
       });
     }
     return said;
+  }
+
+  /** Who asked for a task waiting on a question in this conversation answers it with their next message
+   *  to the automation (in a group, one that @ it): a choice by its number or its words, or what they
+   *  write. Null when no task of theirs waits there (it is then said to the chat as anything else). */
+  private async answerTask(capability: Capability, asked: Asked): Promise<string | null> {
+    if (!asked.conversation || !asked.addressed) return null;
+    const waiting = this.api.db.listRuns().filter((run) => run.kind !== "chat" && run.waiting_diagnosis_id
+      && run.origin?.capability === capability.id && run.origin?.conversation === asked.conversation)
+      .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+    const group = (asked.origin.chat_type ?? waiting[0]?.origin?.chat_type) === "group";
+    const task = waiting.find((run) => (run.origin?.requester ? run.origin.requester === asked.sender_id : !group));
+    const question = task?.diagnoses.find((item) => item.id === task.waiting_diagnosis_id);
+    if (!task || !question) return null;
+    const said = asked.text.trim();
+    const picked = /^(?:选|第)?\s*([1-9])\s*(?:个|项)?$/.exec(said);
+    const choice = (picked ? question.choices[Number(picked[1]) - 1] : null) ?? question.choices.find((item) => item.trim() === said) ?? null;
+    if (!this.api.answerQuestion) throw new Error("FluidForm 现在不能回答任务的问题");
+    try {
+      await this.api.answerQuestion(task.id, question.id, { text: choice ? "" : said, choice, attachments: asked.attachments.map((item) => item.id) });
+    } catch (error) {
+      if (error instanceof HttpError) return `没能交给「${taskName(task)}」的负责人：${error.message}`;
+      throw error;
+    }
+    const reply = `收到，已交给「${taskName(task)}」的负责人${choice ? `（选了：${choice}）` : ""}，它接着做，做完在这里告诉你。`;
+    this.automationNote(capability, `${asked.sender || "对方"}回答了任务「${taskName(task)}」的问题`);
+    const chat = task.origin?.chat_run ? this.api.db.getRun(task.origin.chat_run) : null;
+    if (chat?.kind === "chat") {
+      await this.api.executor.locked(chat.id, () => {
+        const latest = this.api.getTask(chat.id);
+        latest.lead_messages.push(LeadMessageSchema.parse({ role: "user", text: said }), LeadMessageSchema.parse({ role: "lead", text: reply }));
+        this.api.db.saveRun(latest);
+      });
+    }
+    return reply;
+  }
+
+  /** A task asked for through an automation asks its user something: told where it was asked for,
+   *  under the message that asked for it, with its choices numbered (answerTask takes the answer). */
+  taskAsked(runId: string, data: Record<string, unknown>): void {
+    const { db } = this.api;
+    const run = db.getRun(runId);
+    const question = withoutPaths(String(data.question ?? "").trim());
+    if (!run || run.kind === "chat" || !run.origin?.capability || !question) return;
+    const choices = (Array.isArray(data.choices) ? data.choices : []).map((item) => String(item).trim()).filter(Boolean);
+    const group = run.origin.chat_type === "group";
+    const who = group && run.origin.requester_name ? `${run.origin.requester_name}，` : "";
+    let text = `${who}「${taskName(run)}」的负责人想问你：\n\n${question}`;
+    if (choices.length) text += "\n\n" + choices.map((item, index) => `${index + 1}. ${item}`).join("\n");
+    text += `\n\n（${group ? "@我 " : ""}直接回复${choices.length ? "编号或你的想法" : "你的想法"}，我交给负责人；网页上也能答。）`;
+    const conversation = run.origin.conversation;
+    if (conversation) {
+      const automation = this.runner.get(run.origin.capability);
+      const notes = (automation.state.notes ??= {});
+      notes[conversation] = [...(notes[conversation] ?? []), cut(text, 2000)].slice(-5);
+      automation.save();
+    }
+    const chat = run.origin.chat_run ? db.getRun(run.origin.chat_run) : null;
+    if (chat?.kind === "chat") {
+      chat.lead_messages.push(LeadMessageSchema.parse({ role: "lead", text }));
+      db.saveRun(chat);
+    }
+    this.runner.notify(run.origin.capability, { event: "task_question", origin: run.origin, title: taskName(run), text });
   }
 
   private automationNote(capability: Capability, line: string): void {

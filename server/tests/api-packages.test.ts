@@ -13,7 +13,7 @@ import * as packages from "../src/capability-packages.js";
 import * as runners from "../src/capability-runner.js";
 import * as sandbox from "../src/capability-sandbox.js";
 import { settings } from "../src/config.js";
-import { type Capability, folderId, LeadMessageSchema, type SupervisorSession } from "../src/models.js";
+import { type Capability, DiagnosisSchema, folderId, LeadMessageSchema, type SupervisorSession } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
 import { remembering } from "./helpers/chat-package.js";
 import * as secrets from "../src/secrets.js";
@@ -107,6 +107,7 @@ function withPackages(): { api: Api; client: Client; runner: runners.Runner; kep
   const runner = api.automations.runner;
   running.push(runner);
   api.executor.endListeners.push((runId, kind) => api.automations.taskEnded(runId, kind));
+  api.executor.questionListeners.push((runId, data) => api.automations.taskAsked(runId, data));
   return { api, client, runner, kept };
 }
 
@@ -1069,6 +1070,65 @@ test("who asked for a task starts it, or calls it off, in the chat", async () =>
   // Without a task waiting, "开始" is said to the chat as anything else.
   const [said] = await message(api, runner, { conversation: "c1", text: "开始" });
   assert.equal(said, "好的。");
+});
+
+/** The task's lead asks its user something, as leading.ts does; what its automation is sent, and the
+ *  answers the lead is started on. */
+function leadAsks(api: Api, runner: runners.Runner, taskId: string, choices = ["允许联网", "不用，按现有数据"]) {
+  const run = api.db.getRun(taskId)!;
+  const question = DiagnosisSchema.parse({ id: "q1", trigger: "lead", status: "done", verdict: "needs_input", question: "没开网络，要不要联网补齐 2025 年的数据？", choices });
+  run.diagnoses.push(question);
+  Object.assign(run, { status: "paused", error: question.question, waiting_diagnosis_id: question.id });
+  api.db.saveRun(run);
+  const events: any[] = [];
+  const started: string[] = [];
+  runner.notify = (_id, event) => events.push(event);
+  api.executor.startLeadAnswer = (_runId, questionId) => { started.push(questionId); };
+  api.executor.emit(taskId, "run.diagnosis_question", { diagnosis_id: question.id, question: question.question, choices });
+  return { events, started };
+}
+
+test("what a task's lead asks is told in the chat it came from, and answered there by its number", async () => {
+  // Regression: the lead's question reached only the page; asked from Feishu, nobody there heard it.
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  const task = await planned(api, runner);
+  const { events, started } = leadAsks(api, runner, task.id);
+  const [event] = events;
+  assert.ok(event.event === "task_question" && event.origin.message_id === task.origin!.message_id);
+  assert.ok(event.text.includes("要不要联网补齐") && event.text.includes("1. 允许联网") && event.text.includes("2. 不用，按现有数据"));
+  assert.deepEqual(runner.get("fake-bot").state.notes.c1.at(-1), event.text);
+  assert.equal(api.db.getRun(task.origin!.chat_run as string)!.lead_messages.at(-1)!.text, event.text);
+  const [reply] = await message(api, runner, { conversation: "c1", text: "2" });
+  assert.ok(reply!.includes("已交给") && reply!.includes("不用，按现有数据"));
+  const after = api.db.getRun(task.id)!;
+  assert.equal(after.waiting_diagnosis_id, null);
+  assert.equal(after.diagnoses.at(-1)!.messages.at(-1)!.choice, "不用，按现有数据");
+  assert.deepEqual(started, ["q1"]);
+  // Answered: what comes next is said to the chat as anything else.
+  const [next] = await message(api, runner, { conversation: "c1", text: "谢谢" });
+  assert.equal(next, "好的。");
+});
+
+test("in a group only who asked for the task answers its question; what they write goes as it is", async () => {
+  const { api, client, runner } = withPackages();
+  await upload(client, pkg());
+  const group = { origin: { chat_type: "group" } };
+  const task = await planned(api, runner, { sender: "甲", sender_id: "ou_a", ...group });
+  const run = api.db.getRun(task.id)!;
+  run.origin = { ...run.origin, chat_type: "group", requester: "ou_a", requester_name: "甲" };
+  api.db.saveRun(run);
+  const { events, started } = leadAsks(api, runner, task.id);
+  assert.ok(events[0].text.startsWith("甲，") && events[0].text.includes("@我"));
+  const [other] = await message(api, runner, { conversation: "c1", text: "1", sender: "乙", sender_id: "ou_b", ...group });
+  assert.ok(!other!.includes("已交给") && api.db.getRun(task.id)!.waiting_diagnosis_id === "q1");
+  // Not called on: not an answer either.
+  await message(api, runner, { conversation: "c1", text: "联网吧", sender: "甲", sender_id: "ou_a", addressed: false, ...group });
+  assert.equal(api.db.getRun(task.id)!.waiting_diagnosis_id, "q1");
+  const [mine] = await message(api, runner, { conversation: "c1", text: "联网补齐，再加一页总结", sender: "甲", sender_id: "ou_a", ...group });
+  assert.ok(mine!.includes("已交给") && !mine!.includes("选了"));
+  const said = api.db.getRun(task.id)!.diagnoses.at(-1)!.messages.at(-1)!;
+  assert.ok(said.text === "联网补齐，再加一页总结" && said.choice === null && started.length === 1);
 });
 
 test("in a group only who asked for it can start it", async () => {
