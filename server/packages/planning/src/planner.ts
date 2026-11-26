@@ -7,6 +7,7 @@ import * as pricing from "../../../src/pricing.js";
 import { settings } from "../../../src/config.js";
 import * as contracts from "../../../src/contracts.js";
 import { log } from "../../../src/log.js";
+import { BASH_MAX_TIMEOUT_MS } from "../../../src/agent.js";
 import { difficultyFor, toPercentScale } from "../../../src/model-hooks.js";
 import { DIFFICULTY_THRESHOLDS, type ModelProfile, type PlanChoice, PlanChoiceSchema, routingReady, type SupervisorSession,
   SupervisorSessionSchema, type TaskNode, TaskNodeSchema, type TaskPlan, TaskPlanSchema } from "../../../src/models.js";
@@ -92,6 +93,13 @@ export function planChoices(payload: Json): PlanChoice[] {
   return found.slice(0, 5);
 }
 
+/** How long one command of a step may run, told to whoever plans, so long builds are split before
+ *  they run (agent.COMMAND_LIMITS tells the step itself). */
+export const COMMAND_RULE = `One shell command of a step runs at most ${BASH_MAX_TIMEOUT_MS / 60_000} minutes (a membership CLI may stop it
+sooner), and nothing it starts in the background survives it: a later command cannot collect a job left
+running. Plan a synthesis, large build or regression that may take longer as several tasks or runs that
+each finish within one command, saving their results to files.
+`;
 export const WORK_RULES = `Rate each task's difficulty for the model that will do it:
 - easy: routine, well-specified work (formatting, summarising given results, small edits).
 - normal: ordinary analysis, research or implementation with clear requirements.
@@ -109,7 +117,7 @@ the request says the task allows it, and then it can download packages into the 
 and call external services. So steps can build, run tests, simulations and scripts with what is
 installed. Keep acceptance criteria within these limits, and name the tools the task needs so they
 are checked before it starts.
-Work that produces files (code, tests, documents) is planned as small work packages, not areas of
+` + COMMAND_RULE + `Work that produces files (code, tests, documents) is planned as small work packages, not areas of
 work, in a new task as much as in an existing project. Each task that writes files lists in "files"
 the 1-5 files it creates or changes and in "reads" up to 8 more files it must read
 for reference: in a project, by their paths in the brief given below; in a new task, by the file

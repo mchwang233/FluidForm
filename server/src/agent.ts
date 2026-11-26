@@ -31,7 +31,16 @@ import { SECRET_ENV } from "./secret-names.js";
 // Bash output returned to the model (its start and end when longer), as Claude Code's.
 export const MAX_BASH_OUTPUT = 30_000;
 export const BASH_TIMEOUT_MS = 120_000;
-export const BASH_MAX_TIMEOUT_MS = 600_000;
+// Long enough for a synthesis run or a large regression in one call: nothing a command starts
+// outlives it (each runs in its own sandbox, killed with its process group when it returns).
+export const BASH_MAX_TIMEOUT_MS = 1_800_000;
+/** What a step's model and the planner are told about how long one command may run and what
+ *  happens to what it leaves running, so long work is planned for it and not found out halfway. */
+export const COMMAND_LIMITS = `One shell command runs at most ${BASH_MAX_TIMEOUT_MS / 60_000} minutes (API models pass Bash a timeout `
+  + `up to ${BASH_MAX_TIMEOUT_MS} ms; the default is ${BASH_TIMEOUT_MS / 60_000} minutes), and every process it starts, `
+  + "background ones (nohup, &, setsid) too, is stopped when it returns: nothing keeps running between "
+  + "calls. Run a long build, synthesis or regression in the foreground with a timeout long enough for it, "
+  + "writing its log to a file; work longer than that is split into parts that each finish within one command.";
 // Installing software while repairing the environment can take a while.
 export const HOST_MAX_TIMEOUT_MS = 900_000;
 // Read: lines by default, at most per call, characters per line and per call.
@@ -69,6 +78,16 @@ export class ToolError extends Error {
 
 export type ToolSpec = { name: string; description: string; parameters: Record<string, unknown> };
 
+/** How many seconds a Bash call may run: the timeout asked for, in milliseconds, within the cap. */
+export function commandSeconds(timeout: unknown, host = false): number {
+  const limit = host ? HOST_MAX_TIMEOUT_MS : BASH_MAX_TIMEOUT_MS;
+  try {
+    return Math.max(1, Math.min(pyFloat2(timeout || BASH_TIMEOUT_MS), limit)) / 1000;
+  } catch {
+    throw new ToolError("timeout must be a number of milliseconds");
+  }
+}
+
 // The tools follow Claude Code's (names, parameters and output), which the models we drive through
 // APIs (DeepSeek, GLM, MiniMax, Kimi, ...) are tuned to use.
 export const TOOLS: ToolSpec[] = [
@@ -77,6 +96,7 @@ export const TOOLS: ToolSpec[] = [
     description: "Executes a bash command in a sandbox and returns its output.\n"
       + "- The working directory persists between commands; shell variables do not.\n"
       + "- /tmp is kept for the whole attempt.\n"
+      + `- ${COMMAND_LIMITS}\n`
       + `- stdout and stderr come back together, up to ${MAX_BASH_OUTPUT} characters (longer output keeps `
       + "its start and end); a command that prints nothing says so. Never redirect output to a file "
       + "just to read it afterwards.\n"
@@ -183,6 +203,7 @@ const agentInstructionsText = (root: string, ports: string, profiles: string, tu
   + "working directory and in /tmp (the same /tmp Bash sees); look at other files, read-only, with Bash.\n"
   + "- Bash keeps its working directory between calls and /tmp for this whole attempt; its output "
   + "comes back to you in full.\n"
+  + `- ${COMMAND_LIMITS}\n`
   + "- Where you are: a sandbox. Only the working directory and /tmp can be written; the rest of the "
   + "system is read-only and the user's home folder is hidden (HOME is the working directory). You are an "
   + "ordinary user, not root: sudo, system packages and system files are out of reach. Commands have no "
@@ -1102,13 +1123,7 @@ export class Workspace {
   async bash(command: unknown, timeout: unknown, signal?: AbortSignal): Promise<[string, boolean]> {
     if (typeof command !== "string" || !command.trim()) throw new ToolError("command is required");
     if (!sandboxAvailable()) throw new ToolError("commands are unavailable: bubblewrap is not installed");
-    const limit = this.host ? HOST_MAX_TIMEOUT_MS : BASH_MAX_TIMEOUT_MS;
-    let seconds: number;
-    try {
-      seconds = Math.max(1, Math.min(pyFloat2(timeout || BASH_TIMEOUT_MS), limit)) / 1000;
-    } catch {
-      throw new ToolError("timeout must be a number of milliseconds");
-    }
+    const seconds = commandSeconds(timeout, this.host);
     // A reviewer reaches none of this machine's services.
     const ports = this.host || this.readOnly ? [] : await deps.sandboxPorts();
     // The output goes to a file, not a pipe: a pipe is a socket pair, whose output pasta (a task

@@ -2,7 +2,7 @@
 import * as contracts from "../../../src/contracts.js";
 import { ask, MAX_REQUIRE_CHARS, MAX_REQUIRES, planTitle } from "./lead-planning.js";
 import type { TaskNode, TaskPlan } from "../../../src/models.js";
-import { CHOICES_RULE, CHOICES_SHAPE, get, INDEPENDENT_RULE, MAX_NODES, PlanProblem, planChoices, type Say, validatePlan } from "./planner.js";
+import { CHOICES_RULE, CHOICES_SHAPE, COMMAND_RULE, get, INDEPENDENT_RULE, MAX_NODES, PlanProblem, planChoices, type Say, validatePlan } from "./planner.js";
 import { head, pyStr } from "../../../src/py.js";
 import * as team from "../../../src/team.js";
 
@@ -61,7 +61,7 @@ share folders or nest one in another. A task that writes files but names neither
 the whole workspace to itself, so it runs alone. Set needs_workspace=true when accessing the
 target project. Workers can edit files and run sandboxed commands; internet requires task permission,
 and root/system installation is unavailable. requires contains only commands checking essential tools.
-` + CHOICES_RULE + `
+` + COMMAND_RULE + CHOICES_RULE + `
 Return JSON only with 1-` + String(MAX_NODES) + ` nodes (usually far fewer), no parts or children:
 {"summary":"objective","title":"short name for the user's list: request's language, at most 12 Chinese characters or 5 English words","serial_reason":"only if no two tasks can run at the same time: why","folder":"short-english-name","requires":["essential tool check"],` + CHOICES_SHAPE + `,"nodes":[
 {"key":"build","title":"short title","employee_id":"chosen employee","instructions":"matters to handle",

@@ -92,6 +92,29 @@ test("a command's timeout keeps its stdout and stderr", async () => {
   assert.ok(output.split("\n").includes("before-timeout") && output.split("\n").includes("error-before-timeout"));
 });
 
+test("a step's command may run 30 minutes, and the step and its planner are told the limits", async () => {
+  // A synthesis run was cut off at 590 s while still mapping: the cap was 10 minutes.
+  assert.equal(agent.commandSeconds(1_800_000), 1800);
+  assert.equal(agent.commandSeconds(7_200_000), 1800);
+  assert.equal(agent.commandSeconds(undefined), agent.BASH_TIMEOUT_MS / 1000);
+  // A job left in the background does not survive the call: say so, before work is planned around it.
+  const bash = agent.TOOLS.find((tool) => tool.name === "Bash")!;
+  const timeout = (bash.parameters.properties as Record<string, { description: string }>).timeout.description;
+  assert.ok(timeout.includes("max 1800000"));
+  for (const told of [bash.description, await agent.agentInstructions(null, false, folder)]) {
+    assert.ok(told.includes("30 minutes") && told.includes("background") && told.includes("nothing keeps running between calls"));
+  }
+  const { WORK_RULES } = await import("../packages/planning/src/planner.js");
+  assert.ok(WORK_RULES.includes("at most 30 minutes") && WORK_RULES.includes("nothing it starts in the background survives it"));
+});
+
+test("a process a command leaves in the background is gone at the next command", async () => {
+  const ws = commandWorkspace();
+  await ws.call("Bash", { command: "nohup sleep 60 >/dev/null 2>&1 & echo $! > /tmp/pid" });
+  const output = await ws.call("Bash", { command: "kill -0 $(cat /tmp/pid) 2>/dev/null && echo alive || echo gone" });
+  assert.equal(output.trim(), "gone");
+});
+
 test("Bash keeps /tmp and its directory through the attempt", async () => {
   // Like Claude Code's Bash: /tmp and the working directory carry over between commands, shell
   // variables do not, and nothing may be written outside the workspace and /tmp.
