@@ -337,6 +337,28 @@ test("a failed task resumes from the failed node", async () => {
   assert.equal(api.db.events("r1").at(-1)!.kind, "run.resumed");
 });
 
+test("resuming a contract step stopped at its tool-call limit grants it more calls", async () => {
+  const { api, client } = taskApi(folder());
+  api.executor.start = () => {};
+  api.models = { "x:one": scored("x:one") };
+  api.providers.configuredModels = all;
+  const run = failedRun("incomplete");
+  const b = run.plan.nodes[1];
+  Object.assign(b, { status: "blocked", model_id: "x:one", contract_tool_calls: 50, contract_turns: 21, contract_cost_usd: 0.05,
+    artifact_contract: { inputs: [], outputs: [{ path: "sw/build", kind: "directory" }], acceptance_commands: ["test -d sw/build"],
+      blocked_when: ["no assembler"], max_turns: 50, max_cost_usd: 1 } });
+  assert.ok(Executor.contractLimitReason(b));
+  api.db.saveRun(run);
+
+  assert.equal((await client.post("/api/tasks/r1/resume", { json: { budget_usd: 2 }, headers: ORIGIN })).status_code, 200);
+
+  const resumed = api.db.getRun("r1")!.plan.nodes[1];
+  assert.equal(resumed.status, "pending");
+  assert.ok(resumed.artifact_contract!.max_turns > resumed.contract_tool_calls);
+  assert.ok(resumed.artifact_contract!.max_cost_usd > 1);
+  assert.equal(Executor.contractLimitReason(resumed), null);
+});
+
 test("resuming checks the status and the budget", async () => {
   const { api, client } = taskApi(folder());
   api.executor.start = () => {};

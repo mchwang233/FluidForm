@@ -19,7 +19,9 @@ import * as services from "./services.js";
 import * as packages from "./capability-packages.js";
 import { missing as sandboxMissing } from "./capability-sandbox.js";
 import { PROFILES, settings } from "./config.js";
+import * as contracts from "./contracts.js";
 import { NETWORK_CHOICE } from "./diagnosis.js";
+import { ExecutorBase } from "./executor-base.js";
 import { EngineerError, STOP } from "./engineer.js";
 import { LearningProblem } from "./learning.js";
 import {
@@ -175,6 +177,9 @@ export function reopenNode(run: ExecutionRun, node: TaskNode): void {
     if (advice && !(node.feedback ?? "").includes(advice)) node.feedback = `${node.feedback}\n诊断建议：${advice}`;
   }
   Object.assign(node, { status: "pending", failed_attempts: 0, environment_fixes: 0 });
+  // A contract step stopped at its limit would be refused again before any model is picked: the
+  // user continuing it grants what a lead's rerun grants (contracts.extend).
+  if (node.artifact_contract && ExecutorBase.contractLimitReason(node)) contracts.extend(node);
 }
 
 /** Content-Disposition as Starlette's FileResponse writes it. */
