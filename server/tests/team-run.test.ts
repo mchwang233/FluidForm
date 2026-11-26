@@ -6,7 +6,7 @@ import { StepLimitExceeded } from "../src/budget.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { Executor } from "../src/executor.js";
-import { CapabilityScoreFields, type ExecutionRun, ExecutionRunSchema, ModelProfileSchema, NodeAttemptSchema, TaskNodeSchema } from "../src/models.js";
+import { CapabilityScoreFields, DecisionSchema, type ExecutionRun, ExecutionRunSchema, ModelProfileSchema, NodeAttemptSchema, TaskNodeSchema } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
 import type { Task } from "../src/tasks.js";
 import * as team from "../packages/planning/src/team-planning.js";
@@ -161,4 +161,35 @@ test("a step already finished cannot publish a second graph of children", async 
   const restored = db.getRun(run.id)!;
   assert.equal(restored.plan.nodes.length, 1);
   assert.equal(restored.plan.nodes[0].status, "succeeded");
+});
+
+/** A step under a turn limit on ``builder``, which the lead moved from the stronger CLI to a weaker one. */
+function switchedRun(): [ExecutionRun, Record<string, ReturnType<typeof ModelProfileSchema.parse>>] {
+  const scored = (id: string, score: number) => ModelProfileSchema.parse({ id, provider: id.split(":")[0], display_name: id, channel: "cli",
+    scores: { ...all95, coding: score }, scores_source: "artificial_analysis", context_window: 200000, max_output_tokens: 4096,
+    input_per_million: 0, output_per_million: 0, supports_tools: true });
+  const strong = scored("cli:strong", 97.6);
+  const weak = scored("cli:weak", 88.1);
+  const run = runWithTeam();
+  run.status = "running";
+  const step = contractNode("verify", "coverage_vdb", [], "out.txt", { employee_id: "builder", quality_threshold: 90, contract: { max_turns: 90, max_cost_usd: 4 } });
+  step.model_id = weak.id;
+  run.plan.nodes = [step];
+  run.plan.employees = [{ ...employees()[0], model_id: strong.id }];
+  run.decisions.push(DecisionSchema.parse({ node_id: step.id, event: "failed", action: "switch_model", model_id: weak.id }));
+  return [run, { [strong.id]: strong, [weak.id]: weak }];
+}
+
+test("a model the lead switched a limited step to keeps it, below the quality threshold", async () => {
+  const [run, models] = switchedRun();
+  const db = new Database(join(folder(), "switched.db"));
+  db.saveRun(run);
+  const providers = { configuredModels: () => new Set(Object.keys(models)) } as never;
+  const executor = new Executor(db, providers, models);
+  assert.ok(await executor.admitToolChannel(run, run.plan.nodes[0]));
+  assert.equal(run.plan.nodes[0].model_id, "cli:weak");
+  // Without the lead's decision the threshold still holds: the step goes to the model that meets it.
+  run.decisions = [];
+  assert.ok(await executor.admitToolChannel(run, run.plan.nodes[0]));
+  assert.equal(run.plan.nodes[0].model_id, "cli:strong");
 });

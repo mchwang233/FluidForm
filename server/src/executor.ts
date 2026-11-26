@@ -353,8 +353,14 @@ export class Executor extends Preflighting {
     }
     if (!limits.length) return true;
     const configured = this.configured(run);
-    const eligible = new Set(eligibleForNode(node, Object.values(this.modelLookup), configured, this.needsVision(run))
-      .filter((model) => scoreFor(model.scores!, node.capability) >= node.quality_threshold).map((model) => model.id));
+    const allowed = eligibleForNode(node, Object.values(this.modelLookup), configured, this.needsVision(run));
+    const eligible = new Set(allowed.filter((model) => scoreFor(model.scores!, node.capability) >= node.quality_threshold).map((model) => model.id));
+    // The model the task's lead switched this step to keeps it below the quality threshold: the lead
+    // judged it fit (often because the stronger one keeps failing), and moving it back would undo that.
+    const decision = run.decisions.filter((item) => item.node_id === node.id).at(-1);
+    if (decision?.action === "switch_model" && decision.model_id === node.model_id && allowed.some((model) => model.id === node.model_id)) {
+      eligible.add(node.model_id!);
+    }
     if (run.plan.employees.length) {
       const employee = team.member(run.plan, node.employee_id);
       if (!employee || !employee.capabilities.includes(node.capability)) eligible.clear();

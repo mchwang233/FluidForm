@@ -9,7 +9,8 @@ import type { Database } from "./db.js";
 import { fromPythonIso, pythonIso } from "./lax.js";
 import { head, pyRegex } from "./py.js";
 
-const QUOTA = pyRegex(String.raw`(?:usage|session|weekly|daily|monthly) limit|limit reached|hit your (usage )?limit`
+// "hit your … limit": whatever the membership calls the window (usage, session, 5-hour, weekly Opus).
+const QUOTA = pyRegex(String.raw`(?:usage|session|weekly|daily|monthly) limit|limit reached|hit your (?:[\w-]+ ){0,3}limit`
   + String.raw`|rate.?limit|quota|insufficient[_ ](balance|quota|credit)`
   + String.raw`|credit balance is too low|out of credits|too many requests|billing|returned (429|402)\b|余额不足|额度`, "i");
 // A plain 429 usually clears quickly; running out of money or a membership limit does not.

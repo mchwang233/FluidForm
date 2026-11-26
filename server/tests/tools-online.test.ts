@@ -13,7 +13,7 @@ import { Database } from "../src/db.js";
 import * as mcp from "../src/mcp.js";
 import { ExecutionRunSchema, TaskNodeSchema } from "../src/models.js";
 import * as quality from "../src/quality.js";
-import { isQuotaError, QuotaTracker, resetTime } from "../src/quota.js";
+import { failureKind, isQuotaError, QuotaTracker, resetTime } from "../src/quota.js";
 
 const saved = { ...settings };
 const env = { ...process.env };
@@ -177,11 +177,19 @@ const NOW = new Date(Date.UTC(2026, 9, 15, 2, 0));
 const SESSION_LIMIT = "claude failed: You've hit your session limit · resets 2pm (Asia/Shanghai)";
 const HOUR = 3600_000;
 
-for (const period of ["usage", "session", "weekly", "daily", "monthly"]) {
+for (const period of ["usage", "session", "weekly", "daily", "monthly", "5-hour", "weekly Opus"]) {
   test(`a membership ${period} limit is a quota error`, () => {
     assert.ok(isQuotaError(`claude failed: You've hit your ${period} limit · resets 2pm (Asia/Shanghai)`));
   });
 }
+
+test("a 5-hour membership limit is out of quota until its reset", () => {
+  const message = "claude failed: You've hit your 5-hour limit · resets 12:30am (Asia/Shanghai)";
+  assert.equal(failureKind(message), "quota");
+  assert.deepEqual(resetTime(message, new Date(Date.UTC(2026, 10, 25, 15, 28))), new Date(Date.UTC(2026, 10, 25, 16, 30)));
+  // Not every "limit" is one: a step's own turn limit is not the model's quota.
+  assert.equal(failureKind("达到声明工具调用上限 50，hit the step limit"), null);
+});
 
 test("a session reset uses the reported time zone", () => {
   assert.deepEqual(resetTime(SESSION_LIMIT, NOW), new Date(Date.UTC(2026, 9, 15, 6)));
