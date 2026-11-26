@@ -2,6 +2,8 @@
 // tests of test_capability_packages, test_call_runtime and test_platform_repair), ported. These
 // run real bwrap and pasta commands, as the Python tests did.
 import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir, userInfo } from "node:os";
@@ -211,6 +213,50 @@ test("a task allowing the network reaches out, but not local services", { skip: 
     proxy.close();
     service.close();
   }
+});
+
+test("a CLI allowed the network runs in its own: the listed host ports, not other local services",
+  { skip: (!networkAllowed() && "The task disabled network access") || (!agent.networkAvailable() && "pasta is not installed") }, async () => {
+  const [listed, port] = await server("hello-from-license\n");
+  const [service, other] = await server("hello-from-api\n");
+  try {
+    for (const name of agent.PROXY_ENV) delete process.env[name];
+    settings.sandbox_host_ports = [port];
+    const probe = `timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/${port}; cat <&3' || echo listed-failed; `
+      + `timeout 2 bash -c 'exec 3<>/dev/tcp/127.0.0.1/${other}' 2>/dev/null && echo local-open || echo local-blocked; id -u`;
+    const command = await agent.ownNetwork(["bash", "-c", probe]);
+    if (!agent.mapsUser()) {
+      assert.deepEqual(command, ["bash", "-c", probe]); // cannot be the user again inside: unchanged
+      return;
+    }
+    assert.ok(command.includes("pasta") && command.includes("--no-map-gw"));
+    assert.equal(command[command.indexOf("-T") + 1], String(port));
+    // Through Node's own pipes, as a CLI is run; not spawnSync: the servers answer from this event loop.
+    const { stdout } = await promisify(execFile)(command[0], command.slice(1), { encoding: "utf8", timeout: 30_000 });
+    assert.ok(stdout.includes("hello-from-license") && stdout.includes("local-blocked"), stdout);
+    assert.ok(stdout.trim().endsWith(String(userInfo().uid)), stdout); // the user, not pasta's root
+    // What it reads, prints on stderr and exits with gets through as well.
+    const piped = await agent.ownNetwork(["bash", "-c", "read line; echo got:$line; echo oops >&2; exit 7"]);
+    const child = spawn(piped[0], piped.slice(1), { stdio: ["pipe", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (data) => (out += data));
+    child.stderr.on("data", (data) => (err += data));
+    child.stdin.end("prompt\n");
+    const code = await new Promise((done) => child.on("close", done));
+    assert.deepEqual([out, err, code], ["got:prompt\n", "oops\n", 7]);
+  } finally {
+    listed.close();
+    service.close();
+  }
+});
+
+test("a CLI's network is unchanged without pasta", async () => {
+  agent.deps.networkAvailable = () => false;
+  assert.deepEqual(await agent.ownNetwork(["codex", "exec"]), ["codex", "exec"]);
+  agent.deps.networkAvailable = () => true;
+  agent.deps.mapsUser = () => false;
+  assert.deepEqual(await agent.ownNetwork(["codex", "exec"]), ["codex", "exec"]);
 });
 
 test("tools from environment repairs reach the sandbox", async () => {

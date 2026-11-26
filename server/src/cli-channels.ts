@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import * as activity from "./activity.js";
+import { ownNetwork } from "./agent.js";
 import { path as attachmentPath } from "./attachments.js";
 import * as calls from "./calls.js";
 import { settings } from "./config.js";
@@ -74,6 +75,10 @@ export const REPAIR_ARGS: Record<string, string[]> = {
 /** Why a CLI exited with an error. Claude Code in JSON mode reports errors such as a usage limit in
  *  the ``result`` of its stdout and leaves stderr empty. */
 export function failureDetail(stdout: Buffer, stderr: Buffer): string {
+  // What the CLI said went wrong comes first: Codex prints warnings on stderr and the reason (a usage
+  // limit, say) as an event on stdout.
+  const reported = reportedError(stdout.toString("utf8"));
+  if (reported) return tail(reported, 500);
   let detail = stderr.toString("utf8").trim();
   if (!detail) {
     let text = stdout.toString("utf8").trim();
@@ -86,6 +91,22 @@ export function failureDetail(stdout: Buffer, stderr: Buffer): string {
     detail = text || "no output";
   }
   return tail(detail, 500);
+}
+
+/** The error in a CLI's JSON lines (Codex: the last ``turn.failed`` or ``error`` event), or "". */
+function reportedError(stdout: string): string {
+  for (const line of splitlines(stdout).reverse()) {
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isObject(event) || (event.type !== "turn.failed" && event.type !== "error")) continue;
+    const message = isObject(event.error) ? event.error.message : event.message;
+    if (message) return pyStr(message).trim();
+  }
+  return "";
 }
 
 /** Run a CLI on the host as the user, network included, but under no_new_privs (which bubblewrap
@@ -406,6 +427,7 @@ export const deps = {
     codexStepPermissions(workdir, network, options),
   codexServers: () => codexServers(),
   repairCommand: (executable: string, args: string[]) => repairCommand(executable, args),
+  ownNetwork: (command: string[]) => ownNetwork(command),
 };
 
 class Timeout extends Error {
@@ -607,8 +629,11 @@ export class CliChannelRegistry {
     const executable = modelId === "cli:codex" ? deps.which(CLI_SPECS[modelId].executable) : null;
     if (!executable) throw new CliError(`${modelId} cannot run a command in its sandbox without the model`);
     return withPrivateTmp(true, async (tmp) => {
-      const child = spawn(executable, ["sandbox", "-P", CODEX_STEP_PROFILE, "-C", cwd, ...deps.codexStepPermissions(cwd, network, { tmpdir: tmp }),
-        "--", "/bin/bash", "-c", command], { cwd, env: { ...environment.commandEnv({ ...process.env } as Record<string, string>), TMPDIR: tmp! },
+      let argv = [executable, "sandbox", "-P", CODEX_STEP_PROFILE, "-C", cwd, ...deps.codexStepPermissions(cwd, network, { tmpdir: tmp }),
+        "--", "/bin/bash", "-c", command];
+      // The network a step gets: see completeIn.
+      if (network) argv = await deps.ownNetwork(argv);
+      const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...environment.commandEnv({ ...process.env } as Record<string, string>), TMPDIR: tmp! },
         stdio: ["ignore", "pipe", "pipe"], detached: true });
       const chunks: Buffer[] = [];
       child.stdout!.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -734,7 +759,10 @@ export class CliChannelRegistry {
       args[1] = prompt;
       stdin = null;
     }
-    const command = repair ? deps.repairCommand(executable, args) : [executable, ...args];
+    // A Codex step allowed the internet gets the network Codex runs in: its own (ownNetwork), so the
+    // internet and this machine's recorded host ports, not every local service.
+    const command = repair ? deps.repairCommand(executable, args)
+      : step && network ? await deps.ownNetwork([executable, ...args]) : [executable, ...args];
     const options: RunOptions = { watch, extraEnv: tmp ? { TMPDIR: tmp } : null, toolTrace, signal };
     const run = () => (spec.id === "cli:codex" ? this.runInput(spec, command, cwd, prompt, timeout, options)
       : this.run(spec, command, cwd, stdin, timeout, options));

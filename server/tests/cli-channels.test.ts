@@ -121,6 +121,16 @@ test("a CLI failure reports the reason from its JSON output", () => {
   assert.equal(cli.failureDetail(Buffer.alloc(0), Buffer.alloc(0)), "no output");
 });
 
+test("a Codex failure reports its failed turn, not a warning on stderr", () => {
+  const limit = "You've hit your usage limit. Try again at Nov 28th, 2026 2:27 PM.";
+  const events = [{ type: "thread.started", thread_id: "t" }, { type: "turn.started" }, { type: "error", message: limit },
+    { type: "turn.failed", error: { message: limit } }].map((event) => JSON.stringify(event)).join("\n");
+  const warning = Buffer.from("warning: Untrusted project-local configuration is disabled.\n");
+  assert.equal(cli.failureDetail(Buffer.from(events), warning), limit);
+  // No failed turn: stderr as before.
+  assert.equal(cli.failureDetail(Buffer.from(JSON.stringify({ type: "turn.started" })), warning), warning.toString().trim());
+});
+
 test("Claude Code runs commands only inside its sandbox", () => {
   const args = CLI_SPECS["cli:claude"].invoke_args;
   assert.ok(!args.includes("--dangerously-skip-permissions") && !args.includes("bypassPermissions"));
@@ -297,6 +307,38 @@ test("Codex compacts its final input and retries a rejection only once", async (
     }
     assert.ok(record.warnings.some((warning: string) => warning.includes(String(original.length)) && warning.includes(String(sent[0].length))));
   }
+});
+
+test("only a Codex step allowed the internet runs in a network of its own", async () => {
+  const registry = new CliChannelRegistry();
+  const commands: string[][] = [];
+  cli.deps.which = (name) => join(folder, name);
+  cli.deps.codexSettings = () => [];
+  cli.deps.codexStepPermissions = () => [];
+  cli.deps.ownNetwork = async (command) => ["own-network", ...command];
+  registry.run = async (_spec, command) => {
+    commands.push(command);
+    return command.includes("cli:claude") ? '{"result":"ok"}' : message("ok");
+  };
+  await registry.complete("cli:codex", "联网的一步", folder, { network: true });
+  await registry.complete("cli:codex", "不联网的一步", folder);
+  await registry.complete("cli:claude", "联网的一步", folder, { network: true }); // its own sandbox keeps localhost out
+  const [networked, offline, claude] = commands;
+  assert.equal(networked[0], "own-network");
+  assert.equal(networked[1], join(folder, "codex"));
+  assert.notEqual(offline[0], "own-network");
+  assert.notEqual(claude[0], "own-network");
+});
+
+test("a networked check in Codex's sandbox runs in the network a step gets", async () => {
+  const log = join(folder, "argv.log");
+  fakeCli("own-network", `#!/bin/sh\necho "$@" > ${log}\necho checked\n`);
+  cli.deps.which = (name) => join(folder, name);
+  cli.deps.codexStepPermissions = () => [];
+  cli.deps.ownNetwork = async (command) => [join(folder, "bin", "own-network"), ...command];
+  const [output, ok] = await new CliChannelRegistry().sandboxRun("cli:codex", "true", folder, 10, true);
+  assert.ok(ok && output.includes("checked"), output);
+  assert.ok(readFileSync(log, "utf8").startsWith(`${join(folder, "codex")} sandbox`));
 });
 
 test("a Codex lead rebuilds a rejected input without changing its conversation", async () => {

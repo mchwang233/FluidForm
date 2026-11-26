@@ -235,7 +235,7 @@ export async function sandboxPorts(): Promise<number[]> {
 }
 
 // What tests replace: the bridged ports, and whether pasta is there.
-export const deps = { sandboxPorts: () => sandboxPorts(), networkAvailable: () => networkAvailable() };
+export const deps = { sandboxPorts: () => sandboxPorts(), networkAvailable: () => networkAvailable(), mapsUser: () => mapsUser() };
 
 export async function agentInstructions(maxTurns: number | null = null, network = false, root = "."): Promise<string> {
   const ports = await deps.sandboxPorts();
@@ -288,6 +288,25 @@ export function mapsUser(): boolean {
 export function networkPrefix(forward: number[]): string[] {
   const tcp = forward.join(",") || "none";
   return ["pasta", "--config-net", "--quiet", "--no-map-gw", "-T", tcp, "-U", "none", "-u", "none", "-t", "none", "--"];
+}
+
+// pasta puts /dev/null in place of a socket on stdin, stdout or stderr, which is what Node gives a
+// child for a pipe; the shell in front gives it real pipes and passes the data and the exit code on.
+// What feeds stdin stops when the command ends, even if the caller never closes it.
+const REAL_PIPES = 'exec 3< <(exec cat 2>/dev/null); feeder=$!\n'
+  + '"$@" <&3 3<&- 2> >(exec cat >&2) | cat\nstatus=${PIPESTATUS[0]}\nkill "$feeder" 2>/dev/null\nexit "$status"';
+
+/** ``command``, a CLI whose own sandbox gives its commands the network it runs in (Codex), in a network
+ *  namespace of its own: the internet, the proxies and this machine's recorded host ports (a license
+ *  server), but no other local service, such as this application's API. As the user again (bwrap maps
+ *  them back from pasta's root), which the CLI's own sandbox needs. Unchanged without pasta or that
+ *  mapping: then its commands reach the host's network as before. */
+export async function ownNetwork(command: string[]): Promise<string[]> {
+  if (!deps.networkAvailable() || !deps.mapsUser()) return command;
+  const forward = [...new Set([...proxyPorts(), ...(await environment.hostPorts())])].sort((a, b) => a - b);
+  const { uid, gid } = userInfo();
+  return ["/bin/bash", "-c", REAL_PIPES, "bash", ...networkPrefix(forward), "bwrap", "--unshare-user", "--uid", String(uid), "--gid", String(gid),
+    "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--die-with-parent", "--", ...command];
 }
 
 /** Width and height of a PNG, JPEG, GIF or WebP picture, from its header; null if unknown. */
