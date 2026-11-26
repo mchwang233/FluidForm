@@ -210,3 +210,30 @@ test("a step that changes what a step alongside reads does not pass", async () =
   assert.ok(a.attempts[0].reason!.includes("改了自己范围外的文件 spec.txt") && a.attempts[0].reason!.includes("「b」"));
   assert.ok(result.status === "succeeded" && a.attempts.length === 2); // its retry stayed in its own files
 });
+
+test("a step is credited only with its own folder: not home files, nor what a step alongside wrote beyond its own", async () => {
+  const root = project([["a", "core/a.sv", ["core/"]], ["b", "periph/b.sv", ["periph/"]]], true);
+  for (const name of ["core", "periph", "sim", ".claude"]) mkdirSync(join(root, name));
+  class Noisy extends Team {
+    override async complete(modelId: string, prompt: string, options: object = {}): Promise<ProviderResult> {
+      if (prompt.includes("写 core/a.sv")) {
+        // HOME is the working directory: shells and tools leave their state at its top.
+        writeFileSync(join(root, ".bashrc"), "x\n");
+        writeFileSync(join(root, ".gitconfig"), "x\n");
+        writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
+        return super.complete(modelId, prompt, options);
+      }
+      // b writes beyond its folder and is still at work when a finishes.
+      writeFileSync(join(root, "sim", "b.log"), "log\n");
+      const result = await super.complete(modelId, prompt, options);
+      await sleep(0.15);
+      return result;
+    }
+  }
+  const team = new Noisy(root);
+  await new Executor(database, team, MODELS).execute("r");
+  assert.equal(team.most, 2);
+  const [a, b] = database.getRun("r")!.plan.nodes;
+  assert.deepEqual(a.changed_files, ["core/a.sv"]);
+  assert.deepEqual(b.changed_files, ["periph/b.sv"]);
+});

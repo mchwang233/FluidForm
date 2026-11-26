@@ -50,6 +50,13 @@ test("changed files skip VCS and dependency folders", () => {
   assert.deepEqual(quality.changedFiles(before, quality.fileState(root)), ["keep.py", "new.txt"]);
 });
 
+test("changed files leave out the home state at the folder's top", () => {
+  const root = folder();
+  const before = quality.fileState(root);
+  for (const name of [".bashrc", ".zshrc", ".gitconfig", ".claude/settings.json", ".cache/pip/x", "src/.bashrc", ".gitignore"]) write(root, name, "x");
+  assert.deepEqual(quality.changedFiles(before, quality.fileState(root)), [".gitignore", "src/.bashrc"]);
+});
+
 test("the handoff lists upstream files and truncates without a summary", () => {
   const upstream = node("a", [], { changed_files: ["src/app.py", "README.md"], result: "y".repeat(50) });
   const downstream = node("b", ["a"]);

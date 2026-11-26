@@ -798,8 +798,9 @@ export class Executor extends Preflighting {
         throw error;
       }
       const everything = quality.changedFiles(before, after);
-      const changed = scope.own(everything);
-      scope.changed = changed; // before it leaves the folder (FolderLock.hold)
+      // Told to those still in the folder before it leaves (FolderLock.hold); it is credited only with its own.
+      scope.changed = scope.own(everything);
+      const changed = scope.mine(everything);
       const intruded = scope.intrusions(everything);
       if (intruded.length) this.intrusions.set(key, intruded);
       return [result, changed];

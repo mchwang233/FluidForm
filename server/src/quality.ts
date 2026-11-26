@@ -447,8 +447,23 @@ export function fileState(root: string): Map<string, string> {
 /** How a folder's files are snapshotted; tests replace it. */
 export const files = { state: fileState };
 
+// What shells and tools keep in their home: a step's HOME is its working directory (agent.ts), so these
+// change at the top of the folder whatever the step does, and are never its work.
+export const HOME_STATE = new Set([".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bash_history", ".profile",
+  ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".zlogout", ".zsh_history", ".cshrc", ".tcshrc", ".history",
+  ".gitconfig", ".git-credentials", ".viminfo", ".lesshst", ".python_history", ".node_repl_history", ".sqlite_history",
+  ".wget-hsts", ".netrc", ".claude.json", ".cache", ".local", ".npm", ".pki", ".ipython", ".java", ".cargo", ".rustup", ".gem",
+  ".m2", ".gradle", ".conda", ".keras", ".nv", ".dotnet", ".vscode-server", ".mozilla", ...PRIVATE_DIRS]);
+
+/** Whether a path, relative to the working directory, is shell or tool state kept at its top level. */
+export function homeState(path: string): boolean {
+  const first = path.split("/")[0].toLowerCase();
+  return HOME_STATE.has(first) || first.startsWith(".zcompdump");
+}
+
+/** The files that differ between two snapshots, leaving out the home state at the folder's top. */
 export function changedFiles(before: Map<string, string>, after: Map<string, string>): string[] {
-  return [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).sort();
+  return [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path) && !homeState(path)).sort();
 }
 
 function git(root: string, args: string[]): string {

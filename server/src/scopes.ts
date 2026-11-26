@@ -41,6 +41,15 @@ export class Scope {
     return changed.filter((path) => !within(path, [...this.others, ...this.left]));
   }
 
+  /** Of the files changed in the folder while this step ran, those it is credited with: within what it
+   *  owns, and beyond that only when no other step was in the folder with it, since any of them may have
+   *  written there. The rest is nobody's, and is still told to those in the folder (``changed``). */
+  mine(changed: string[]): string[] {
+    const own = this.own(changed);
+    if (this.everything || !this.alongside.length) return own;
+    return own.filter((path) => within(path, this.writes));
+  }
+
   clashes(other: Scope): boolean {
     if (this.everything || other.everything) return true;
     return overlap(this.writes, new Set([...other.writes, ...other.reads])) || overlap(this.reads, other.writes);
