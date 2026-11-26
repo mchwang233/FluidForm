@@ -19,7 +19,9 @@ FluidForm gives it to every model that diagnoses or repairs the platform.
 ## Diagnosing (before any edit)
 
 1. Read `docs/ARCHITECTURE.md` to find the owning module. Do not read whole large files:
-   search (`grep -n`) for the names involved, then read only those line ranges.
+   search (`grep -n`) for the names involved, then read only those line ranges. A step that cannot
+   reach something (a license server, the internet), reaches what it should not, loses its output or
+   keeps failing on quota points to its model's channel: follow `skills/model-channel/SKILL.md`.
 2. Tie the failure to evidence: the attempt's outcome and reason, events, logs, the code path.
 3. Report where the defect is, one line per place, then the status line:
 

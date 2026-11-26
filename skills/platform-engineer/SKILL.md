@@ -35,6 +35,7 @@ FluidForm gives it to the platform engineer for every component it plans or buil
      outside service, a background service): a capability package, as
      `skills/capability-package/SKILL.md` says. Kept inside its folder, it goes live without a restart;
    - a model or channel: `server/src/catalog.ts` (models), `providers.ts` (API), `cli-channels.ts` (`CLI_SPECS`);
+     follow `skills/model-channel/SKILL.md`: measure its sandbox, output and quota messages first;
    - a tool for API models: `agent.ts` (`Workspace`, its tool list and sandbox);
    - a skill: a folder under `skills/` with a `SKILL.md`;
    - a web UI feature: the component in `frontend/` named in the map, styles in `style.css`;
