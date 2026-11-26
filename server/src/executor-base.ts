@@ -14,7 +14,6 @@ import { RequestBudget, StepLimitExceeded } from "./budget.js";
 import * as pricing from "./pricing.js";
 import { CLI_SPECS } from "./cli-channels.js";
 import { settings } from "./config.js";
-import * as contracts from "./contracts.js";
 import type { Conversation } from "./conversation.js";
 import type { Database } from "./db.js";
 import { nowIso } from "./lax.js";
@@ -24,7 +23,7 @@ import { type Attachment, type Diagnosis, DiagnosisSchema, type EngineerJob, Eve
 import { type PlatformRepairs, type RepairJob, SourceRepairs } from "./platform-repair.js";
 import * as progress from "./progress.js";
 import type { CompleteOptions, ProviderResult, SpendOk } from "./providers.js";
-import { AsyncEvent, fixed, head, pyRound, pyStr } from "./py.js";
+import { AsyncEvent, fixed, formatG, head, pyRound, pyStr } from "./py.js";
 import * as quality from "./quality.js";
 import { type ModelUnavailable, failureKind, type QuotaTracker } from "./quota.js";
 import { retryModel } from "./recovery.js";
@@ -420,11 +419,16 @@ export abstract class ExecutorBase {
     node.review = node.unable_reason = reason;
     if (node.artifact_evidence) node.artifact_evidence.accepted = false;
     if (!node.result) node.result = `BLOCKED: ${reason}`;
-    let report = `${reason}\n累计请求轮次：${node.contract_turns}；工具调用：${node.contract_tool_calls}；累计费用：$${fixed(node.contract_cost_usd, 6)}。\n` + contracts.prompt(node);
+    // For the user: why it stopped, what it used and was to deliver. The model's own instructions
+    // (contracts.prompt) are not theirs to read.
+    const contract = node.artifact_contract;
+    const lines = [reason, `已用：请求 ${node.contract_turns} 轮、工具调用 ${node.contract_tool_calls} 次、$${fixed(node.contract_cost_usd, 4)}`
+      + (contract ? `（这一步的上限：${contract.max_turns} 次、$${formatG(contract.max_cost_usd)}）。` : "。")];
+    if (contract?.outputs.length) lines.push(`这一步要交付：${contract.outputs.map((item) => item.path).join("、")}。`);
     const last = node.attempts.at(-1);
-    if (last?.trace) report += `\n日志：${last.trace}`;
+    if (last?.trace) lines.push(`日志：${last.trace}`);
     run.diagnoses.push(DiagnosisSchema.parse({ id: shortId(), trigger: "artifact_contract", node_id: node.id, status: "done", scope: "task", verdict: "blocked",
-      report, finished_at: nowIso() }));
+      report: lines.join("\n"), user_action: "可以在负责人对话里让它放宽这一步的上限再试，或把这一步拆小；不依赖它的步骤照常进行。", finished_at: nowIso() }));
     const below = quality.descendants(run, new Set([node.id]));
     for (const downstream of run.plan.nodes) {
       if (below.has(downstream.id) && downstream.status === "pending") {

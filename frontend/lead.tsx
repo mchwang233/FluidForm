@@ -3,7 +3,7 @@ import { canChat, has, useProvided } from "./provided";
 import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type Attachment } from "./attachments";
-import { Composer, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
+import { Composer, Failure, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
 import type { EngineerJob, EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, JoinEngineer, MENTION, tellEngineer, useEngineerJobs, type Act } from "./lead-engineer";
 import { ToolLog, type ToolCall } from "./plan-graph";
@@ -248,7 +248,7 @@ function RepairProgress({ repair, model, waiting, onReply }: { repair: Repair; m
         : repair.status === "failed" ? <span className="dx-chip bad">没有完成</span>
         : verdict && <span className={`dx-chip ${verdict.tone}`}>{verdict.label}</span>}
     </div>
-    {repair.status === "failed" && repair.error && <p className="error">{repair.error}</p>}
+    {repair.status === "failed" && repair.error && <Failure error={repair.error} lead="" />}
     {repair.report && <details className="lead-instructions" open={waiting}><summary>修复报告</summary><div className="dx-report"><MarkdownView text={repair.report} /></div></details>}
     {(repair.messages ?? []).map((message, i) => <UserMessage key={i} message={message} />)}
     {waiting && <>

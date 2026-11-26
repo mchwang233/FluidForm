@@ -127,6 +127,17 @@ test("an artifact's turn limit adds up across retries, and resuming cannot reset
   assert.equal(db.getRun("artifacts")!.plan.nodes[0].attempts.at(-1)!.outcome, "stopped");
 });
 
+test("a step stopped at its limit tells the user why and what they can do, not the model's instructions", async () => {
+  const [executor, db] = setupExecutor(folder(), [contractNode("vdb", undefined, [], undefined, { contract: { max_turns: 2 } })], noOutput);
+  settings.max_node_attempts = 10;
+  await executor.execute("artifacts");
+  const diagnosis = db.getRun("artifacts")!.diagnoses.find((item) => item.trigger === "artifact_contract")!;
+  const report = diagnosis.report!;
+  assert.ok(report.includes("轮次上限 2") && report.includes("coverage.vdb"), report);
+  for (const instruction of ["Artifact contract", "acceptance_commands", "{", "Write every declared output"]) assert.ok(!report.includes(instruction), report);
+  assert.ok(diagnosis.user_action && diagnosis.user_action.includes("负责人"), diagnosis.user_action ?? "");
+});
+
 test("an artifact's cost limit stops it instead of a budget pause or a retry", async () => {
   const [executor, db, providers] = setupExecutor(folder(), [contractNode("vdb", undefined, [], undefined, { contract: { max_cost_usd: 0.002 } })], noOutput);
   settings.auto_diagnose = true;

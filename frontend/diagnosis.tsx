@@ -32,7 +32,7 @@ const VERDICTS: Record<string, { label: string; tone: string; note: (model: stri
 };
 
 // Who brought the platform engineer (a diagnosis's trigger), as the user reads it.
-const CALLED_BY: Record<string, string> = { manual: "你请来的", auto: "失败后请来", lead_repair: "负责人请来", preflight: "执行前检查请来" };
+const CALLED_BY: Record<string, string> = { manual: "你请来的", auto: "失败后请来", lead_repair: "负责人请来", preflight: "执行前检查请来", artifact_contract: "到了上限" };
 
 /** Diagnoses grouped into conversations: a reply's follow-up joins the one it answers. */
 function conversations(list: Diagnosis[]): Diagnosis[][] {
@@ -76,6 +76,16 @@ function Report({ text }: { text: string }) {
   </div>;
 }
 
+/** Why the platform engineer stopped, in its first line; test output and logs folded under it. */
+export function Failure({ error, lead = "平台工程师没有查完：" }: { error: string; lead?: string }) {
+  const [summary, ...rest] = error.trim().split("\n");
+  const details = rest.join("\n").trim();
+  return <div className="dx-failure">
+    <p className="error">{lead}{summary.replace(/[：:]\s*$/, "") || "原因未知"}</p>
+    {details && <details><summary>技术细节</summary><pre>{details}</pre></details>}
+  </div>;
+}
+
 function AssistantMessage({ item, model, node, run }: { item: Diagnosis; model: string; node?: string; run: RunLike }) {
   const verdict = item.verdict ? VERDICTS[item.verdict] : undefined;
   const running = (item.scope === "fluidform" || item.scope === "super_partner") ? `${model} 正在修复平台自身问题，并验证修改…`
@@ -89,7 +99,7 @@ function AssistantMessage({ item, model, node, run }: { item: Diagnosis; model: 
       <small>{item.trigger === "lead" ? "负责人提问" : item.reply_to ? "回复" : CALLED_BY[item.trigger] ?? "平台工程师"}{node ? ` · ${node}` : ""} · {when(item.created_at)}</small>
     </div>
     {item.status === "running" ? <p className="diagnosis-running"><span className="dx-typing" aria-hidden="true"><i /><i /><i /></span>{running}</p>
-      : item.status === "failed" ? <p className="error">平台工程师没有查完：{item.error}</p>
+      : item.status === "failed" ? <Failure error={item.error ?? ""} />
       : <>
         {verdict && <p className={`diagnosis-verdict ${verdict.tone}`}>{verdict.note(model, item)}</p>}
         {item.report && <Report text={item.report} />}
@@ -171,7 +181,8 @@ export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models:
   const thread = groups[Math.min(Math.max(index, 0), groups.length - 1)];
   if (!thread) return null;
   const last = thread[thread.length - 1], status = chip(run, last), latest = index >= groups.length - 1;
-  const name = (item: Diagnosis) => models.find(m => m.id === item.model_id)?.display_name ?? item.model_id ?? "—";
+  // A step stopped at its limit: FluidForm itself says so, not a model.
+  const name = (item: Diagnosis) => models.find(m => m.id === item.model_id)?.display_name ?? item.model_id ?? (item.trigger === "artifact_contract" ? "FluidForm" : "—");
   const nodeTitle = (item: Diagnosis) => run.plan.nodes.find(n => n.id === item.node_id)?.title;
   const busy = (run.diagnoses ?? []).some(item => item.status === "running") || !!run.maintenance_id || last.verdict === "platform_pending";
   const waiting = run.waiting_diagnosis_id === last.id;

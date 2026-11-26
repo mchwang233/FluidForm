@@ -1713,6 +1713,30 @@ test("a running task can be paused and diagnosed, and the report shows its advic
 });
 
 
+test("a step stopped at its limit and a failed repair read as plain words, with the test output folded", async t => {
+  const run = mission("limit-task", "incomplete");
+  run.plan.nodes = [{ id: "a", title: "汇编器", dependencies: [], model_id: "cli:codex", status: "blocked", estimated_cost_usd: 0, attempts: [] }];
+  run.diagnoses = [
+    { id: "d1", trigger: "artifact_contract", node_id: "a", model_id: null, status: "done", verdict: "blocked", report: "达到声明工具调用上限 50",
+      user_action: "可以在负责人对话里让它放宽这一步的上限再试", created_at: "2026-10-14T06:00:00Z" },
+    { id: "d2", trigger: "manual", node_id: "a", model_id: "cli:claude", status: "failed",
+      error: "Server tests 未通过：\nnot ok 408 - a change is applied by a restart\n  failureType: 'testCodeFailure'", created_at: "2026-10-14T07:00:00Z" },
+  ];
+  const models = [{ id: "cli:claude", provider: "anthropic", display_name: "Claude Code CLI", channel: "cli", enabled: true, configured: true, scores: null }];
+  const { document, click } = await setup(t, [run], models, { openComposer: false });
+  const card = () => document.querySelector(".diagnosis-card");
+  if (!card()) await click([...document.querySelectorAll(".task-tabs button")].find(b => b.textContent.startsWith("对话")));
+  // The failure in one line; the test output only when asked for.
+  const failure = card().querySelector(".dx-failure");
+  assert.equal(failure.querySelector(".error").textContent, "平台工程师没有查完：Server tests 未通过");
+  assert.ok(!failure.querySelector("details").open);
+  assert.match(failure.querySelector("pre").textContent, /not ok 408/);
+  // A step stopped at its limit: FluidForm says so, with what the user can do.
+  await click(card().querySelector('[aria-label="上一次"]'));
+  assert.match(card().textContent, /FluidForm.*到了上限 · 汇编器/);
+  assert.match(card().querySelector(".diagnosis-verdict.warn").textContent, /FluidForm 判断需要你先处理。可以在负责人对话里让它放宽/);
+});
+
 test("models out of quota are listed until they reset, and can be put back by hand", async t => {
   const models = [{ id: "cli:claude", provider: "anthropic", display_name: "Claude Code CLI", channel: "cli", enabled: true, configured: true, scores: null }];
   const { state, document, act, click } = await setup(t, [mission("build-task", "running")], models, { openComposer: false });
