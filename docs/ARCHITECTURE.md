@@ -205,9 +205,12 @@ Its offline check is `check.py`; integration tests are `server/tests/dingtalk-bo
   for only what needs none of their results; no review, no attempt, no progress watch, cost charged as usual.
   `TaskNode.preparing`/`head_start`/`head_start_generation`; the report goes into the first attempt's prompt
   (`quality.HEAD_START_DONE`); events `node.head_start`, `node.head_started`; tests `server/tests/scopes-run.test.ts`.
+  It uses at most a third of the step's declared calls (`HEAD_START_SHARE`, executor-base.ts).
 - `admitToolChannel`: before dispatch and again after final model selection, checks declared
   tool-limit enforcement, authorization, routing eligibility and cumulative limits. A compatible
   replacement must also fit the remaining run/step budgets and other dispatched work's reservations.
+  A step at its own declared limit before it starts goes to its lead (`leadAtLimit` → `decide`, event
+  `node.limit_reached`), not straight to a stop; docs/design/limits-and-the-lead.md.
 - `executeNode`: one attempt; exceptions map to outcomes (`budget`, `error`, quota → `switchModel`).
 - `check` (review.ts): review or verification verdict; `quality.Verdict(passed, reason, fix, unable, ...)`.
 - `finish`: appends the `NodeAttempt` with an `Outcome`.

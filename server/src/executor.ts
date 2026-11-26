@@ -243,7 +243,15 @@ export class Executor extends Preflighting {
       return Boolean(limit) && running.size >= limit;
     };
     for (const node of ready) {
-      if (node.status !== "pending" || !(await this.admitToolChannel(run, node, reserved))) continue;
+      if (node.status !== "pending") continue;
+      if (!(await this.admitToolChannel(run, node, reserved))) {
+        // Handed to its lead at its limit: counted as at work, so the task waits for the decision.
+        if (handedToLead(node)) {
+          running.set(new Task(() => this.leadAtLimit(run.id, node.id)), node.id);
+          started.add(node.id);
+        }
+        continue;
+      }
       const model = node.model_id ? this.modelLookup[node.model_id] : undefined;
       if (atCapacity(model)) continue;
       if (node.estimated_cost_usd && reserved + node.estimated_cost_usd > run.budget_usd) {
@@ -381,6 +389,19 @@ export class Executor extends Preflighting {
       if (compatible && eligible.has(model.id) && (retained || affordable)) candidates.push(model);
     }
     const reason = limits.map((n) => this.contractLimitReason(n)).find(Boolean) ?? null;
+    // At its own declared limit before it starts (an early start used the calls, say): its lead decides,
+    // as for a limit reached while working (finish): more calls, a split, a repair or giving up. The
+    // caller hands it over (leadAtLimit); only without a lead does it stop as declared.
+    const own = this.contractLimitReason(node);
+    if (own && this.canLead()) {
+      node.status = "running";
+      // Recorded as an attempt that stopped before doing anything: the lead reads the last attempt, and
+      // the step's history shows why its calls are used up.
+      node.attempts.push(NodeAttemptSchema.parse({ model_id: node.model_id, outcome: "stopped", reason: `开始前已用完：${own}` }));
+      this.save(run);
+      this.emit(run.id, "node.limit_reached", { node_id: node.id, reason: own, started: false });
+      return false;
+    }
     if (candidates.length && !reason) {
       if (!candidates.some((model) => model.id === node.model_id)) {
         const previous = node.model_id;
@@ -404,6 +425,14 @@ export class Executor extends Preflighting {
     await Promise.all([...running.keys()].map((task) => task.settled()));
   }
 
+  /** A step at its declared limit before it started (admitToolChannel), for its lead to decide. */
+  async leadAtLimit(runId: string, nodeId: string): Promise<void> {
+    const node = this.db.getRun(runId)?.plan.nodes.find((item) => item.id === nodeId);
+    if (!node) return;
+    const reason = this.contractLimitReason(node) ?? "达到声明上限，停止工作包。";
+    await this.decide(runId, nodeId, quality.verdict({ passed: false, reason }), "stopped");
+  }
+
   async executeNode(runId: string, nodeId: string): Promise<void> {
     const begun = await this.locked(runId, async () => {
       const run = this.db.getRun(runId);
@@ -422,7 +451,7 @@ export class Executor extends Preflighting {
         } catch (error) {
           if (!(error instanceof NoEligibleModelError)) throw error;
           if (team.governors(run.plan, node).length) {
-            if (!(await this.admitToolChannel(run, node))) return null;
+            if (!(await this.admitToolChannel(run, node))) return handedToLead(node) ? "lead" : null;
           } else {
             run.status = "paused";
             run.error = error.message;
@@ -434,7 +463,7 @@ export class Executor extends Preflighting {
         await this.spread(run, node);
       }
       // Refreshing, spreading and concurrent work may have changed the final channel or limits.
-      if (!(await this.admitToolChannel(run, node, null, admitted))) return null;
+      if (!(await this.admitToolChannel(run, node, null, admitted))) return handedToLead(node) ? "lead" : null;
       if (!this.outOfQuota(node.model_id) && node.estimated_cost_usd && run.actual_cost_usd + node.estimated_cost_usd > run.budget_usd) {
         this.pauseForBudget(run);
         return null;
@@ -446,6 +475,7 @@ export class Executor extends Preflighting {
       return [run, node] as const;
     });
     if (!begun) return;
+    if (begun === "lead") return this.leadAtLimit(runId, nodeId);
     const [run, node] = begun;
     this.emit(runId, "node.started", { node_id: node.id, model_id: node.model_id, attempt: node.attempts.length + 1 });
     const generation = node.generation;
@@ -916,6 +946,11 @@ export class Executor extends Preflighting {
     if (next === "lead") await this.decide(runId, nodeId, verdict, outcome);
     else if (next === "diagnose") await this.repair(runId, nodeId, verdict, outcome);
   }
+}
+
+/** admitToolChannel gave the step to its lead (its limit reached before it started), rather than refusing it. */
+function handedToLead(node: TaskNode): boolean {
+  return node.status === "running";
 }
 
 /** A stored time's instant, for ordering times written in different forms. */

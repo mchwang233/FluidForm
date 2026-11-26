@@ -138,6 +138,29 @@ test("a step stopped at its limit tells the user why and what they can do, not t
   assert.ok(diagnosis.user_action && diagnosis.user_action.includes("负责人"), diagnosis.user_action ?? "");
 });
 
+test("a step started early uses at most a third of its calls, and keeps the rest for itself", async () => {
+  const [executor, db] = setupExecutor(folder(), [contractNode("vdb", undefined, [], undefined, { contract: { max_turns: 6 } })], noOutput);
+  const run = db.getRun("artifacts")!;
+  const node = run.plan.nodes[0];
+  const turn = (async (budget: { beginTurn(): Promise<void> }) => {
+    await budget.beginTurn();
+    return new ProviderResult("ok", 1, 1, "test:worker");
+  }) as never;
+  node.preparing = true;
+  db.saveRun(run);
+  await executor.charged(run, node, "test:worker", turn, { work: true });
+  await executor.charged(run, node, "test:worker", turn, { work: true });
+  await assert.rejects(executor.charged(run, node, "test:worker", turn, { work: true }), (error: Error) =>
+    error instanceof StepLimitExceeded && error.message.includes("三分之一"));
+  assert.equal(db.getRun("artifacts")!.plan.nodes[0].contract_turns, 2);
+  // Started for real, it has the rest: 4 more of its 6.
+  const started = db.getRun("artifacts")!;
+  started.plan.nodes[0].preparing = false;
+  db.saveRun(started);
+  for (let i = 0; i < 4; i += 1) await executor.charged(started, started.plan.nodes[0], "test:worker", turn, { work: true });
+  await assert.rejects(executor.charged(started, started.plan.nodes[0], "test:worker", turn, { work: true }), StepLimitExceeded);
+});
+
 test("an artifact's cost limit stops it instead of a budget pause or a retry", async () => {
   const [executor, db, providers] = setupExecutor(folder(), [contractNode("vdb", undefined, [], undefined, { contract: { max_cost_usd: 0.002 } })], noOutput);
   settings.auto_diagnose = true;

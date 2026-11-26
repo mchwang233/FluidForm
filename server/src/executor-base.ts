@@ -61,6 +61,18 @@ export function tracePath(runId: string, nodeId: string, attempt: number): strin
 const shortId = () => crypto.randomUUID().replaceAll("-", "").slice(0, 8);
 export const newDiagnosisId = shortId;
 
+/** What a step started early (Executor.headStart) may use of its declared limit: the rest is kept for
+ *  the step itself, so preparing never uses up its allowance before it starts. */
+export const HEAD_START_SHARE = 1 / 3;
+
+/** Stop a head start at its share of the step's declared calls (``used``: its turns or tool calls). */
+function headStartShare(node: TaskNode, used: number): void {
+  if (!node.preparing || !node.artifact_contract) return;
+  if (used >= Math.floor(node.artifact_contract.max_turns * HEAD_START_SHARE)) {
+    throw new StepLimitExceeded("提前准备最多用这一步三分之一的调用次数，其余留给正式开始后。");
+  }
+}
+
 export abstract class ExecutorBase {
   readonly tasks = new Map<string, Task<void>>();
   readonly learningTasks = new Map<string, Task<void>>();
@@ -240,11 +252,13 @@ export abstract class ExecutorBase {
     };
     const useTurn = () => this.locked(run.id, () => {
       const latest = this.db.getRun(run.id)!;
-      const governors = team.governors(latest.plan, latest.plan.nodes.find((item) => item.id === node!.id)!);
+      const current = latest.plan.nodes.find((item) => item.id === node!.id)!;
+      const governors = team.governors(latest.plan, current);
       for (const governor of governors) {
         const reason = this.contractLimitReason(governor);
         if (reason) throw new StepLimitExceeded(reason);
       }
+      headStartShare(current, current.contract_turns);
       for (const governor of governors) governor.contract_turns += 1;
       this.save(latest);
     });
@@ -252,10 +266,12 @@ export abstract class ExecutorBase {
     // interrupted or failed invocation: its side effects may already exist.
     const beginTool = () => this.locked(run.id, () => {
       const latest = this.db.getRun(run.id)!;
-      const governors = team.governors(latest.plan, latest.plan.nodes.find((item) => item.id === node!.id)!);
+      const current = latest.plan.nodes.find((item) => item.id === node!.id)!;
+      const governors = team.governors(latest.plan, current);
       for (const governor of governors) {
         if (governor.contract_tool_calls >= governor.artifact_contract!.max_turns) throw new StepLimitExceeded("达到声明工具调用上限，额外调用未执行。");
       }
+      headStartShare(current, current.contract_tool_calls);
       for (const governor of governors) governor.contract_tool_calls += 1;
       this.save(latest);
     });

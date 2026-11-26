@@ -270,6 +270,38 @@ test("a step at its limit goes to the lead and stops without a decision", async 
   assert.equal(db.getRun("artifacts")!.plan.nodes[0].status, "blocked");
 });
 
+test("a step already at its limit before it starts goes to the lead, not straight to a stop", async () => {
+  // Its calls were used before it started (a head start, say): the lead decides, here to run it again.
+  const node = contractNode();
+  Object.assign(node, { contract_tool_calls: 3 });
+  const [executor, db, providers] = setupExecutor(folder(), [node]);
+  executor.canLead = () => true;
+  const asked: string[] = [];
+  executor.askForDecision = async (_runId, _nodeId, prompt) => {
+    asked.push(prompt);
+    return { action: "retry", reason: "almost done", options: [] } as never;
+  };
+  await executor.execute("artifacts");
+  const run = db.getRun("artifacts")!;
+  assert.ok(asked.length === 1 && asked[0].includes("declared limit"), asked.join("\n---\n"));
+  assert.ok(db.events("artifacts").some((e) => e.kind === "node.limit_reached") && db.events("artifacts").some((e) => e.kind === "node.limit_extended"));
+  assert.ok(run.plan.nodes[0].artifact_contract!.max_turns > 3 && providers.calls.includes("vdb"));
+  assert.notEqual(run.status, "incomplete", run.error ?? "");
+  assert.equal(run.plan.nodes[0].attempts[0].outcome, "stopped"); // the stop before it started, in its history
+});
+
+test("without a lead a step already at its limit stops as declared", async () => {
+  const node = contractNode();
+  Object.assign(node, { contract_tool_calls: 3 });
+  const [executor, db, providers] = setupExecutor(folder(), [node]);
+  executor.canLead = () => false;
+  await executor.execute("artifacts");
+  const run = db.getRun("artifacts")!;
+  assert.equal(run.plan.nodes[0].status, "blocked");
+  assert.equal(run.status, "incomplete");
+  assert.deepEqual(providers.calls, []);
+});
+
 /** A report step blocked by a coverage gap, after the step that produced the coverage. */
 function blockedRun(made: unknown) {
   const vdb = contractNode();
