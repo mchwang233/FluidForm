@@ -1,12 +1,13 @@
 // cli-channels.ts: its tests in test_activity, test_agent, test_attachments, test_core, test_executor,
 // test_preflight, test_progress and test_supervisor, ported.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, afterEach, beforeEach, test } from "node:test";
 import * as activity from "../src/activity.js";
-import { Workspace } from "../src/agent.js";
+import { proxyListenScript, Workspace } from "../src/agent.js";
 import * as calls from "../src/calls.js";
 import { builtinModels } from "../src/catalog.js";
 import * as cli from "../src/cli-channels.js";
@@ -339,6 +340,55 @@ test("a networked check in Codex's sandbox runs in the network a step gets", asy
   const [output, ok] = await new CliChannelRegistry().sandboxRun("cli:codex", "true", folder, 10, true);
   assert.ok(ok && output.includes("checked"), output);
   assert.ok(readFileSync(log, "utf8").startsWith(`${join(folder, "codex")} sandbox`));
+});
+
+test("Claude Code's sandbox opens only the recorded host ports, never every local service", () => {
+  const settingsOf = (args: string[]) => JSON.parse(args[args.indexOf("--settings") + 1]).sandbox;
+  const base = CLI_SPECS["cli:claude"].invoke_args;
+  assert.deepEqual(cli.withHostPorts(base, []), base);
+  const offline = settingsOf(cli.withHostPorts(base, [26585, 36013]));
+  assert.deepEqual(offline.network, { allowedDomains: ["127.0.0.1:26585", "127.0.0.1:36013"], allowLocalBinding: true });
+  assert.equal(offline.allowUnsandboxedCommands, false);
+  const online = settingsOf(cli.withHostPorts(cli.withNetwork("cli:claude", base), [26585]));
+  assert.deepEqual(online.network.allowedDomains, ["*", "127.0.0.1:26585"]);
+  // 127.0.0.1 on the deny list would win over its listed port; localhost and ::1 stay closed.
+  assert.deepEqual(online.network.deniedDomains, ["localhost", "::1"]);
+});
+
+test("a Claude Code step gets the bridge to the host ports while it runs", async () => {
+  const registry = new CliChannelRegistry();
+  const seen: [string[], string][] = [];
+  cli.deps.which = (name) => join(folder, name);
+  cli.deps.hostPorts = async () => [26585];
+  registry.run = async (_spec, command, _cwd, _stdin, _timeout, options) => {
+    const file = options?.extraEnv?.CLAUDE_ENV_FILE ?? "";
+    seen.push([command, file && readFileSync(file, "utf8")]);
+    return '{"result":"ok"}';
+  };
+  await registry.complete("cli:claude", "跑 VCS", folder);
+  await registry.complete("cli:claude", "修环境", folder, { repair: true });
+  const [[step, script], [repair, none]] = seen;
+  assert.ok(step[step.indexOf("--settings") + 1].includes("127.0.0.1:26585"));
+  assert.ok(script.includes("TCP-LISTEN:26585") && script.includes("PROXY:"), script);
+  assert.ok(!repair.join(" ").includes("127.0.0.1:26585") && none === "");
+  assert.ok(!readdirSync(tmpdir()).some((name) => name.startsWith("sp-claude-") && existsSync(join(tmpdir(), name, "env.sh"))));
+});
+
+test("the bridge goes out through the sandbox's proxy, with its credentials", () => {
+  const log = join(folder, "socat.log");
+  fakeCli("socat", `#!/bin/sh\necho "$@" >> ${log}\n`);
+  const before = join(folder, "mine.sh");
+  writeFileSync(before, "echo user-env-loaded\n");
+  const script = proxyListenScript([26585], before);
+  // --norc: bash reads ~/.bashrc when its stdin is a socket, as Node's pipes are.
+  const done = spawnSync("bash", ["--norc", "-c", script.replace(/for _ in .*done/, "true") + "echo ok"], { encoding: "utf8",
+    env: { PATH: process.env.PATH!, http_proxy: "http://srt.abc:secret@127.0.0.1:3128" } });
+  assert.equal(done.stdout, "user-env-loaded\nok\n");
+  for (let i = 0; i < 100 && !existsSync(log); i += 1) spawnSync("sleep", ["0.02"]);
+  assert.equal(readFileSync(log, "utf8").trim(), "TCP-LISTEN:26585,bind=127.0.0.1,fork,reuseaddr PROXY:127.0.0.1:127.0.0.1:26585,proxyport=3128,proxyauth=srt.abc:secret");
+  // No proxy (not in Claude Code's sandbox): nothing listens.
+  const plain = spawnSync("bash", ["--norc", "-c", script + "echo ok"], { encoding: "utf8", env: { PATH: process.env.PATH! } });
+  assert.equal(plain.stdout, "user-env-loaded\nok\n");
 });
 
 test("a Codex lead rebuilds a rejected input without changing its conversation", async () => {

@@ -41,3 +41,15 @@ Codex 自己没有"只放行某几个端口"这一档：不联网就禁 TCP，�
 ## 顺带：Codex 失败时报出真正的原因
 
 验证时 Codex 额度用完了，FluidForm 报的却是 stderr 上的一条警告（"Untrusted project-local configuration is disabled"），真正的原因在 stdout 的 `turn.failed` 事件里，被盖住了。现在 `failureDetail` 先看 JSON 输出里最后一个 `turn.failed` 或 `error` 事件，有就用它；没有的话还是用 stderr。这样额度用完的原因也能被 `quota.ts`、`diagnosing.ts` 认出来。测试：`tests/cli-channels.test.ts`「a Codex failure reports its failed turn, not a warning on stderr」。
+
+## Claude Code 步骤也能连记下的本机端口
+
+Claude Code 在 Linux 上给每条沙箱命令一个私有网络，直连本机一律失败；它自己的代理只放行 `allowedDomains` 里写明的 `host:port`（只写主机会打开所有端口，`"*"` 不包括本机地址）。FlexLM 不走代理，所以之前 claude 步骤里的 VCS 一直签不出许可证。
+
+- `cli-channels.withHostPorts`：有记下的端口时，设置里放行 `127.0.0.1:<端口>`，打开 `allowLocalBinding`。联网时把 `127.0.0.1` 从禁止名单拿掉（禁止优先，否则会盖过放行的端口），`localhost`、`::1` 仍禁止。
+- `agent.proxyListenScript` 和 `cli-channels.withClaudeBridge`：生成一个 `CLAUDE_ENV_FILE`（Claude Code 在每条沙箱命令前加载它），在命令的私有网络里为每个端口起 socat，经沙箱代理（HTTP CONNECT，带它的认证）转出去。用户自己的 `CLAUDE_ENV_FILE` 先加载。调用结束就删掉。没有 socat 或没有代理时什么都不做。
+- 只给步骤（`completeIn`，不含修复）。负责人的会话不变。
+
+实测（Claude Code 2.1.332，真实 `complete("cli:claude")`）：不联网、联网两种情况都 `snpslmd: UP`，`vcs -full64` 编译返回 0、`simv` 输出正常；FluidForm 的 API 直连、走代理、写 `localhost` 都连不上，其他本机端口也连不上。
+
+测试：`tests/cli-channels.test.ts`「Claude Code's sandbox opens only the recorded host ports, never every local service」「a Claude Code step gets the bridge to the host ports while it runs」「the bridge goes out through the sandbox's proxy, with its credentials」。

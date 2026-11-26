@@ -4,11 +4,11 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync,
   statSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import * as activity from "./activity.js";
-import { ownNetwork } from "./agent.js";
+import { ownNetwork, proxyListenScript, sandboxPorts } from "./agent.js";
 import { path as attachmentPath } from "./attachments.js";
 import * as calls from "./calls.js";
 import { settings } from "./config.js";
@@ -64,6 +64,39 @@ export const CLAUDE_SANDBOX_SETTINGS = pyDumps({ sandbox: { enabled: true, autoA
 // whose services (this application's API among them) stay closed.
 export const CLAUDE_NETWORK_SETTINGS = pyDumps({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
   network: { allowedDomains: ["*"], deniedDomains: ["localhost", "127.0.0.1", "::1"] } } });
+/** ``args`` with Claude Code's sandbox settings opened to this machine's recorded host ports (a
+ *  license server, say): its proxy reaches a local port only as the ``host:port`` listed in
+ *  allowedDomains (a bare host would open them all), and the bridge that listens on them inside each
+ *  command needs to bind (allowLocalBinding; agent.proxyListenScript). Every other local service
+ *  stays closed: with the internet, 127.0.0.1 leaves the deny list, which would win over the listed
+ *  ports, and "*" never covers a local address. */
+export function withHostPorts(args: string[], ports: number[]): string[] {
+  if (!ports.length) return args;
+  return args.map((arg) => {
+    if (arg !== CLAUDE_SANDBOX_SETTINGS && arg !== CLAUDE_NETWORK_SETTINGS) return arg;
+    const given = JSON.parse(arg);
+    const network = given.sandbox.network ?? {};
+    network.allowedDomains = [...(network.allowedDomains ?? []), ...ports.map((port) => `127.0.0.1:${port}`)];
+    if (network.deniedDomains) network.deniedDomains = network.deniedDomains.filter((host: string) => host !== "127.0.0.1");
+    network.allowLocalBinding = true;
+    return pyDumps({ ...given, sandbox: { ...given.sandbox, network } });
+  });
+}
+
+/** ``work`` with an env file for Claude Code (CLAUDE_ENV_FILE) that bridges ``ports`` into each of its
+ *  sandboxed commands, removed afterwards; ``work`` gets the variables to add (none without ports). */
+export async function withClaudeBridge<T>(ports: number[], work: (env: Record<string, string>) => Promise<T>): Promise<T> {
+  if (!ports.length) return work({});
+  const folder = mkdtempSync(join(tmpdir(), "sp-claude-"));
+  const file = join(folder, "env.sh");
+  try {
+    writeFileSync(file, proxyListenScript(ports, process.env.CLAUDE_ENV_FILE ?? ""), { mode: 0o644 });
+    return await work({ CLAUDE_ENV_FILE: file });
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+}
+
 // Repairing the environment: Claude Code without its sandbox and without asking for approval. The
 // whole CLI runs under bubblewrap instead, which only blocks gaining root (see repairCommand).
 export const CLAUDE_REPAIR_SETTINGS = pyDumps({ sandbox: { enabled: false } });
@@ -428,6 +461,8 @@ export const deps = {
   codexServers: () => codexServers(),
   repairCommand: (executable: string, args: string[]) => repairCommand(executable, args),
   ownNetwork: (command: string[]) => ownNetwork(command),
+  // The host ports a step's sandbox reaches (none without socat, which bridges them).
+  hostPorts: () => sandboxPorts(),
 };
 
 class Timeout extends Error {
@@ -749,6 +784,9 @@ export class CliChannelRegistry {
       args = [...args.slice(0, at), ...args.slice(at + 2)];
       args = [args[0], ...deps.codexStepPermissions(cwd, network, { tmpdir: tmp }), ...args.slice(1)];
     } else if (network && !repair) args = withNetwork(spec.id, args);
+    // A Claude Code step reaches this machine's recorded host ports, and only those (withHostPorts).
+    const ports = spec.id === "cli:claude" && !repair ? await deps.hostPorts() : [];
+    args = withHostPorts(args, ports);
     args = withAttachments(spec.id, args, attachments);
     if (spec.id === "cli:codex") {
       args = [args[0], ...deps.codexSettings(effort), ...args.slice(1)];
@@ -763,10 +801,13 @@ export class CliChannelRegistry {
     // internet and this machine's recorded host ports, not every local service.
     const command = repair ? deps.repairCommand(executable, args)
       : step && network ? await deps.ownNetwork([executable, ...args]) : [executable, ...args];
-    const options: RunOptions = { watch, extraEnv: tmp ? { TMPDIR: tmp } : null, toolTrace, signal };
-    const run = () => (spec.id === "cli:codex" ? this.runInput(spec, command, cwd, prompt, timeout, options)
-      : this.run(spec, command, cwd, stdin, timeout, options));
-    const stdout = step ? await withCodexRules(cwd, run) : await run();
+    const stdout = await withClaudeBridge(ports, async (bridge) => {
+      const extraEnv = tmp || ports.length ? { ...(tmp ? { TMPDIR: tmp } : {}), ...bridge } : null;
+      const options: RunOptions = { watch, extraEnv, toolTrace, signal };
+      const run = () => (spec.id === "cli:codex" ? this.runInput(spec, command, cwd, prompt, timeout, options)
+        : this.run(spec, command, cwd, stdin, timeout, options));
+      return step ? withCodexRules(cwd, run) : run();
+    });
     if (spec.id === "cli:codex") return codexOutput(stdout);
     const text = stdout.trim();
     if (["cli:claude", "cli:gemini", "cli:qwen"].includes(spec.id)) {

@@ -520,9 +520,35 @@ export function listenScript(ports: number[]): string {
   if (!ports.length) return "";
   const lines = ports.map((port) => `socat TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${SANDBOX_PORTS_DIR}/${port}.sock`
     + " </dev/null >/dev/null 2>&1 &");
-  // A listening socket shows in /proc/net/tcp as "<addr>:<hex port> 00000000:0000 0A".
+  lines.push(untilListening(ports));
+  return lines.join("\n") + "\n";
+}
+
+/** Wait until each port listens. A listening socket shows in /proc/net/tcp as "<addr>:<hex port> 00000000:0000 0A". */
+function untilListening(ports: number[]): string {
   const ready = ports.map((port) => `grep -q ":${port.toString(16).toUpperCase().padStart(4, "0")} 00000000:0000 0A" /proc/net/tcp`).join(" && ");
-  lines.push(`for _ in $(seq 250); do { ${ready}; } && break; sleep 0.02; done`);
+  return `for _ in $(seq 250); do { ${ready}; } && break; sleep 0.02; done`;
+}
+
+/** Shell lines Claude Code runs before each of its sandboxed commands (CLAUDE_ENV_FILE): on Linux each
+ *  such command has a private network, and the sandbox's proxy (``http_proxy`` inside it) reaches a
+ *  local port only when its settings list it (cli-channels.withHostPorts). Each host port listens there
+ *  and goes out through that proxy (HTTP CONNECT), for clients that use no proxy themselves, such as a
+ *  FlexLM license check. ``before``: an env file of the user's own, loaded first. Without a proxy or
+ *  socat, nothing. */
+export function proxyListenScript(ports: number[], before = ""): string {
+  const lines = before ? [`if [ -r ${shlexQuote(before)} ]; then . ${shlexQuote(before)}; fi`] : [];
+  if (!ports.length) return lines.join("\n") + (lines.length ? "\n" : "");
+  lines.push('__sp_proxy="${http_proxy:-${HTTP_PROXY:-}}"',
+    'if [ -n "$__sp_proxy" ] && command -v socat >/dev/null 2>&1; then',
+    '  __sp_proxy="${__sp_proxy#*://}"; __sp_proxy="${__sp_proxy%%/*}"; __sp_auth=""',
+    '  case "$__sp_proxy" in *@*) __sp_auth=",proxyauth=${__sp_proxy%@*}"; __sp_proxy="${__sp_proxy##*@}";; esac',
+    // In a subshell: no job notices in the command's output.
+    ...ports.map((port) => `  (socat TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr `
+      + `"PROXY:\${__sp_proxy%:*}:127.0.0.1:${port},proxyport=\${__sp_proxy##*:}$__sp_auth" </dev/null >/dev/null 2>&1 &)`),
+    `  ${untilListening(ports)}`,
+    "fi",
+    "unset __sp_proxy __sp_auth");
   return lines.join("\n") + "\n";
 }
 
