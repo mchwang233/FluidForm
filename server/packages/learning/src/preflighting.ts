@@ -1,6 +1,6 @@
 // The check before a task's first step and the skills prepared then. Each runs with the executor as
 // ``this`` (server/src/preflighting.ts); the checks and prompts themselves are in preflight.ts.
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import * as agentTools from "../../../src/agent.js";
@@ -96,24 +96,34 @@ export async function prepareSkills(this: Preflighting, runId: string, workspace
   const ready: string[] = [];
   const prepared: string[] = [];
   const failed: string[] = [];
-  for (const [name, tools, given] of toolGroups(wanted, library)) {
+  const tried = failedBefore();
+  // Each skill on its own, all at once: one that takes long holds up only itself, not the others after it.
+  await Promise.all(toolGroups(wanted, library).map(async ([name, tools, given]) => {
     let general = given;
     if (settings.skill_reuse_first) {
       const existing = skills.forTools(tools, library).filter((s) => s.body && tools.every((tool) => s.tools.includes(tool)));
       if (existing.length) {
         ready.push(existing[0].name);
         this.emit(runId, "run.skill_selected", { name: existing[0].name, origin: existing[0].machine ? "machine" : "general" });
-        continue;
+        return;
       }
-      // A public skill is only a reference for writing this machine's one: never given to a step as it
-      // is, and gone with the generation if that fails.
-      if (general === null) general = await this.publicReference(runId, name, tools);
     }
     const mine = settings.skill_reuse_first ? [] : skills.forTools(tools, library).filter((skill) => skill.machine);
     if (mine.length) {
       ready.push(...mine.map((skill) => skill.name));
-      continue;
+      return;
     }
+    // Written and failed lately: not tried again for every task (2026-11-27, three skills timing out in
+    // each of a task's two preflights, 12 minutes before its first step).
+    const earlier = tried[failureKey(name, tools)];
+    if (earlier && Date.now() - Date.parse(earlier.at) < SKILL_RETRY_HOURS * 3600_000) {
+      this.emit(runId, "run.skill_skipped", { name, failed_at: earlier.at, reason: earlier.reason });
+      failed.push(`${name}: ${SKILL_RETRY_HOURS} 小时内写过没成（${earlier.reason}），这次不再写`);
+      return;
+    }
+    // A public skill is only a reference for writing this machine's one: never given to a step as it
+    // is, and gone with the generation if that fails.
+    if (settings.skill_reuse_first && general === null) general = await this.publicReference(runId, name, tools);
     try {
       this.emit(runId, "run.skill_generating", { name, timeout: settings.skill_preparation_timeout,
         max_turns: settings.skill_reuse_first ? settings.skill_generation_max_turns : null });
@@ -122,13 +132,47 @@ export async function prepareSkills(this: Preflighting, runId: string, workspace
       if (!skill || !skill.body) throw new Error("the reply was not a SKILL.md");
       skills.saveMachine(name, withTools(text, tools));
       prepared.push(name);
+      noteFailure(name, tools, null);
     } catch (error) {
       if (isCancelled(error)) throw error;
-      failed.push(`${name}: ${head(String((error as Error)?.message ?? ""), 200) || (error as Error)?.name || "Error"}`);
+      const reason = head(String((error as Error)?.message ?? ""), 200) || (error as Error)?.name || "Error";
+      failed.push(`${name}: ${reason}`);
+      noteFailure(name, tools, reason);
     }
-  }
+  }));
   this.emit(runId, "run.skills_prepared", { prepared, reused: ready, failed });
   return [...new Set([...ready, ...prepared])];
+}
+
+/** Hours a skill that could not be written is left alone before a task tries again. */
+export const SKILL_RETRY_HOURS = 24;
+type Failures = Record<string, { at: string; reason: string }>;
+const failuresFile = () => join(settings.data_dir, "skills-failed.json");
+const failureKey = (name: string, tools: string[]) => `${name}|${[...tools].sort().join(",")}`;
+
+/** The skills that could not be written, by name and tools, with when and why. */
+export function failedBefore(): Failures {
+  try {
+    const data = JSON.parse(readFileSync(failuresFile(), "utf8"));
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Notes that ``name`` could not be written (``reason``), or, with null, that it was. */
+function noteFailure(name: string, tools: string[], reason: string | null): void {
+  const data = failedBefore();
+  const key = failureKey(name, tools);
+  if (reason === null && !(key in data)) return;
+  if (reason === null) delete data[key];
+  else data[key] = { at: new Date().toISOString(), reason };
+  try {
+    mkdirSync(settings.data_dir, { recursive: true });
+    writeFileSync(failuresFile(), JSON.stringify(data, null, 1));
+  } catch {
+    // only a note: the next task tries again
+  }
 }
 
 export async function publicReference(this: Preflighting, runId: string, name: string, tools: string[]): Promise<skills.Skill | null> {

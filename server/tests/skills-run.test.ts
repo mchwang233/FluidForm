@@ -11,6 +11,7 @@ import { Executor } from "../src/executor.js";
 import { ExecutionRunSchema } from "../src/models.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as skillDiscovery from "../packages/learning/src/skill-discovery.js";
+import { SKILL_RETRY_HOURS } from "../packages/learning/src/preflighting.js";
 import * as skills from "../src/skills.js";
 import { conftest } from "./helpers/conftest.js";
 import { model } from "./helpers/lead-run.js";
@@ -145,6 +146,59 @@ test("the deadline for writing a skill does not hold up the task's start", async
   assert.deepEqual(cancelled, [true]);
   const event = db.events("timeout").filter((e) => e.kind === "run.skills_prepared").at(-1)!;
   assert.ok((event.data as Record<string, unknown[]>).failed.length);
+});
+
+test("a skill that could not be written is not tried again for a day", async () => {
+  Object.assign(settings, { skill_reuse_first: true, skill_preparation_timeout: 5 });
+  skills.places.source = join(folder(), "empty");
+  const db = new Database(join(folder(), "t.db"));
+  task(db, "again");
+  const executor = new Executor(db, new Machine(), MODELS);
+  executor.available = onlyFakesim;
+  let writes = 0;
+  executor.writeSkill = async () => {
+    writes += 1;
+    throw new Error("no luck");
+  };
+  assert.deepEqual(await executor.prepareSkills("again", folder(), []), []);
+  assert.deepEqual(await executor.prepareSkills("again", folder(), []), []);
+  assert.equal(writes, 1);
+  const skipped = db.events("again").filter((e) => e.kind === "run.skill_skipped");
+  assert.equal(skipped.length, 1);
+  // A day later it is tried again, and once written the note is gone.
+  const file = join(settings.data_dir, "skills-failed.json");
+  const notes = JSON.parse(readFileSync(file, "utf8"));
+  for (const key of Object.keys(notes)) notes[key].at = new Date(Date.now() - (SKILL_RETRY_HOURS + 1) * 3600_000).toISOString();
+  writeFileSync(file, JSON.stringify(notes));
+  executor.writeSkill = async () => {
+    writes += 1;
+    return GENERAL.replace("name: fake-sim", "name: fakesim");
+  };
+  assert.deepEqual(await executor.prepareSkills("again", folder(), []), ["fakesim"]);
+  assert.equal(writes, 2);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {});
+});
+
+test("skills for different tools are written at the same time", async () => {
+  Object.assign(settings, { skill_reuse_first: true, skill_preparation_timeout: 5 });
+  skills.places.source = join(folder(), "empty");
+  const db = new Database(join(folder(), "t.db"));
+  db.saveRun(ExecutionRunSchema.parse({ id: "both", prompt: "用 fakesim 和 othersim", status: "queued", budget_usd: 1,
+    plan: { summary: "s", nodes: [{ id: "n", title: "仿真", instructions: "用 fakesim 和 othersim 跑", capability: "coding", model_id: "x:flash" }],
+      requires: ["fakesim --version", "othersim --version"] } }));
+  const executor = new Executor(db, new Machine(), MODELS);
+  executor.available = async (_run, _workspace, tools) => tools;
+  let running = 0;
+  let most = 0;
+  executor.writeSkill = async (_run, _workspace, name) => {
+    running += 1;
+    most = Math.max(most, running);
+    await new Promise((done) => setTimeout(done, 30));
+    running -= 1;
+    return `---\nname: ${name}\ndescription: d\n---\n# ${name}\n`;
+  };
+  assert.deepEqual((await executor.prepareSkills("both", folder(), [])).sort(), ["fakesim", "othersim"]);
+  assert.equal(most, 2);
 });
 
 test("the skill is prepared once and given to the steps", needsBwrap, async () => {

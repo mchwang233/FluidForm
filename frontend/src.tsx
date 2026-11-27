@@ -181,6 +181,7 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "run.skill_reference":data=>`「${data.name}」参考现成技能${data.cached?"（已缓存）":""}`,
   "run.skill_selected":data=>`选用已有技能「${data.name}」`,
   "run.skill_generating":data=>`编写技能「${data.name}」`,
+  "run.skill_skipped":data=>`技能「${data.name}」最近写过没成，这次跳过`,
   "run.skills_prepared":data=>{const parts=[data.prepared?.length?`新写 ${data.prepared.length} 个`:"",data.reused?.length?`沿用 ${data.reused.length} 个`:"",data.failed?.length?`${data.failed.length} 个没写成`:""].filter(Boolean);return `技能准备好了${parts.length?`：${parts.join("，")}`:""}`},
   "node.critical_overrun_check":(data,title)=>data.stop?`${title(data.node_id)}：运行 ${data.minutes} 分钟（预计 ${data.expected_minutes} 分钟），负责人判断卡住并停止（${data.reason??""}）`:`${title(data.node_id)}：运行 ${data.minutes} 分钟（预计 ${data.expected_minutes} 分钟），负责人判断仍在推进，继续执行`,
   "node.limit_extended":(data,title)=>`${title(data.node_id)}：负责人放宽了这一步的调用次数`,
@@ -256,7 +257,7 @@ const clock=(at:string)=>new Date(at).toLocaleTimeString("zh-CN",{hour12:false})
 /** Entries that only say work goes on as it should: checks that let a step continue, skills being prepared, the lead starting to think. */
 function routineEvent(event:TimelineEvent){
   if(["node.progress_check","node.overrun_check","node.critical_overrun_check"].includes(event.kind))return !event.data?.stop;
-  return ["run.skill_searching","run.skill_search_finished","run.skill_reference","run.skill_selected","run.skill_generating","run.lead_thinking","node.queued","node.dequeued"].includes(event.kind);
+  return ["run.skill_searching","run.skill_search_finished","run.skill_reference","run.skill_selected","run.skill_generating","run.skill_skipped","run.lead_thinking","node.queued","node.dequeued"].includes(event.kind);
 }
 const FOLD_EVENTS=3;
 /** Runs of routine entries fold behind one line, so what changed the task stands out. */
