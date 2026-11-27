@@ -129,8 +129,8 @@ test("the user switches the shipped extensions off and on; they cannot be remove
   await bundled.offer();
   const found = (await client.get("/api/capabilities")).json().filter((item: any) => item.kind === "extension");
   assert.deepEqual(found.map((item: any) => [item.id, item.status]).sort(), [["agy", "active"], ["anthropic", "active"], ["doubao", "active"],
-    ["engineer", "active"], ["glm", "active"], ["google", "active"], ["kimi", "active"], ["lead", "active"], ["learning", "active"],
-    ["minimax", "active"], ["openai", "active"], ["planning", "active"], ["qwen", "active"]]);
+    ["engineer", "active"], ["gemini-cli", "active"], ["glm", "active"], ["google", "active"], ["kimi", "active"], ["lead", "active"], ["learning", "active"],
+    ["minimax", "active"], ["openai", "active"], ["planning", "active"], ["qwen", "active"], ["qwen-code", "active"]]);
   const set = (id: string, enabled: boolean) => client.patch(`/api/capabilities/${id}`, { json: { enabled, confirmed: true }, headers: ORIGIN });
   assert.equal((await set("planning", false)).status_code, 200);
   assert.ok(!uses.planning() && !uses.team() && uses.engineer());

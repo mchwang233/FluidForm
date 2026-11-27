@@ -48,7 +48,7 @@ Run it **with and without** the task's network permission. The rules:
 
 | Must | Why it went wrong before |
 |---|---|
-| Steps never run outside a sandbox | Gemini CLI and Qwen run unsandboxed: they read the home folder and reach every local service |
+| Steps never run outside a sandbox | Gemini CLI and Qwen ran unsandboxed (until they became model packages): they read the home folder and reached every local service |
 | The FluidForm API is never reachable, with or without the internet | A networked Codex step shared the host's network and got `200` from `/api/tasks` |
 | Recorded host ports (`environment.hostPorts()`, `sandbox.json` `host_ports`) are reachable, and only those | Claude Code's sandbox denied all of localhost, so VCS could not get a license |
 | Nothing the CLI calls "leave the sandbox" runs unasked | Some CLIs (agy Auto mode, Claude `allowUnsandboxedCommands`) let a reviewer or the model run a command outside: turn it off |
@@ -95,6 +95,9 @@ How the existing channels meet them (reuse these, do not invent a fourth way):
 - **A test script run outside the service reads `.fluidform` under the current folder**: set
   `FLUIDFORM_DATA_DIR`, or it sees no recorded host ports and the license check fails for no reason.
 - **`pkill -f <pattern>` matches the shell running it** when the pattern is in its own command line.
+- **An npm-installed CLI is a link in `bin/` to a script inside `node_modules/<package>/`**, both under
+  the hidden home: the sandbox needs the whole package (`programFiles`) and must start it by its real
+  path, not the link.
 
 ## 3. Its answers and its errors
 

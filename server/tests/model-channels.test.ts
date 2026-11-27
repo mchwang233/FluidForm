@@ -1,12 +1,14 @@
 // model-channels.ts and the model packages (server/packages/agy): a membership CLI brought in by a
 // package, called only inside FluidForm's sandbox, switched off with its package.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { channel as agy, parse as agyParse, args as agyArgs, stdin as agyStdin, HOSTS } from "../packages/agy/src/index.js";
+import { channel as gemini, parse as geminiParse } from "../packages/gemini-cli/src/index.js";
+import { channel as qwen } from "../packages/qwen-code/src/index.js";
 import { sandboxAvailable } from "../src/agent.js";
 import { builtinModels, ownModels } from "../src/catalog.js";
 import * as cli from "../src/cli-channels.js";
@@ -251,3 +253,62 @@ print(json.dumps({"event": "result", "result": {"status": "SUCCESS", "response":
       for (const server of listening) server.close();
     }
   });
+
+// ---- Gemini CLI and Qwen Code: moved into packages, called as before, now sandboxed ---------------
+
+test("Gemini CLI and Qwen Code are model packages, called as they were before", () => {
+  for (const [channel, executable] of [[gemini, "gemini"], [qwen, "qwen"]] as const) {
+    assert.equal(channel.executable, executable);
+    assert.deepEqual(channel.args(call("/w", { prompt: "do it" })), ["-p", "do it", "--output-format", "json"]);
+    assert.equal(channel.stdin(call("/w")), null);
+    assert.equal(channel.sessions, false, "neither leads a task");
+    assert.equal(modelChannels.ownerOf(channel.id)?.provides[0], `model:${channel.id}`);
+  }
+  assert.ok(!(("cli:gemini" in cli.CLI_SPECS) || ("cli:qwen" in cli.CLI_SPECS)), "FluidForm no longer has them built in");
+  assert.ok(builtinModels().some((item) => item.id === "cli:gemini") && builtinModels().some((item) => item.id === "cli:qwen"));
+  assert.ok(!ownModels().some((item) => item.id === "cli:gemini" || item.id === "cli:qwen"));
+});
+
+test("Gemini CLI's answer is read as before: its JSON response, or its text", () => {
+  assert.deepEqual(geminiParse(JSON.stringify({ response: "hello", stats: {} })), { text: "hello", usage: {}, sessionId: null, error: null, quota: false });
+  assert.equal(geminiParse("plain words\n").text, "plain words");
+  const usage = geminiParse(JSON.stringify({ result: "x", usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 3 } })).usage;
+  assert.deepEqual(usage, { input_tokens: 8, output_tokens: 2, cached_input_tokens: 3 });
+});
+
+/** A Node CLI installed as npm does: node_modules/<package>/ under the home, a link to it in bin/. */
+function npmCli(home: string): string {
+  const root = join(home, ".npm-global", "lib", "node_modules", "fake-cli");
+  mkdirSync(join(root, "lib"), { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "fake-cli" }));
+  writeFileSync(join(root, "lib", "answer.js"), "module.exports = 'from its own module';\n");
+  writeFileSync(join(root, "cli.js"), `#!/usr/bin/env node
+const answer = require("./lib/answer.js");
+process.stdin.resume();
+process.stdin.on("data", () => undefined).on("end", () => console.log(JSON.stringify({ event: "result", result: { status: "SUCCESS", response: answer } })));
+`);
+  chmodSync(join(root, "cli.js"), 0o755);
+  mkdirSync(join(home, ".npm-global", "bin"), { recursive: true });
+  const link = join(home, ".npm-global", "bin", "fakecli");
+  symlinkSync(join(root, "cli.js"), link);
+  return link;
+}
+
+test("a CLI installed with npm is kept whole in the sandbox: its package, not only its script", () => {
+  const home = join(folder, "home");
+  process.env.HOME = home;
+  const link = npmCli(home);
+  assert.deepEqual(modelChannels.programFiles(link), [join(home, ".npm-global", "lib", "node_modules", "fake-cli")]);
+  assert.deepEqual(modelChannels.programFiles("/bin/true"), [realpathSync("/bin/true")]);
+});
+
+test("a CLI installed with npm in the hidden home runs in the sandbox", realSandbox, async () => {
+  const home = join(folder, "home");
+  process.env.HOME = home;
+  const link = npmCli(home);
+  const fake = fakeChannel(folder, "");
+  cli.deps.which = (name: string) => (name === "fakecli" ? link : null);
+  modelChannels.deps.hostPorts = async () => [];
+  const reply = await new CliChannelRegistry().channelRun(fake, call(workspace()), false, 60);
+  assert.equal(reply.text, "from its own module");
+});

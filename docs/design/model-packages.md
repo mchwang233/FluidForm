@@ -140,6 +140,41 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
 - 能力页多了 8 张厂商卡片。
 - 图片生成和网页搜索（MCP 服务器、`web_search_models`）的密钥不经过厂商包的开关：关掉 GLM 的包，只是不再调度它的对话模型。
 
+## Gemini CLI 和 Qwen Code（第 3 步的前一半）
+
+### 为什么
+
+这两个 CLI 原来写在核心的 `CLI_SPECS` 里，而且完全不在沙箱里跑：步骤里的命令能读整个家目录，也能连本机所有服务，包括 FluidForm API。
+
+### 改动
+
+- **两个新包**：`server/packages/gemini-cli`（`model:cli:gemini`）和 `server/packages/qwen-code`（`model:cli:qwen`）。
+  - 包 id 不能叫 `qwen`，因为 API 厂商包已经用了这个 id。
+  - 调用方式和原来一样：提示词作为 `-p` 的参数，输出用 `--output-format json`，解析时取 `response`、`result` 或 `text`。
+  - 两个都不当负责人。
+- **核心**：
+  - `CLI_SPECS` 和种子表里删掉这两项，`completeIn` 里删掉它们的分支。
+  - `programFiles`：npm 装的 Node CLI 在家目录的 `node_modules/<包>/` 里，核心把整个包目录只读挂进沙箱，不只挂那个脚本文件。
+  - 沙箱里用程序的真实路径启动，因为 `bin/` 下的符号链接所在目录被隐藏了。
+- **网络**：现在和别的模型包一样。不联网的任务只能连到它们自己的模型服务和许可证端口；原来是什么都能连。
+
+### 没有实测的地方
+
+这台机器上没有装 gemini，也没有装 qwen，所以下面几项来自它们的文档，不是测出来的：
+- 登录目录：`~/.gemini`、`~/.qwen`；
+- 模型服务的域名；
+- 额度用完时的报错原文。
+
+装上以后，要按 `skills/model-channel/SKILL.md` 实测一遍。不联网的调用如果失败，日志里会写"拦下了访问 …"，把这个域名加进包里即可。另外，`~/.gemini` 整个目录可写，所以 Gemini CLI 也能看到同一目录下 agy 的登录信息（同一个 Google 账户）。
+
+### 测试
+
+`server/tests/model-channels.test.ts`：
+- 两个包的参数和原来一样，不再内置在核心里；
+- Gemini 的输出按原来的方式解析；
+- npm 装的 CLI 会把整个包挂进沙箱；
+- 用真 bwrap 跑一次：家目录被隐藏，脚本在沙箱里仍能加载同一个包里的其他模块。这项测试在修复前失败（找不到 `bin/` 下的链接）。
+
 ## 后续
 
-Codex、Claude、Gemini、Qwen 逐个搬成包，每个都先过一遍 `skills/model-channel/SKILL.md` 的实测。Gemini 和 Qwen 现在没有沙箱，搬过来以后就会套上核心的沙箱。
+把 Codex 和 Claude Code 搬成包。这两个有自己验证过的沙箱（Codex 的权限配置、Claude 的设置和端口桥），还有负责人对话、修复模式和 Codex 的额度读取。怎么搬还没定，见报告里的选项。

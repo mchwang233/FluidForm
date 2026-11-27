@@ -1,5 +1,6 @@
-// Membership CLIs as models: Codex, Claude Code, Gemini and Qwen, run in their own
-// sandboxes for steps, in a conversation for the task's lead, or on the host for a repair.
+// Membership CLIs as models: Codex and Claude Code here, run in their own sandboxes for steps, in a
+// conversation for the task's lead, or on the host for a repair; the others come from model packages
+// (model-channels.ts), run in FluidForm's sandbox.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync,
@@ -223,10 +224,6 @@ export const CLI_SPECS: Record<string, CliSpec> = {
   "cli:claude": { id: "cli:claude", executable: "claude", auth_command: ["auth", "status"],
     invoke_args: ["-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--settings", CLAUDE_SANDBOX_SETTINGS, "--no-session-persistence"],
     fallback_model_id: "anthropic:claude-sonnet-5" },
-  "cli:gemini": { id: "cli:gemini", executable: "gemini", auth_command: ["--version"], invoke_args: ["-p", "", "--output-format", "json"],
-    fallback_model_id: "google:gemini-pro" },
-  "cli:qwen": { id: "cli:qwen", executable: "qwen", auth_command: ["--version"], invoke_args: ["-p", "", "--output-format", "json"],
-    fallback_model_id: "qwen:qwen-plus" },
 };
 
 /** Kill the CLI and any tools it spawned; they share the session started for it. */
@@ -238,7 +235,7 @@ function killGroup(child: ChildProcess): void {
   }
 }
 
-/** Open the CLI's sandbox to the internet. Gemini and Qwen run unsandboxed already; Codex steps get
+/** Open the CLI's sandbox to the internet. A model package's CLI gets it from model-channels; Codex steps get
  *  it from their permission profile (codexStepPermissions). */
 export function withNetwork(modelId: string, args: string[]): string[] {
   return modelId === "cli:claude" ? args.map((arg) => (arg === CLAUDE_SANDBOX_SETTINGS ? CLAUDE_NETWORK_SETTINGS : arg)) : args;
@@ -870,11 +867,7 @@ export class CliChannelRegistry {
       args = [args[0], ...deps.codexSettings(effort), ...args.slice(1)];
       if (!args.includes("--json")) args.splice(1, 0, "--json");
     }
-    let stdin: Buffer | null = Buffer.from(prompt, "utf8");
-    if (spec.id === "cli:gemini" || spec.id === "cli:qwen") {
-      args[1] = prompt;
-      stdin = null;
-    }
+    const stdin: Buffer | null = Buffer.from(prompt, "utf8");
     // A Codex step allowed the internet gets the network Codex runs in: its own (ownNetwork), so the
     // internet and this machine's recorded host ports, not every local service.
     const command = repair ? deps.repairCommand(executable, args)
@@ -888,7 +881,7 @@ export class CliChannelRegistry {
     });
     if (spec.id === "cli:codex") return codexOutput(stdout);
     const text = stdout.trim();
-    if (["cli:claude", "cli:gemini", "cli:qwen"].includes(spec.id)) {
+    if (spec.id === "cli:claude") {
       try {
         const payload = JSON.parse(text);
         if (isObject(payload)) return { text: pyStr(payload.result || payload.response || payload.text || text), usage: cliUsage(payload) };

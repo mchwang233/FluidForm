@@ -101,6 +101,18 @@ export const deps = {
   ownNetwork: (command: string[]) => ownNetwork(command),
 };
 
+/** What running ``executable`` needs, read-only, wherever it is (the home, say, which is hidden): the
+ *  program itself, or the whole package it belongs to (a Node CLI installed with npm runs from
+ *  node_modules/<package>/), found as the nearest folder above it with a package.json. */
+export function programFiles(executable: string): string[] {
+  const program = real(executable);
+  const home = real(homedir());
+  for (let folder = dirname(program); folder !== "/" && folder !== home && folder !== dirname(folder); folder = dirname(folder)) {
+    if (existsSync(join(folder, "package.json"))) return [folder];
+  }
+  return [program];
+}
+
 /** bwrap's file system for a call: the whole disk read-only; the home hidden but for the CLI's own
  *  state (and the executable); FluidForm's data hidden but for the call's folder,
  *  writable for a step and read-only for the lead; the tools the environment repairs installed and
@@ -108,9 +120,7 @@ export const deps = {
 export function fileSystem(channel: ModelChannel, executable: string, call: ChannelCall): string[] {
   const home = real(homedir());
   const state = channel.state.map((folder) => join(home, folder)).filter(isDir).flatMap((folder) => ["--bind", folder, folder]);
-  // The executable itself, wherever it is (the home, say, which is hidden).
-  const program = real(executable);
-  const keepProgram = ["--ro-bind", program, program];
+  const keepProgram = programFiles(executable).flatMap((path) => ["--ro-bind", path, path]);
   const cwd = real(call.cwd);
   const [outer, inner, masked] = new Workspace(cwd).platformData();
   const tools = environment.toolsDir();
@@ -138,6 +148,8 @@ export async function withSandbox<T>(channel: ModelChannel, argv: string[], call
   work: (command: string[], env: Record<string, string>) => Promise<T>): Promise<T> {
   if (!deps.sandboxAvailable()) throw new Error(`${channel.id} 需要 bubblewrap（bwrap）沙箱才能运行，这台机器上没有。`);
   const files = fileSystem(channel, argv[0], call);
+  // By its real path: a link to it (npm's bin/) may be in the hidden home.
+  argv = [real(argv[0]), ...argv.slice(1)];
   const env = { TMPDIR: "/tmp" };
   if (network && !call.lead) return work(await deps.ownNetwork(["bwrap", ...files, "--", ...argv]), env);
   const ports = call.lead ? [] : await deps.hostPorts();
