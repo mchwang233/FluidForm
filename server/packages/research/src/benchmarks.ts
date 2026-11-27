@@ -1,15 +1,11 @@
 // Public benchmark results, kept separate from the application's routing presets.
-import { log } from "../../../src/log.js";
+import {
+  apiProviders, compareKeys, type Database, type Fetcher, get, HttpStatusError, log, type ModelProfile, pyQuote, pyStr, pythonIso,
+  RequestTimeout, settings, splitlines, TransportError, utcnow, within
+} from "../../../src/extension-api.js";
 import { readPage, type Reader } from "./model-read.js";
-import * as apiProviders from "../../../src/api-providers.js";
 import { createHash } from "node:crypto";
-import { settings } from "../../../src/config.js";
-import type { Database } from "../../../src/db.js";
-import { type Fetcher, get, HttpStatusError, RequestTimeout, TransportError, within } from "../../../src/fetching.js";
 import { PublicTableParser } from "./html-tables.js";
-import { pythonIso } from "../../../src/lax.js";
-import { type ModelProfile, utcnow } from "../../../src/models.js";
-import { compareKeys, pyStr, splitlines, pyQuote } from "../../../src/py.js";
 
 export const AA_URL = "https://artificialanalysis.ai/api/v2/language/models/free";
 export const AA_PUBLIC_URL = "https://artificialanalysis.ai/leaderboards/models";

@@ -1,14 +1,10 @@
 // How the platform engineer fixes FluidForm itself for a task. The copy, its checks and applying it are
 // FluidForm's (server/src/platform-repair.ts, self-repair.ts).
-import { PLATFORM_SCOPE } from "../../../src/models.js";
+import {
+  type Diagnosis, type ExecutionRun, failureOutput, MAX_ENVIRONMENT_FIXES, parse as parseDiagnosis, PLATFORM_SCOPE, pyDumps, pyRound,
+  RepairError, repairGuide, type SelfRepair, settings, type TaskNode
+} from "../../../src/extension-api.js";
 import { join } from "node:path";
-import { settings } from "../../../src/config.js";
-import { parse as parseDiagnosis } from "../../../src/diagnosis.js";
-import type { Diagnosis, ExecutionRun, TaskNode } from "../../../src/models.js";
-import { failureOutput, RepairError, repairGuide } from "../../../src/platform-repair.js";
-import { pyDumps, pyRound } from "../../../src/py.js";
-import { MAX_ENVIRONMENT_FIXES } from "../../../src/recovery.js";
-import type { SelfRepair } from "../../../src/self-repair.js";
 
 type Json = Record<string, any>;
 

@@ -1,15 +1,9 @@
 // What the lead is asked about an attempt that runs far past its expected time.
-import * as activity from "../../../src/activity.js";
-import { BudgetExceeded, StepLimitExceeded } from "../../../src/budget.js";
-import { settings } from "../../../src/config.js";
-import type { ExecutionRun, TaskNode } from "../../../src/models.js";
-import * as progress from "../../../src/progress.js";
-import { pyRound } from "../../../src/py.js";
-import * as quality from "../../../src/quality.js";
-import type { ReviewHost } from "../../../src/review.js";
-import { loopTurns } from "../../../src/routing.js";
+import {
+  activity, BudgetExceeded, type ExecutionRun, isCancelled, loopTurns, progress, pyRound, quality, type ReviewHost, settings,
+  StepLimitExceeded, type TaskNode
+} from "../../../src/extension-api.js";
 import * as prompts from "./prompts.js";
-import { isCancelled } from "../../../src/tasks.js";
 
 /** A step others wait for that runs far past its expected time is not stuck, but holds the whole task:
  *  the lead says whether it goes on or stops for a faster model. Asked again after each further stretch

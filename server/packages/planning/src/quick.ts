@@ -1,8 +1,7 @@
 // Whether a task needs a plan at all: one quick step, or one model carrying it through alone.
-import { log } from "../../../src/log.js";
-import type { ModelProfile } from "../../../src/models.js";
-import { head, isObject, pyRegex, pyStr, splitlines } from "../../../src/py.js";
-import { ask, type Completer, costOf, MAX_REQUEST_CHARS } from "../../../src/triage.js";
+import {
+  ask, type Completer, costOf, head, isObject, log, MAX_REQUEST_CHARS, type ModelProfile, pyRegex, pyStr, splitlines
+} from "../../../src/extension-api.js";
 
 const quickPrompt = (text: string) =>
   "Is this request work that one capable model can do by itself in one go, in a few minutes, with "

@@ -1,15 +1,13 @@
 // Forming a project team and delegating work through the task graph (team.form and team.delegate in
 // team.ts). Apart from team.ts, which lower modules use, because these need the planner.
-import { settings } from "../../../src/config.js";
-import * as contracts from "../../../src/contracts.js";
+import {
+  ancestors, CAPABILITIES, contracts, digest, type Employee, EmployeeSchema, type ExecutionRun, member, minBy, type ModelProfile,
+  NoEligibleModelError, pyDumps, refreshSkills, route, routingReady, settings, skills, type TaskNode, type TaskPlan, TaskPlanSchema,
+  vendor
+} from "../../../src/extension-api.js";
 import { ask, MAX_TASKS } from "./lead-planning.js";
-import { type Employee, EmployeeSchema, type ExecutionRun, type ModelProfile, routingReady, type TaskNode, type TaskPlan, TaskPlanSchema } from "../../../src/models.js";
 import { PlanProblem, type Say, scopeProblems, taskNode } from "./planner.js";
-import { minBy, pyDumps } from "../../../src/py.js";
 import { checkAcyclic } from "./replan.js";
-import { NoEligibleModelError, vendor } from "../../../src/routing.js";
-import * as skills from "../../../src/skills.js";
-import { ancestors, CAPABILITIES, digest, member, refreshSkills, route } from "../../../src/team.js";
 
 /** Employees from this many on all with one provider are sent back once (SPREAD_RULE). */
 export const SPREAD_CHECK_MIN_EMPLOYEES = 3;

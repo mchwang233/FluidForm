@@ -6,15 +6,11 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
   writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { path as attachmentPath } from "../../../src/attachments.js";
-import * as calls from "../../../src/calls.js";
-import { CliError, type CliText, codexHome, cliUsage, InputTooLarge, inputTooLarge } from "../../../src/cli-channels.js";
-import { settings } from "../../../src/config.js";
-import * as environment from "../../../src/environment.js";
-import { type ModelChannel, type OwnConversation, type OwnStep, register, type Runner } from "../../../src/model-channels.js";
-import type { Attachment } from "../../../src/models.js";
-import { formatG, isObject, pyDumps, pyRegex, pyStr, splitlines } from "../../../src/py.js";
-import { compactContext } from "../../../src/team.js";
+import {
+  type Attachment, calls, CliError, type CliText, cliUsage, codexHome, compactContext, environment, formatG, InputTooLarge, inputTooLarge,
+  isObject, type ModelChannel, type OwnConversation, type OwnStep, path as attachmentPath, pyDumps, pyRegex, pyStr, register, type Runner,
+  settings, splitlines
+} from "../../../src/extension-api.js";
 
 export const EXECUTABLE = "codex";
 

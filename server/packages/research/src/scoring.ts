@@ -6,10 +6,8 @@
 // for that capability. Membership CLIs run whatever model the account defaults to, so each
 // inherits the scores of the strongest AA-scored model from the same vendor.
 import { isDeepStrictEqual } from "node:util";
-import { type CapabilityScore, CapabilityScoreSchema, type ModelProfile } from "../../../src/models.js";
-import { formatG, pyRound } from "../../../src/py.js";
+import { AA_SOURCE, type CapabilityScore, CapabilityScoreSchema, formatG, type ModelProfile, pyRound } from "../../../src/extension-api.js";
 
-import { AA_SOURCE } from "../../../src/catalog.js";
 
 export { AA_SOURCE };
 export const INTELLIGENCE = "artificial_analysis_intelligence_index";

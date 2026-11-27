@@ -1,10 +1,8 @@
 // What the platform engineer is told when it looks into a stuck step or repairs it.
-import { timeKey } from "../../../src/lax.js";
-import { type ExecutionRun, Outcome, type TaskNode } from "../../../src/models.js";
-import { fixed, head, pyStr, sortedBy } from "../../../src/py.js";
-import { recentFailures, SWITCH_AFTER } from "../../../src/recovery.js";
-import * as skills from "../../../src/skills.js";
-import { MAX_RESULT_CHARS, NETWORK_CHOICE, STATUS, OPTIONS, INTERACTION_INSTRUCTIONS, USER_ACTION, REPORT_FORMAT, toolSummary, ENGINEER } from "../../../src/diagnosis.js";
+import {
+  ENGINEER, type ExecutionRun, fixed, head, INTERACTION_INSTRUCTIONS, MAX_RESULT_CHARS, NETWORK_CHOICE, OPTIONS, Outcome, pyStr,
+  recentFailures, REPORT_FORMAT, skills, sortedBy, STATUS, SWITCH_AFTER, type TaskNode, timeKey, toolSummary, USER_ACTION
+} from "../../../src/extension-api.js";
 
 /** The request, the plan, and every attempt of every step. */
 export function history(run: ExecutionRun, events: string[]): string[] {

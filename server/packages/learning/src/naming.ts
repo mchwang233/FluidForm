@@ -1,8 +1,6 @@
-import * as pricing from "../../../src/pricing.js";
-import { log } from "../../../src/log.js";
-import { type ModelProfile } from "../../../src/models.js";
-import { head, minBy, pyDumps, pyRound, pySplit } from "../../../src/py.js";
-import { Problem, Review, Db, program, mostCommon, problem, Completion } from "../../../src/retrospect.js";
+import {
+  Completion, Db, head, log, minBy, type ModelProfile, mostCommon, pricing, Problem, problem, program, pyDumps, pyRound, pySplit, Review
+} from "../../../src/extension-api.js";
 
 // --- Naming problems by what they are about (one cheap model call when a task ends) ---------------
 // Kinds and keys come from the records (a module, a program), so one cause (Synopsys' EDA environment

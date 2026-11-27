@@ -1,14 +1,10 @@
 // Refresh model metadata without inventing quality scores or making inference calls.
 import type { BenchmarkCatalog } from "./benchmarks.js";
-import type { Database } from "../../../src/db.js";
-import { type Fetcher, get, HttpStatusError, RequestTimeout, TransportError, within } from "../../../src/fetching.js";
-import { fromPythonIso, pythonIso } from "../../../src/lax.js";
-import { type ModelProfile, ModelProfileSchema, utcnow } from "../../../src/models.js";
-import { pyRegex } from "../../../src/py.js";
+import {
+  apiProviders, type Database, type Fetcher, fromPythonIso, get, HttpStatusError, type ModelProfile, ModelProfileSchema, Mutex,
+  PROVIDER_ENV, pyRegex, pythonIso, RequestTimeout, sleep, Task, TransportError, utcnow, within
+} from "../../../src/extension-api.js";
 import { rescore } from "./scoring.js";
-import * as apiProviders from "../../../src/api-providers.js";
-import { PROVIDER_ENV } from "../../../src/secret-names.js";
-import { Mutex, sleep, Task } from "../../../src/tasks.js";
 
 export const PUBLIC_CATALOG_URL = "https://models.dev/api.json";
 // Match the regions used by providers.ts; never take credential destinations from remote data.

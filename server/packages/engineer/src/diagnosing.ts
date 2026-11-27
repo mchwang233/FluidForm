@@ -1,21 +1,10 @@
 // How the platform engineer looks into a stuck step and repairs it. Each runs with the executor as
 // ``this`` (server/src/diagnosing.ts), which acts on what it finds.
-import { uses } from "../../../src/features.js";
-import * as agentTools from "../../../src/agent.js";
-import { BudgetExceeded } from "../../../src/budget.js";
-import { settings } from "../../../src/config.js";
-import { interaction, parse as parseDiagnosis } from "../../../src/diagnosis.js";
-import * as environment from "../../../src/environment.js";
-import { nowIso } from "../../../src/lax.js";
-import { type Diagnosis, type ExecutionRun, type TaskNode } from "../../../src/models.js";
-import { RepairError } from "../../../src/platform-repair.js";
-import type { ProviderResult } from "../../../src/providers.js";
-import { head, pyRound } from "../../../src/py.js";
-import * as quality from "../../../src/quality.js";
-import * as retrospect from "../../../src/retrospect.js";
-import { canAct, diagnosers, engineers, NoEligibleModelError } from "../../../src/routing.js";
-import { currentTask, isCancelled, Task } from "../../../src/tasks.js";
-import { Diagnosing } from "../../../src/diagnosing.js";
+import {
+  agent as agentTools, BudgetExceeded, canAct, currentTask, diagnosers, Diagnosing, type Diagnosis, engineers, environment,
+  type ExecutionRun, head, interaction, isCancelled, NoEligibleModelError, nowIso, parse as parseDiagnosis, type ProviderResult, pyRound,
+  quality, RepairError, retrospect, settings, Task, type TaskNode, uses
+} from "../../../src/extension-api.js";
 import { repairPrompt, prompt as diagnosisPrompt } from "./prompts.js";
 
 type Json = Record<string, any>;

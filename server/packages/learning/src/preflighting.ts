@@ -3,21 +3,14 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import * as agentTools from "../../../src/agent.js";
-import { settings } from "../../../src/config.js";
-import { parse as parseDiagnosis } from "../../../src/diagnosis.js";
-import * as environment from "../../../src/environment.js";
-import { nowIso } from "../../../src/lax.js";
-import { type ExecutionRun, type PreflightCheck, PreflightCheckSchema, PreflightSchema, TaskNodeSchema } from "../../../src/models.js";
+import {
+  agent as agentTools, type CliChannelRegistry, environment, type ExecutionRun, head, isCancelled, nowIso, parse as parseDiagnosis,
+  type PreflightCheck, PreflightCheckSchema, Preflighting, PreflightSchema, pySplit, routeNode, settings, shlexQuote, skills,
+  TaskNodeSchema
+} from "../../../src/extension-api.js";
 import { cacheKey, cliChecks, describe, failures, neededTools, OUTPUT_KEPT, PASSED, passedBefore, repairPrompt, sandboxChecks, skillPrompt,
   toolGroups, withTools } from "./preflight.js";
-import { head, pySplit, shlexQuote } from "../../../src/py.js";
-import { routeNode } from "../../../src/routing.js";
 import * as skillDiscovery from "./skill-discovery.js";
-import * as skills from "../../../src/skills.js";
-import { isCancelled } from "../../../src/tasks.js";
-import type { CliChannelRegistry } from "../../../src/cli-channels.js";
-import { Preflighting } from "../../../src/preflighting.js";
 
 class Deadline extends Error {
   override name = "TimeoutError";

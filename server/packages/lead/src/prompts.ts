@@ -1,11 +1,10 @@
 // What the lead is asked, and how its decision is read. The lead's session and the conversation are
 // FluidForm's (server/src/supervisor.ts), shared with chats.
-import { uses } from "../../../src/features.js";
-import { settings } from "../../../src/config.js";
-import { NETWORK_CHOICE, toolSummary } from "../../../src/diagnosis.js";
-import { type EngineerJob, type ExecutionRun, type ModelProfile, type NodeAttempt, Outcome, scoreFor, type TaskNode } from "../../../src/models.js";
-import { fixed, formatG, head, pyStr, truthy } from "../../../src/py.js";
-import { partOf, ENGINEER_CALLERS, type EngineerCall, readEngineer, none, workspaceOf, type Decision } from "../../../src/supervisor.js";
+import {
+  type Decision, ENGINEER_CALLERS, type EngineerCall, type EngineerJob, type ExecutionRun, fixed, formatG, head, type ModelProfile,
+  NETWORK_CHOICE, type NodeAttempt, none, Outcome, partOf, pyStr, readEngineer, scoreFor, settings, type TaskNode, toolSummary, truthy,
+  uses, workspaceOf
+} from "../../../src/extension-api.js";
 
 type Json = Record<string, any>;
 

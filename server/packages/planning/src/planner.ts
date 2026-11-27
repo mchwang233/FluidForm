@@ -1,22 +1,13 @@
 // Planning a request: the task's lead plans it as tasks in a conversation it keeps
 // (task-planning.ts, supervisor.ts); with no lead model, the best planner plans it in one call; with no
 // planner at all, a fixed fallback plan.
-import { uses } from "../../../src/features.js";
+import {
+  BASH_MAX_TIMEOUT_MS, contracts, DIFFICULTY_THRESHOLDS, difficultyFor, head, log, minBy, type ModelProfile, ModelUnavailable,
+  type PlanChoice, PlanChoiceSchema, pricing, type ProviderResult, pyFloat2, pyInt, pyRegex, pyRound, pySplit, pyStr, routingReady,
+  settings, supervisor, type SupervisorSession, SupervisorSessionSchema, type TaskNode, TaskNodeSchema, type TaskPlan, TaskPlanSchema,
+  team, toPercentScale, truthy, uses, writesFiles
+} from "../../../src/extension-api.js";
 import { randomUUID } from "node:crypto";
-import * as pricing from "../../../src/pricing.js";
-import { settings } from "../../../src/config.js";
-import * as contracts from "../../../src/contracts.js";
-import { log } from "../../../src/log.js";
-import { BASH_MAX_TIMEOUT_MS } from "../../../src/agent.js";
-import { difficultyFor, toPercentScale } from "../../../src/model-hooks.js";
-import { DIFFICULTY_THRESHOLDS, type ModelProfile, type PlanChoice, PlanChoiceSchema, routingReady, type SupervisorSession,
-  SupervisorSessionSchema, type TaskNode, TaskNodeSchema, type TaskPlan, TaskPlanSchema } from "../../../src/models.js";
-import type { ProviderResult } from "../../../src/providers.js";
-import { head, minBy, pyFloat2, pyInt, pyRegex, pyRound, pySplit, pyStr, truthy } from "../../../src/py.js";
-import { ModelUnavailable } from "../../../src/quota.js";
-import { writesFiles } from "../../../src/scopes.js";
-import * as supervisor from "../../../src/supervisor.js";
-import * as team from "../../../src/team.js";
 import { form } from "./team-planning.js";
 
 type Json = Record<string, any>;

@@ -2,12 +2,10 @@
 // applying and committing are FluidForm's (server/src/engineer.ts).
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { settings } from "../../../src/config.js";
-import { EngineerMessageSchema, type EngineerJob } from "../../../src/models.js";
-import { COMPONENT_GUIDES, failureOutput, RepairError, REPAIR_GUIDES, repairGuide } from "../../../src/platform-repair.js";
-import { head } from "../../../src/py.js";
-import { sleep } from "../../../src/tasks.js";
-import { plainLines, readReply, type Engineering } from "../../../src/engineer.js";
+import {
+  COMPONENT_GUIDES, type Engineering, type EngineerJob, EngineerMessageSchema, failureOutput, head, plainLines, readReply, REPAIR_GUIDES,
+  RepairError, repairGuide, settings, sleep
+} from "../../../src/extension-api.js";
 
 type Json = Record<string, any>;
 const message = (fields: Json) => EngineerMessageSchema.parse(fields);

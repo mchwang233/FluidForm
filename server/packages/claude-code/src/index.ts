@@ -5,14 +5,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { proxyListenScript } from "../../../src/agent.js";
-import { path as attachmentPath } from "../../../src/attachments.js";
-import * as calls from "../../../src/calls.js";
-import { CliError, type CliText, cliUsage } from "../../../src/cli-channels.js";
-import { settings } from "../../../src/config.js";
-import { type ModelChannel, type OwnConversation, type OwnStep, register, type Runner } from "../../../src/model-channels.js";
-import type { Attachment } from "../../../src/models.js";
-import { isObject, pyDumps, pyStr } from "../../../src/py.js";
+import {
+  type Attachment, calls, CliError, type CliText, cliUsage, isObject, type ModelChannel, type OwnConversation, type OwnStep,
+  path as attachmentPath, proxyListenScript, pyDumps, pyStr, register, type Runner, settings
+} from "../../../src/extension-api.js";
 
 export const EXECUTABLE = "claude";
 

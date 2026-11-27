@@ -1,22 +1,14 @@
 // Looking back on a finished task and keeping what it teaches. The records, and starting and stopping
 // a review, are FluidForm's (server/src/learning.ts).
-import { uses } from "../../../src/features.js";
+import {
+  agent, allocated, AsyncEvent, blocks, BudgetExceeded, Cancelled, currentTask, type Database, diagnosers, evidence, type ExecutionRun,
+  head, type Improvement, ImprovementSchema, isCancelled, LearningHost, LearningProblem, type LearningReview, learningSource, MAX_ITEMS,
+  message, metrics, type ModelProfile, nowIso, observe, pyDumps, pyRegex, pyRound, quality, RequestBudget, retrospect, revision, sameKey,
+  settings, skills, skipCancelledLearning, SkippedLearning, strongestModel, tail, uses
+} from "../../../src/extension-api.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as agent from "../../../src/agent.js";
-import { BudgetExceeded, RequestBudget } from "../../../src/budget.js";
-import { settings } from "../../../src/config.js";
-import type { Database } from "../../../src/db.js";
-import { nowIso } from "../../../src/lax.js";
-import { type ExecutionRun, type Improvement, ImprovementSchema, type LearningReview, type ModelProfile } from "../../../src/models.js";
-import { AsyncEvent, head, pyDumps, pyRegex, pyRound, tail } from "../../../src/py.js";
-import * as quality from "../../../src/quality.js";
-import * as retrospect from "../../../src/retrospect.js";
-import { diagnosers } from "../../../src/routing.js";
-import * as skills from "../../../src/skills.js";
-import { Cancelled, currentTask, isCancelled } from "../../../src/tasks.js";
-import { MAX_ITEMS, SkippedLearning, LearningProblem, blocks, message, strongestModel, revision, metrics, observe, evidence, LearningHost, skipCancelledLearning, learningSource, sameKey, allocated } from "../../../src/learning.js";
 
 export function analysisPrompt(data: string, existing: Improvement[]): string {
   return "[[fluidform:learning:analyze]]\nReview the finished task using only the recorded evidence below. "

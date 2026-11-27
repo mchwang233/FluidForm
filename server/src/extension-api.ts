@@ -1,0 +1,67 @@
+// What FluidForm's core gives its packages (server/packages/*/src), the one module they import it from.
+// A package that needs more of the core adds it here: what the packages depend on is then seen in one
+// place, and server/tests/extension-api.test.ts keeps them from reaching past it. The task capabilities
+// (lead, planning, engineer, learning) still run as the executor (``this``) and use its classes as they are.
+
+export * as activity from "./activity.js";
+export * as agent from "./agent.js";
+export { BASH_MAX_TIMEOUT_MS, proxyListenScript } from "./agent.js";
+export * as apiProviders from "./api-providers.js";
+export { path } from "./attachments.js";
+export { BATCH_CHARS, FILE_CHARS, PARALLEL, render, scan } from "./briefing.js";
+export type { Ask, Brief } from "./briefing.js";
+export { BudgetExceeded, RequestBudget, StepLimitExceeded } from "./budget.js";
+export type { Priced } from "./budget.js";
+export * as calls from "./calls.js";
+export * as capabilities from "./capabilities.js";
+export { AA_SOURCE } from "./catalog.js";
+export { CliError, InputTooLarge, cliUsage, codexHome, inputTooLarge } from "./cli-channels.js";
+export type { CliChannelRegistry, CliText } from "./cli-channels.js";
+export { settings } from "./config.js";
+export * as contracts from "./contracts.js";
+export type { Database } from "./db.js";
+export { Diagnosing } from "./diagnosing.js";
+export { ENGINEER, ENGINEER_CALLED, INTERACTION_INSTRUCTIONS, MAX_RESULT_CHARS, NETWORK_CHOICE, OPTIONS, REPORT_FORMAT, STATUS, USER_ACTION, interaction, parse, toolSummary } from "./diagnosis.js";
+export { plainLines, readReply } from "./engineer.js";
+export type { Engineering } from "./engineer.js";
+export * as environment from "./environment.js";
+export { uses } from "./features.js";
+export { HttpStatusError, RequestTimeout, TransportError, get, within } from "./fetching.js";
+export type { Fetcher } from "./fetching.js";
+export { fromPythonIso, newId, nowIso, pythonIso, timeKey } from "./lax.js";
+export { Leading } from "./leading.js";
+export { LearningProblem, MAX_ITEMS, SkippedLearning, allocated, blocks, evidence, learningSource, message, metrics, observe, revision, sameKey, skipCancelledLearning, strongestModel } from "./learning.js";
+export type { LearningHost } from "./learning.js";
+export { log } from "./log.js";
+export { register } from "./model-channels.js";
+export type { ChannelCall, ChannelReply, ModelChannel, OwnConversation, OwnStep, Runner } from "./model-channels.js";
+export { difficultyFor, toPercentScale } from "./model-hooks.js";
+export { ArtifactWaiverSchema, CapabilityScoreSchema, DIFFICULTY_THRESHOLDS, DecisionSchema, DiagnosisSchema, EmployeeSchema, EngineerMessageSchema, ImprovementSchema, ModelProfileSchema, Outcome, PLATFORM_SCOPE, PlanChoiceSchema, PreflightCheckSchema, PreflightSchema, SupervisorSessionSchema, TaskNodeSchema, TaskPlanSchema, folderId, routingReady, scoreFor, utcnow } from "./models.js";
+export type { ArtifactEvidence, ArtifactWaiver, Attachment, CapabilityScore, Diagnosis, Employee, EngineerJob, ExecutionRun, Improvement, LearningReview, ModelProfile, NodeAttempt, PlanChoice, PreflightCheck, SupervisorSession, TaskNode, TaskPlan } from "./models.js";
+export { COMPONENT_GUIDES, REPAIR_GUIDES, RepairError, failureOutput, repairGuide } from "./platform-repair.js";
+export { Preflighting } from "./preflighting.js";
+export * as pricing from "./pricing.js";
+export * as progress from "./progress.js";
+export type { ProviderResult } from "./providers.js";
+export { AsyncEvent, compareKeys, fixed, formatG, head, isObject, minBy, pyDumps, pyFloat2, pyInt, pyQuote, pyRegex, pyRound, pySplit, pyStr, shlexQuote, sortedBy, splitlines, tail, truthy } from "./py.js";
+export * as quality from "./quality.js";
+export { ModelUnavailable } from "./quota.js";
+export { MAX_ENVIRONMENT_FIXES, SWITCH_AFTER, recentFailures } from "./recovery.js";
+export type { Research } from "./research.js";
+export * as retrospect from "./retrospect.js";
+export { mostCommon, problem, program } from "./retrospect.js";
+export type { Completion, Db, Problem, Review } from "./retrospect.js";
+export type { ReviewHost } from "./review.js";
+export { NoEligibleModelError, canAct, diagnosers, engineers, loopTurns, nodeCost, pickReviewer, routeNode, vendor } from "./routing.js";
+export { writesFiles } from "./scopes.js";
+export { PROVIDER_ENV } from "./secret-names.js";
+export type { SelfRepair } from "./self-repair.js";
+export * as skills from "./skills.js";
+export * as supervisor from "./supervisor.js";
+export { ENGINEER_CALLERS, none, partOf, readEngineer, workspaceOf } from "./supervisor.js";
+export type { Decision, EngineerCall } from "./supervisor.js";
+export { Cancelled, Mutex, Task, currentTask, isCancelled, sleep } from "./tasks.js";
+export * as team from "./team.js";
+export { CAPABILITIES, ancestors, compactContext, digest, member, refreshSkills, route } from "./team.js";
+export { MAX_REQUEST_CHARS, ask, costOf } from "./triage.js";
+export type { Completer } from "./triage.js";

@@ -3,11 +3,9 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { type Ask, BATCH_CHARS, type Brief, FILE_CHARS, PARALLEL, render, scan } from "../../../src/briefing.js";
-import type { Priced } from "../../../src/budget.js";
-import { log } from "../../../src/log.js";
-import * as pricing from "../../../src/pricing.js";
-import { head, pyDumps, pyRegex, pyStr, truthy } from "../../../src/py.js";
+import {
+  type Ask, BATCH_CHARS, type Brief, FILE_CHARS, head, log, PARALLEL, type Priced, pricing, pyDumps, pyRegex, pyStr, render, scan, truthy
+} from "../../../src/extension-api.js";
 
 const length = (text: string) => [...text].length;
 

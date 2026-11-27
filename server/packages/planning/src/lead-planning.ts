@@ -2,7 +2,7 @@
 // more when a reply is not the plan asked for, the plan's short name, and the limits on a plan.
 import { ZodError } from "zod";
 import { extractJson, type Say } from "./planner.js";
-import { head, pySplit, pyStr } from "../../../src/py.js";
+import { head, pySplit, pyStr } from "../../../src/extension-api.js";
 
 // Most tasks one plan has, with what replanning adds (replan.ts, team.ts).
 export const MAX_TASKS = 60;

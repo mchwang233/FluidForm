@@ -1,20 +1,10 @@
 // What the lead does: after a failed attempt, at the end, and with the user's answers. Each runs with
 // the executor as ``this`` (server/src/leading.ts), which does what changes the task.
-import { BudgetExceeded } from "../../../src/budget.js";
-import * as capabilities from "../../../src/capabilities.js";
-import { settings } from "../../../src/config.js";
-import * as contracts from "../../../src/contracts.js";
-import { ENGINEER_CALLED } from "../../../src/diagnosis.js";
-import { nowIso } from "../../../src/lax.js";
-import { log } from "../../../src/log.js";
-import { DecisionSchema, DiagnosisSchema } from "../../../src/models.js";
-import { pyRound } from "../../../src/py.js";
-import * as quality from "../../../src/quality.js";
-import { nodeCost } from "../../../src/routing.js";
-import * as supervisor from "../../../src/supervisor.js";
+import {
+  BudgetExceeded, capabilities, contracts, currentTask, DecisionSchema, DiagnosisSchema, ENGINEER_CALLED, isCancelled, Leading, log,
+  nodeCost, nowIso, pyRound, quality, settings, supervisor
+} from "../../../src/extension-api.js";
 import * as prompts from "./prompts.js";
-import { currentTask, isCancelled } from "../../../src/tasks.js";
-import { Leading } from "../../../src/leading.js";
 
 type Json = Record<string, any>;
 type Choice = supervisor.Decision | "budget" | null;

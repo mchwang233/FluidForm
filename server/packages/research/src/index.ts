@@ -1,10 +1,7 @@
 // The model research package's entry: what FluidForm asks of it (server/src/research.ts). It looks
 // up the providers' model catalogs (new models, context windows, prices), the public leaderboards'
 // results, and scores the models for routing from them.
-import { settings } from "../../../src/config.js";
-import type { Database } from "../../../src/db.js";
-import type { ModelProfile } from "../../../src/models.js";
-import type { Research } from "../../../src/research.js";
+import { type Database, type ModelProfile, type Research, settings } from "../../../src/extension-api.js";
 import { BenchmarkCatalog } from "./benchmarks.js";
 import { CatalogSync } from "./catalog-sync.js";
 import type { Reader } from "./model-read.js";

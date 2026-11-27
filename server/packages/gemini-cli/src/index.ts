@@ -3,7 +3,7 @@
 // now runs in FluidForm's sandbox for it (before, unsandboxed). Not measured on a real gemini yet
 // (none was installed): STATE and HOSTS are its documented login folder and API hosts; check them
 // with skills/model-channel/SKILL.md once it is installed.
-import { type ChannelCall, type ChannelReply, type ModelChannel, register } from "../../../src/model-channels.js";
+import { type ChannelCall, type ChannelReply, type ModelChannel, register } from "../../../src/extension-api.js";
 
 // Where it keeps its login and settings, under the home.
 export const STATE = [".gemini"];

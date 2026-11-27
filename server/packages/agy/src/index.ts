@@ -8,7 +8,7 @@
 // - The prompt goes in on stdin as one stream-json message ("--print=" with no text): an argument
 //   is limited to 128 KiB.
 // - Its model is called through the proxy in the environment; with no internet it needs only HOSTS.
-import { type ChannelCall, type ChannelReply, type ModelChannel, register } from "../../../src/model-channels.js";
+import { type ChannelCall, type ChannelReply, type ModelChannel, register } from "../../../src/extension-api.js";
 
 export const MODEL = "gemini-4-neon-high";
 
