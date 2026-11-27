@@ -11,7 +11,8 @@ import type { Capability } from "./models.js";
 
 export const KIND = "extension";
 
-export type Extension = { id: string; name: string; provides: string[] };
+/** ``models``: the catalog entries of the models a model package brings (model-channels.ts). */
+export type Extension = { id: string; name: string; provides: string[]; models: Record<string, unknown>[] };
 
 function read(folder: string): Extension[] {
   if (!existsSync(folder)) return [];
@@ -21,7 +22,10 @@ function read(folder: string): Extension[] {
     if (!entry.isDirectory() || !existsSync(path)) continue;
     try {
       const given = JSON.parse(readFileSync(path, "utf8"));
-      if (given.kind === KIND) found.push({ id: String(given.id), name: String(given.name), provides: given.provides.map(String) });
+      if (given.kind === KIND) {
+        const models = Array.isArray(given.models) ? given.models.filter((item: unknown) => item && typeof item === "object") : [];
+        found.push({ id: String(given.id), name: String(given.name), provides: given.provides.map(String), models });
+      }
     } catch (error) {
       log.error(`could not read the shipped package ${entry.name}: ${(error as Error).message}`);
     }

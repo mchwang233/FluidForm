@@ -1,6 +1,7 @@
 // FluidForm's HTTP API, served by Fastify: the local-only guard, and
 // the routes the console uses. What they work with is the Api (api.ts).
 import * as extensions from "./extensions.js";
+import * as modelChannels from "./model-channels.js";
 import { uses } from "./features.js";
 import { createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -466,7 +467,9 @@ export function buildApp(api: Api): FastifyInstance {
     const configured = providers().configuredModels(Object.keys(api.models));
     const matches = api.benchmarks.matchModels(Object.values(api.models));
     const statuses = providers().cli.statuses;
-    return Object.values(api.models).filter((model) => model.scores_source === AA_SOURCE).map((model) => ({
+    // A model package's model shows only while its package is on.
+    const offered = (id: string) => !modelChannels.ownerOf(id) || modelChannels.channelFor(id) !== null;
+    return Object.values(api.models).filter((model) => model.scores_source === AA_SOURCE && offered(model.id)).map((model) => ({
       ...model, configured: configured.has(model.id), routing_ready: routingReady(model), benchmarks: matches.get(model.id) ?? [],
       auth_type: model.channel === "cli" ? statuses[model.id]?.auth_type ?? null : "api_key",
     }));

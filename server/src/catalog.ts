@@ -1,6 +1,7 @@
 // Conservative seed data. Unverified prices cannot be used for real billing claims.
 // Routing scores come only from Artificial Analysis (scoring); only the offline demo model carries
 // fixed scores.
+import * as extensions from "./extensions.js";
 import { type ModelProfile, ModelProfileSchema } from "./models.js";
 
 const SEED: Record<string, unknown>[] = [
@@ -48,4 +49,10 @@ const SEED: Record<string, unknown>[] = [
 
 export function builtinModels(): ModelProfile[] {
   return SEED.map((model) => ModelProfileSchema.parse(model));
+}
+
+/** What the catalog is seeded with: the built-in models, and those the shipped model packages bring
+ *  (on or off: off, their CLI is not offered; model-channels.ts). */
+export function catalogModels(): ModelProfile[] {
+  return [...builtinModels(), ...extensions.shipped.flatMap((item) => item.models).map((model) => ModelProfileSchema.parse(model))];
 }

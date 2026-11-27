@@ -1,6 +1,6 @@
 // Refresh model metadata without inventing quality scores or making inference calls.
 import type { BenchmarkCatalog } from "./benchmarks.js";
-import { builtinModels } from "./catalog.js";
+import { catalogModels } from "./catalog.js";
 import type { Database } from "./db.js";
 import { type Fetcher, get, HttpStatusError, RequestTimeout, TransportError, within } from "./fetching.js";
 import { fromPythonIso, pythonIso } from "./lax.js";
@@ -24,7 +24,7 @@ type Json = Record<string, any>;
 /** Seed only missing entries. Restarting must preserve discoveries and user choices. */
 export function seedCatalog(db: Database): Record<string, ModelProfile> {
   const models: Record<string, ModelProfile> = Object.fromEntries(db.listModels().map((model) => [model.id, model]));
-  const missing = builtinModels().filter((model) => !(model.id in models));
+  const missing = catalogModels().filter((model) => !(model.id in models));
   db.saveModels(missing);
   for (const model of missing) models[model.id] = model;
   return models;

@@ -5,10 +5,18 @@ description: How to add or change a model channel in FluidForm itself (an API pr
 
 # Adding a model channel
 
-A channel is how FluidForm runs one model: an API provider (`providers.ts`, `catalog.ts`) or a CLI
-(`cli-channels.ts` `CLI_SPECS`, `catalog.ts`). Each CLI brings **its own sandbox**, and each one
-behaves differently. Never assume; measure every item below on the real CLI before writing code,
-and keep the measured answers in the design note.
+A channel is how FluidForm runs one model: an API provider (`providers.ts`, `catalog.ts`), a built-in
+CLI (`cli-channels.ts` `CLI_SPECS`, `catalog.ts`), or a **model package** (`server/packages/<id>`,
+`docs/design/model-packages.md`). A new CLI is a model package: its `capability.json` (kind
+`extension`, `provides: ["model:cli:<name>"]`, its catalog entry in `models`) and its `src/index.ts`,
+which exports a `ModelChannel` (`model-channels.ts`): its arguments, stdin, how to read its output and
+quota, its login folders (`state`) and model hosts (`hosts`). It runs no command: FluidForm runs every
+call in its own sandbox for it (`withSandbox`), which is the boundary whatever the CLI's own sandbox
+does. Follow `server/packages/agy`.
+
+Each built-in CLI brings **its own sandbox**, and each one behaves differently. Never assume;
+measure every item below on the real CLI before writing code, and keep the measured answers in the
+design note.
 
 Every pitfall here was hit at least once. The check is the cure.
 
@@ -49,6 +57,10 @@ How the existing channels meet them (reuse these, do not invent a fourth way):
 - **Claude Code**: its settings (`withNetwork`, `withHostPorts`): only `127.0.0.1:<port>` in
   `allowedDomains`, and `CLAUDE_ENV_FILE` (`withClaudeBridge`, `proxyListenScript`) bridges each port
   through its proxy inside each command, because license clients ignore proxies.
+- **Model packages** (agy): FluidForm's bwrap around the whole CLI (`model-channels.withSandbox`):
+  the home hidden but for its `state`; with the internet, `ownNetwork`; without, `--unshare-net`, the
+  host ports by Unix socket and only its `hosts` through `DomainProxy`. Its commands run outside its
+  own sandbox and still inside this one.
 
 ## 2. Pitfalls in running it
 
@@ -62,6 +74,22 @@ How the existing channels meet them (reuse these, do not invent a fourth way):
   exactly the tools steps need in the settings passed per call, never by editing the user's settings.
 - **The CLI's own sandbox may hide or deny paths the step needs**: the tools folder
   (`environment.toolsDir()`) and the profiles (`environment.profiles()`) must be readable inside.
+- **agy (1.5.18) cannot be kept in its own sandbox.** Print mode always turns its terminal sandbox on
+  (the log says "Print mode: enabling terminal sandbox"; `enableTerminalSandbox: false` does not
+  change it), that sandbox has no network and no loopback (no license), and nothing keeps a command
+  in it: Auto mode's reviewer sends commands out, `toolPermission: "proceed-in-sandbox"` with Default
+  mode denies every command headless, and with `command(*)` allowed all commands run outside.
+  `unsandboxed(...)` rules are ignored on personal accounts. So FluidForm's sandbox is the boundary,
+  and agy runs in Default mode (`agentMode: ""`) with `command(*)`, which needs no reviewer.
+- **A CLI that calls its model through a proxy** (agy: `HTTPS_PROXY`) works with no internet behind
+  `DomainProxy` given its hosts. Find them with a logging CONNECT proxy, not from the docs.
+- **The prompt as an argument is limited to 128 KiB** (`MAX_ARG_STRLEN`): pass it on stdin (agy:
+  `--print=` with `--input-format stream-json`, one `{"event":"user","message":{"content":…}}` line).
+- **A model refuses a probe that looks like an attack** ("probe the sandbox", "bypass"): ask for the
+  real job ("check the license server is up and download the page") with a script that does it.
+- **A test script run outside the service reads `.fluidform` under the current folder**: set
+  `FLUIDFORM_DATA_DIR`, or it sees no recorded host ports and the license check fails for no reason.
+- **`pkill -f <pattern>` matches the shell running it** when the pattern is in its own command line.
 
 ## 3. Its answers and its errors
 

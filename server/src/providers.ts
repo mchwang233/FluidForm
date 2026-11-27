@@ -10,7 +10,7 @@ import { BudgetExceeded, ProviderError, StepLimitExceeded } from "./budget.js";
 import * as callRecords from "./calls.js";
 import { boundBytes, inputBound, ProviderGate, retryAfter, type Limits } from "./call-control.js";
 import * as chatActions from "./chat-actions.js";
-import { CLI_SPECS, CliChannelRegistry, CliError, type CliText, InputTooLarge, inputTooLarge, SessionLost } from "./cli-channels.js";
+import { CliChannelRegistry, CliError, specFor, type CliText, InputTooLarge, inputTooLarge, SessionLost } from "./cli-channels.js";
 import { settings } from "./config.js";
 import { ArtifactBlocked } from "./contracts.js";
 import * as memory from "./conversation.js";
@@ -374,7 +374,7 @@ export class ProviderRegistry {
         // including CLI-to-CLI handoff and project tool requirements.
         if (kind) throw this.quota.mark(modelId, message, kind);
         if (!allow_api_fallback) throw new ProviderError(message);
-        const fallback = CLI_SPECS[modelId].fallback_model_id;
+        const fallback = specFor(modelId)!.fallback_model_id;
         if (!this.configuredModels([fallback]).has(fallback)) throw new ProviderError(`${message}; no API fallback is configured`);
         const result = await this.complete(fallback, prompt, { workspace, cli_timeout, attachments, act, spend_ok, network, review_workspace,
           review_files, watch, signal });

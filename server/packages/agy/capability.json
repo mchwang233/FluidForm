@@ -1,0 +1,24 @@
+{
+  "id": "agy",
+  "name": "Antigravity CLI",
+  "kind": "extension",
+  "provides": [
+    "model:cli:agy"
+  ],
+  "version": "1.0.0",
+  "summary": "用你的 Google 会员账户，通过 Antigravity CLI（agy，Gemini 4 Neon High）做步骤、当任务负责人。它在 FluidForm 的沙箱里运行：只能写自己的工作目录，看不到家目录里的密钥和 FluidForm 的数据；不联网的任务只连得到它自己的模型服务和本机许可证。停用后不再把步骤交给它。",
+  "models": [
+    {
+      "id": "cli:agy",
+      "provider": "google",
+      "display_name": "Antigravity CLI (membership)",
+      "context_window": 1000000,
+      "input_per_million": 0,
+      "output_per_million": 0,
+      "supports_vision": true,
+      "pricing_verified": true,
+      "channel": "cli",
+      "execution_priority": 0
+    }
+  ]
+}

@@ -12,7 +12,7 @@ import { mkdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { RequestBudget, StepLimitExceeded } from "./budget.js";
 import * as pricing from "./pricing.js";
-import { CLI_SPECS } from "./cli-channels.js";
+import { specFor } from "./cli-channels.js";
 import { settings } from "./config.js";
 import type { Conversation } from "./conversation.js";
 import type { Database } from "./db.js";
@@ -587,7 +587,7 @@ export abstract class ExecutorBase {
 
   /** A CLI step may fall back to its metered API only if enabled and within budget. */
   async fallbackAllowed(run: ExecutionRun, node: TaskNode): Promise<boolean> {
-    const spec = CLI_SPECS[node.model_id || ""];
+    const spec = specFor(node.model_id || "");
     if (!spec) return true;
     const model = this.modelLookup[spec.fallback_model_id];
     if (!model || !model.enabled || !routingReady(model)) return false;

@@ -17,6 +17,7 @@ import * as environment from "./environment.js";
 import type { Attachment } from "./models.js";
 import * as progress from "./progress.js";
 import { formatG, isObject, pyDumps, pyRegex, pyStr, splitlines, tail } from "./py.js";
+import * as modelChannels from "./model-channels.js";
 import { compactContext } from "./team.js";
 
 // Bound the full UTF-8 input conservatively, leaving room for CLI/protocol wrapping.
@@ -159,6 +160,19 @@ export const SESSION_ARGS: Record<string, string[]> = {
   "cli:codex": ["exec", "--json", "--skip-git-repo-check", "--color", "never"],
 };
 export const SESSION_CLIS = new Set(Object.keys(SESSION_ARGS));
+
+/** Whether ``modelId`` keeps a conversation (so it can lead a task): a built-in CLI or a model package's. */
+export function keepsConversations(modelId: string): boolean {
+  return SESSION_CLIS.has(modelId) || Boolean(modelChannels.channelFor(modelId)?.sessions);
+}
+
+/** The CLI ``modelId`` is: a built-in one, or the one a model package that is on brings; null otherwise. */
+export function specFor(modelId: string): CliSpec | null {
+  if (modelId in CLI_SPECS) return CLI_SPECS[modelId];
+  const channel = modelChannels.channelFor(modelId);
+  return channel ? { id: channel.id, executable: channel.executable, auth_command: channel.auth_command, invoke_args: [],
+    fallback_model_id: channel.fallback_model_id } : null;
+}
 // How a CLI says the conversation to continue is gone.
 const SESSION_MISSING = pyRegex(String.raw`no (conversation|session|rollout)|not found|does not exist`, "i");
 
@@ -470,7 +484,9 @@ class Timeout extends Error {
 }
 
 export type RunOptions = { watch?: progress.Watch | null; idle?: number | null; extraEnv?: Record<string, string> | null;
-  toolTrace?: string | null; signal?: AbortSignal };
+  toolTrace?: string | null; signal?: AbortSignal;
+  /** Given, a non-zero exit returns the output too, and this gets the exit code and stderr. */
+  exit?: { code: number | null; stderr: string } };
 
 export class CliChannelRegistry {
   private cached: Record<string, CliStatus> | null = null;
@@ -480,13 +496,20 @@ export class CliChannelRegistry {
     return { counting_unit: null, hard_limit: false };
   }
 
+  // The model packages' channels the statuses were read with: one switched on or off reads them again.
+  private channelsKey = "";
+
   refresh(): Record<string, CliStatus> {
-    this.cached = Object.fromEntries(Object.entries(CLI_SPECS).map(([modelId, spec]) => [modelId, this.probe(spec)]));
+    const channels = modelChannels.active();
+    this.channelsKey = channels.map((channel) => channel.id).sort().join(",");
+    const specs = [...Object.values(CLI_SPECS), ...channels.map((channel) => specFor(channel.id)!)];
+    this.cached = Object.fromEntries(specs.map((spec) => [spec.id, this.probe(spec)]));
     return this.cached;
   }
 
   get statuses(): Record<string, CliStatus> {
-    return this.cached ?? this.refresh();
+    const key = modelChannels.active().map((channel) => channel.id).sort().join(",");
+    return this.cached && key === this.channelsKey ? this.cached : this.refresh();
   }
 
   availableModelIds(): Set<string> {
@@ -653,7 +676,8 @@ export class CliChannelRegistry {
       throw error;
     }
     trace(toolTrace, "cli.exit", { exit_code: code });
-    if (code) throw new CliError(`${spec.executable} failed: ${failureDetail(Buffer.concat(out), Buffer.concat(err))}`);
+    if (options.exit) Object.assign(options.exit, { code, stderr: Buffer.concat(err).toString("utf8") });
+    if (code && !options.exit) throw new CliError(`${spec.executable} failed: ${failureDetail(Buffer.concat(out), Buffer.concat(err))}`);
     return Buffer.concat(out).toString("utf8");
   }
 
@@ -693,6 +717,20 @@ export class CliChannelRegistry {
    *  ``timeout`` is a hard limit. */
   async converse(modelId: string, prompt: string, cwd: string, { sessionId = null, timeout = null, effort = null, attachments = [], signal }:
     { sessionId?: string | null; timeout?: number | null; effort?: string | null; attachments?: Attachment[]; signal?: AbortSignal } = {}): Promise<[CliText, string]> {
+    const channel = modelChannels.channelFor(modelId);
+    if (channel?.sessions) {
+      const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
+      const call = { prompt, cwd, lead: true, sessionId, readable };
+      let reply: modelChannels.ChannelReply;
+      try {
+        reply = await this.channelRun(channel, call, false, timeout ?? settings.lead_call_max_minutes * 60, { signal });
+      } catch (error) {
+        if (sessionId && error instanceof CliError && SESSION_MISSING.test(error.message)) throw new SessionLost(error.message);
+        throw error;
+      }
+      if (!reply.sessionId) throw new CliError(`${channel.executable} did not report its conversation id`);
+      return [{ text: reply.text, usage: reply.usage }, reply.sessionId];
+    }
     const spec = CLI_SPECS[modelId];
     const executable = spec ? deps.which(spec.executable) : null;
     if (!executable || !(modelId in SESSION_ARGS)) throw new CliError(`${modelId} cannot keep a conversation here`);
@@ -756,7 +794,21 @@ export class CliChannelRegistry {
   async complete(modelId: string, prompt: string, cwd: string, { timeout = 900, attachments = [], repair = false, network = false, watch = null,
     effort = null, toolTrace = null, signal }: { timeout?: number; attachments?: Attachment[]; repair?: boolean; network?: boolean;
     watch?: progress.Watch | null; effort?: string | null; toolTrace?: string | null; signal?: AbortSignal } = {}): Promise<CliText> {
+    const channel = modelChannels.channelFor(modelId);
+    if (channel) {
+      const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
+      const call = { prompt, cwd, lead: false, sessionId: null, readable };
+      try {
+        const reply = await this.channelRun(channel, call, network, timeout, { watch, toolTrace, signal }, repair);
+        trace(toolTrace, "cli.result", { text: reply.text, model_id: modelId });
+        return { text: reply.text, usage: reply.usage };
+      } catch (error) {
+        trace(toolTrace, "cli.error", { reason: (error as Error).message || (error as Error).name });
+        throw error;
+      }
+    }
     const spec = CLI_SPECS[modelId];
+    if (!spec) throw new CliError(`${modelId} is not a CLI in use`);
     const executable = deps.which(spec.executable);
     if (!executable) throw new CliError(`${spec.executable} is no longer installed`);
     const args = [...(repair ? REPAIR_ARGS[spec.id] ?? spec.invoke_args : spec.invoke_args)];
@@ -772,6 +824,32 @@ export class CliChannelRegistry {
       trace(toolTrace, "cli.result", { text: text.text, model_id: modelId });
       return text;
     });
+  }
+
+  /** One call of a model package's CLI, always in FluidForm's sandbox for it (model-channels.ts),
+   *  except a ``repair``, which leaves it to fix the environment as every CLI's repair does. Its
+   *  answer, or CliError with what it said; a quota it ran out of reads as one ("limit reached"). */
+  async channelRun(channel: modelChannels.ModelChannel, call: modelChannels.ChannelCall, network: boolean, timeout: number,
+    options: RunOptions = {}, repair = false): Promise<modelChannels.ChannelReply> {
+    const spec = specFor(channel.id)!;
+    const executable = deps.which(channel.executable);
+    if (!executable) throw new CliError(`${channel.executable} is no longer installed`);
+    const argv = [executable, ...channel.args(call)];
+    const input = channel.stdin(call);
+    const stdin = input === null ? null : Buffer.from(input, "utf8");
+    const exit = { code: null as number | null, stderr: "" };
+    const stdout = repair
+      ? await this.run(spec, deps.repairCommand(argv[0], argv.slice(1)), call.cwd, stdin, timeout, { ...options, exit })
+      : await modelChannels.withSandbox(channel, argv, call, network, (command, env) =>
+        this.run(spec, command, call.cwd, stdin, timeout, { ...options, extraEnv: { ...(options.extraEnv ?? {}), ...env }, exit }));
+    const reply = channel.parse(stdout);
+    if (reply.quota) throw new CliError(`${channel.executable} usage limit reached: ${reply.error}`);
+    if (reply.error || exit.code) {
+      // What it said in its answer, and, when it exited with an error, what it printed besides.
+      const detail = exit.code ? failureDetail(Buffer.from(stdout, "utf8"), Buffer.from(exit.stderr, "utf8")) : "";
+      throw new CliError(`${channel.executable} failed: ${[reply.error, detail].filter(Boolean).join("; ")}`);
+    }
+    return reply;
   }
 
   async completeIn(spec: CliSpec, executable: string, given: string[], step: boolean, tmp: string | null, prompt: string, cwd: string,

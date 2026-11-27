@@ -10,7 +10,7 @@ import * as pricing from "./pricing.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { ProviderError } from "./budget.js";
-import { SESSION_CLIS, SessionLost } from "./cli-channels.js";
+import { keepsConversations, SessionLost } from "./cli-channels.js";
 import { settings } from "./config.js";
 import * as folders from "./folders.js";
 import { type Attachment, type EngineerJob, type ExecutionRun, folderId, type ModelProfile, partPath, routingReady, type SupervisorSession, SupervisorSessionSchema, type TaskNode } from "./models.js";
@@ -46,7 +46,7 @@ export const workspaceOf = (run: ExecutionRun) => run.project_dir || join(settin
 export function candidates(models: ModelProfile[], configured: Set<string>, exclude: Iterable<string> = []): ModelProfile[] {
   const excluded = new Set(exclude);
   const eligible = models.filter((model) => model.enabled && routingReady(model) && configured.has(model.id) && !excluded.has(model.id)
-    && !settings.helper_only_models.includes(model.id) && model.provider !== "mock" && (model.channel !== "cli" || SESSION_CLIS.has(model.id)));
+    && !settings.helper_only_models.includes(model.id) && model.provider !== "mock" && (model.channel !== "cli" || keepsConversations(model.id)));
   // The catalog's price only breaks a tie of scores (a chat's are ordered by the chat package).
   return sortedBy(eligible, (model) => [model.channel !== "cli", -model.scores!.planning, -model.scores!.reliability,
     pricing.enabled() ? (model.input_per_million || 0) + (model.output_per_million || 0) : 0]);
