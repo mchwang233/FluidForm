@@ -216,7 +216,7 @@ const EVENT_LABELS:Record<string,(data:Record<string,any>,title:(id:string)=>str
   "node.delegated":(data,title)=>`${title(data.node_id)} 委派了 ${data.children?.length??0} 个子任务，等待验收结果`,
   "run.engineer_requested":(data,title)=>`负责人请平台工程师添加组件${data.node_id?`（${title(data.node_id)}）`:""}，等你在负责人对话里批准方案`,
   "run.lead_changed":data=>`负责人换成 ${data.model_id}${data.previous_model_id?`（原为 ${data.previous_model_id}）`:""}`,
-  "node.succeeded":(data,title)=>`${title(data.node_id)}：完成`,
+  "node.succeeded":(data,title)=>`${title(data.node_id)}：${data.accepted_by_lead?"未通过，负责人放行":"完成"}`,
   "node.overrun_check":(data,title)=>data.stop?`${title(data.node_id)}：已用 ${data.turns} 轮（预计 ${data.expected} 轮），负责人停止了这次尝试（${data.reason??""}）`:`${title(data.node_id)}：已用 ${data.turns} 轮（预计 ${data.expected} 轮），负责人判断仍在推进，继续执行`,
   "node.progress_check":(data,title)=>data.stop?`${title(data.node_id)}：运行 ${data.minutes} 分钟后检查，判断已卡住并停止（${data.reason??""}）`:`${title(data.node_id)}：运行 ${data.minutes} 分钟后检查，仍在推进，继续执行`,
   "node.retry":(data,title)=>data.reason==="environment_fixed"?`${title(data.node_id)}：环境已修复，重新执行`:`${title(data.node_id)}：未通过，${data.reason==="lead"?"负责人决定重试":`准备重试（${data.reason??""}）`}`,

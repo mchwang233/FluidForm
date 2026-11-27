@@ -1351,6 +1351,23 @@ test("each task shows its check result, and clicking it shows its progress", asy
   assert.equal(document.querySelector(".node-progress"), null);
 });
 
+test("a step its lead let through without passing is not shown as passed", async t => {
+  const run = mission("waived", "running");
+  run.plan.nodes = [
+    { id: "syn", title: "Synthesis", capability: "coding", dependencies: [], model_id: "minimax:m3", status: "succeeded", estimated_cost_usd: 0,
+      accepted_by_lead: true, review: "负责人接受：实质交付已完成", result: "done",
+      attempts: [{ model_id: "minimax:m3", outcome: "error", reason: "cut off", cost_usd: 0 }] },
+    { id: "ok", title: "Docs", capability: "coding", dependencies: [], model_id: "minimax:m3", status: "succeeded", estimated_cost_usd: 0, result: "done",
+      attempts: [{ model_id: "minimax:m3", outcome: "passed", cost_usd: 0 }] },
+  ];
+  const { document } = await setup(t, [run]);
+  const [waived, passed] = [...document.querySelectorAll(".plan-node")];
+  assert.equal(waived.querySelector(".plan-check").textContent, "⚠ 未通过，负责人放行（最后一次：执行出错）");
+  assert.equal(waived.querySelector(".state").textContent, "负责人放行");
+  assert.ok(waived.querySelector(".state").classList.contains("accepted"));
+  assert.ok(!passed.querySelector(".state").classList.contains("accepted"));
+});
+
 test("a step waiting for its inputs shows it is starting early, and later what it prepared", async t => {
   const run = mission("head-start", "running");
   run.plan.nodes = [

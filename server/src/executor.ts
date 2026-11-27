@@ -927,6 +927,7 @@ export class Executor extends Preflighting {
         node.status = "succeeded";
         node.feedback = null;
         node.failed_attempts = 0;
+        node.accepted_by_lead = false;
         this.emit(runId, "node.succeeded", { node_id: node.id, cost_usd: spent, selected_model_id: node.model_id, used_model_id: result ? result.used_model_id : null });
       } else if (outcome === "verify_failed") {
         // The lead judges the findings before any work is sent back (leading.ts).

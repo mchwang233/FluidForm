@@ -73,6 +73,8 @@ test("the lead can accept work a check rejected", async () => {
   const node = result.plan.nodes[0];
   assert.ok(result.status === "succeeded" && node.result === "做完了" && node.review === "负责人接受：理由：accept");
   assert.equal(team.work.length, 1);
+  // Kept apart from a step that passed: done because it was let through.
+  assert.equal(node.accepted_by_lead, true);
 });
 
 test("the lead ends a step that cannot be done here", async () => {

@@ -190,6 +190,7 @@ export async function applyDecision(this: Leading, runId: string, nodeId: string
       node.status = "succeeded";
       node.feedback = null;
       node.review = `负责人接受：${reason}`;
+      node.accepted_by_lead = true;
       this.emit(runId, "node.succeeded", { node_id: nodeId, accepted_by_lead: true, reason });
     } else if (action === "unable") {
       this.markUnable(run, node, reason || verdict.unable || verdict.reason, null, decision.user_action ?? null);

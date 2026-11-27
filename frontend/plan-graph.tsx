@@ -9,7 +9,7 @@ export type PlanNode = {
   capability?: string; dependencies?: string[]; needs_workspace?: boolean; result?: string;
   difficulty?: string; quality_threshold?: number; routing_note?: string | null; started_at?: string | null; waiting_for_folder?: boolean; preparing?: boolean; head_start?: string;
   acceptance_criteria?: string; verifies?: string[]; attempts?: NodeAttempt[]; failed_attempts?: number;
-  feedback?: string | null; unable_reason?: string | null; review_passed?: boolean | null; review?: string | null; summary?: string | null;
+  feedback?: string | null; unable_reason?: string | null; review_passed?: boolean | null; accepted_by_lead?: boolean; review?: string | null; summary?: string | null;
   changed_files?: string[]; changed_files_total?: number | null; folders?: string[]; inputs?: { node_id: string; form: string; changed_files: number }[];
   files?: string[]; reads?: string[]; provides?: string; check?: string; part_id?: string | null;
 };
@@ -65,6 +65,10 @@ export const DONE_LINE = "✓ 完成";
 /** One line on the card saying where the node stands right now. */
 export function nodeLine(node: PlanNode, nodes: PlanNode[], number: Map<string, string>): { tone: string; text: string } {
   const attempts = node.attempts ?? [], last = attempts[attempts.length - 1];
+  // Done because the lead accepted what the step had, not because it passed: says how its last try ended.
+  if (node.status === "succeeded" && node.accepted_by_lead) {
+    return { tone: "warn", text: `⚠ 未通过，负责人放行${last ? `（最后一次：${OUTCOME_LABELS[last.outcome] ?? last.outcome}）` : ""}` };
+  }
   if (node.status === "succeeded") return { tone: "ok", text: node.verifies?.length ? "✓ 验证通过" : node.review_passed ? "✓ 验收通过" : DONE_LINE };
   if (node.status === "failed") return { tone: "bad", text: `✗ ${last ? OUTCOME_LABELS[last.outcome] ?? "失败" : "失败"}` };
   if (node.status === "unable") return { tone: "bad", text: "⊘ 当前环境无法完成" };
@@ -224,7 +228,7 @@ export function PlanGraph({ apiBase, runId, runStatus, nodes, all = nodes, inPro
                   onClick={open} onMouseEnter={() => setActive(node.id)} onMouseLeave={() => setActive(null)}>
                   <div className="plan-node-line"><span className="num">{number.get(node.id)}</span>
                     <button type="button" className="plan-node-title" aria-expanded={selectedId === node.id} onClick={event => { event.stopPropagation(); open(); }} onFocus={() => setActive(node.id)} onBlur={() => setActive(null)}>{node.title}</button>
-                    <span className={`state ${node.status}`}>{nodeStatusLabel(node)}</span></div>
+                    <span className={`state ${node.status}${node.accepted_by_lead && node.status === "succeeded" ? " accepted" : ""}`}>{nodeStatusLabel(node)}</span></div>
                   {line.text !== DONE_LINE && <p className={`plan-check ${line.tone}`} title={node.review ?? undefined}>{line.text}</p>}
                   <button type="button" className="plan-model" onClick={event => { event.stopPropagation(); setOpenNode(node); }} title={`${selectionReason(node, model)}点击查看模型能力图。`}>{model?.display_name ?? node.model_id ?? "未分配模型"}</button>
                 </article>;

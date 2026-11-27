@@ -124,7 +124,12 @@ export function review(run: ExecutionRun, events: { kind: string; data: Record<s
     const turns = Math.max(0, ...node.attempts.map((attempt) => attempt.turns));
     const expected = routing.loopTurns(node);
     steps.push({ id: node.id, title: node.title, model_id: node.model_id, status: node.status, estimated_usd: node.estimated_cost_usd,
-      actual_usd: spent, expected_turns: expected, turns, attempts: node.attempts.length });
+      actual_usd: spent, expected_turns: expected, turns, attempts: node.attempts.length, ...(node.accepted_by_lead ? { accepted_by_lead: true } : {}) });
+    // Done only because its lead let it through: a step that did not pass, counted as such across tasks.
+    if (node.status === "succeeded" && node.accepted_by_lead) {
+      const last = node.attempts.at(-1);
+      problems.push(problem("accepted_unpassed", node.model_id || "?", `未通过（${last?.outcome ?? "?"}），负责人放行：${head((node.review || "").replace(/^负责人接受：/, ""), 160)}`, node.id));
+    }
     if (node.estimated_cost_usd && spent >= NOTICEABLE_USD && spent > OVER * node.estimated_cost_usd) {
       problems.push(problem("estimate_low", node.model_id || "?", `花费 $${fixed(spent, 3)}，估算 $${fixed(node.estimated_cost_usd, 3)}`, node.id));
     }

@@ -1738,3 +1738,6 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 .capability-field-state.ok{color:var(--ok,light-dark(#1f9d55,#3ccb7f))}
 .capability-package .capability-check{margin:0}
 .capability-confirm .capability-confirm-missing{margin:0 0 8px!important;font-size:12.5px!important;color:var(--danger)!important}
+
+/* A step its lead let through without passing (accepted_by_lead). */
+.state.succeeded.accepted{color:var(--warn)}

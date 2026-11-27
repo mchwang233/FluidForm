@@ -78,8 +78,9 @@ export function statusLabel(status: string): string {
 }
 
 /** A step's status; a running step still waiting for another to leave its folder is queued. */
-export function nodeStatusLabel(node: { status: string; waiting_for_folder?: boolean; preparing?: boolean }): string {
+export function nodeStatusLabel(node: { status: string; waiting_for_folder?: boolean; preparing?: boolean; accepted_by_lead?: boolean }): string {
   if (node.status === "pending" && node.preparing) return "先行准备中";
+  if (node.status === "succeeded" && node.accepted_by_lead) return "负责人放行";
   return node.status === "running" && node.waiting_for_folder ? "排队中" : statusLabel(node.status);
 }
 

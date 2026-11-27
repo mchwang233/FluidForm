@@ -185,6 +185,8 @@ export const TaskNodeFields = {
   environment_fixes: lax.int().default(() => (0)),
   feedback: z.string().nullable().default(() => (null)),
   review_passed: lax.bool().nullable().default(() => (null)),
+  /** Done because its lead accepted it after an attempt that did not pass (leading.ts accept), not by passing. */
+  accepted_by_lead: lax.bool().default(() => (false)),
   review: z.string().nullable().default(() => (null)),
   unable_reason: z.string().nullable().default(() => (null)),
   summary: z.string().nullable().default(() => (null)),

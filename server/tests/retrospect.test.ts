@@ -51,6 +51,17 @@ test("a finished task is summed up with its problems", () => {
   assert.equal(environment.label, "沙箱里找不到 vcs 命令");
 });
 
+test("a step its lead let through without passing is a problem of its own", () => {
+  const let_through = TaskNodeSchema.parse({ id: "a", title: "综合", instructions: "i", capability: "coding", model_id: "minimax:m3", status: "succeeded",
+    accepted_by_lead: true, review: "负责人接受：实质交付已完成", attempts: [{ model_id: "minimax:m3", outcome: "error" }] });
+  const body = retrospect.review(finished("r", [let_through, platformStep()]), []);
+  assert.deepEqual(body.steps.map((step) => step.accepted_by_lead ?? false), [true, false]);
+  const found = body.problems.filter((item) => item.kind === "accepted_unpassed");
+  assert.equal(found.length, 1);
+  assert.equal(found[0].key, "minimax:m3");
+  assert.equal(found[0].label, "未通过（error），负责人放行：实质交付已完成");
+});
+
 test("the program a failing command was about", () => {
   assert.equal(retrospect.program("source /eda/.edarc && which vcs && vcs -ID"), "vcs");
   assert.equal(retrospect.program("cd /work; PATH=/x:$PATH /opt/bin/iverilog -g2012 a.v"), "iverilog");
