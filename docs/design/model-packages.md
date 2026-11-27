@@ -282,6 +282,7 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
   - 比例超出 0–1 照样拒收。
   - 配了 API 密钥时，补分项（`addAaDetails`）也能读新格式。
 - 用真实页面实测：读出 126 组成绩，每组都有分项。Claude Fable 5.2 (high) 的综合指数是 61.9。
+- **后续修正**：`NODE_USE_ENV_PROXY` 会被 FluidForm 启动的所有命令继承。步骤里每个 Node 进程都会多打一行"EnvHttpProxyAgent is experimental"警告，执行前检查里的"Codex 沙箱"这一项要逐字比对输出，因此失败，任务被暂停。现在 `main.ts` 等 Node 读过这个变量后就把它删掉，FluidForm 自己的请求仍然走代理（实测删掉后仍返回 200）。
 
 **测试**：`benchmarks.test.ts` 新增「the page without a creator column is read from its model records」和「the API's indices get the subscores from records that name their release」；旧版页面的测试全部保留，全部通过。
 

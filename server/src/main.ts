@@ -12,6 +12,11 @@ import { stopOn } from "./shutdown.js";
 
 const { values } = parseArgs({ options: { host: { type: "string", default: "127.0.0.1" }, port: { type: "string", default: "8000" } } });
 
+// NODE_USE_ENV_PROXY (scripts/service.sh) is read once, as Node starts: its fetch now goes through the
+// user's proxy. The commands FluidForm runs must not inherit it: each Node among them would print an
+// "EnvHttpProxyAgent is experimental" warning, which broke a sandbox check whose output is compared.
+delete process.env.NODE_USE_ENV_PROXY;
+
 // What it kept as FluidForm, moved to FluidForm's names first.
 migrate();
 settings.prepare();

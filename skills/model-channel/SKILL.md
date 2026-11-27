@@ -97,6 +97,10 @@ How the existing channels meet them (reuse these, do not invent a fourth way):
 - **A test script run outside the service reads `.fluidform` under the current folder**: set
   `FLUIDFORM_DATA_DIR`, or it sees no recorded host ports and the license check fails for no reason.
 - **`pkill -f <pattern>` matches the shell running it** when the pattern is in its own command line.
+- **An environment variable meant for FluidForm's own process leaks into every command it runs.**
+  `NODE_USE_ENV_PROXY=1` (Node's fetch through `HTTPS_PROXY`) made each Node in a step print an
+  "EnvHttpProxyAgent is experimental" warning and failed the Codex sandbox preflight, which compares
+  output; `main.ts` deletes it once Node has read it. Check a new launcher variable against the preflight.
 - **An npm-installed CLI is a link in `bin/` to a script inside `node_modules/<package>/`**, both under
   the hidden home: the sandbox needs the whole package (`programFiles`) and must start it by its real
   path, not the link.
