@@ -489,7 +489,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -1011,7 +1011,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -1533,7 +1533,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -2054,7 +2054,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -2576,7 +2576,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -3101,7 +3101,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -3623,7 +3623,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -4146,7 +4146,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -4668,7 +4668,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -5190,7 +5190,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -5710,7 +5710,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     70.0,
@@ -6232,7 +6232,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     70.0,
@@ -6753,7 +6753,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -7275,7 +7275,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -7796,7 +7796,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -8318,7 +8318,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -8840,7 +8840,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -9361,7 +9361,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -9883,7 +9883,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -10408,7 +10408,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -10930,7 +10930,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -11453,7 +11453,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -11975,7 +11975,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -12497,7 +12497,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -13017,7 +13017,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     80.0,
@@ -13539,7 +13539,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     80.0,
@@ -14060,7 +14060,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -14582,7 +14582,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -15103,7 +15103,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -15625,7 +15625,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -16147,7 +16147,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -16668,7 +16668,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -17190,7 +17190,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -17715,7 +17715,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -18237,7 +18237,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -18760,7 +18760,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -19282,7 +19282,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "cli:codex",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -19804,7 +19804,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "cli:codex",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -23453,7 +23453,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     65,
@@ -23979,7 +23979,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     65,
@@ -26029,7 +26029,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -26546,7 +26546,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -31209,7 +31209,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -31727,7 +31727,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -33280,7 +33280,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -33797,7 +33797,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -38460,7 +38460,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -38978,7 +38978,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -40531,7 +40531,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     90.0,
@@ -41048,7 +41048,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     90.0,
@@ -96479,7 +96479,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -97001,7 +97001,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -97523,7 +97523,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -98044,7 +98044,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -98566,7 +98566,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -99091,7 +99091,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -99613,7 +99613,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -100136,7 +100136,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -100658,7 +100658,7 @@
    ],
    "strongest": "cli:codex",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -101180,7 +101180,7 @@
    ],
    "strongest": "cli:codex",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     70.0,
@@ -101700,7 +101700,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     70.0,
@@ -102222,7 +102222,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     70.0,
@@ -102743,7 +102743,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -103265,7 +103265,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -103786,7 +103786,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -104308,7 +104308,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -104830,7 +104830,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -105351,7 +105351,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -105873,7 +105873,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -106398,7 +106398,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -106920,7 +106920,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -107443,7 +107443,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -107965,7 +107965,7 @@
    ],
    "strongest": "cli:codex",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -108487,7 +108487,7 @@
    ],
    "strongest": "cli:codex",
    "stronger": "cli:codex",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     80.0,
@@ -109007,7 +109007,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     80.0,
@@ -109529,7 +109529,7 @@
    ],
    "strongest": "openai:sol",
    "stronger": "openai:sol",
-   "spread": "mock:local",
+   "spread": "cli:claude",
    "fit": [
     null,
     80.0,
@@ -110050,7 +110050,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -110572,7 +110572,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -111093,7 +111093,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -111615,7 +111615,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -112137,7 +112137,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -112658,7 +112658,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -113180,7 +113180,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -113705,7 +113705,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -114227,7 +114227,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -114750,7 +114750,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -115272,7 +115272,7 @@
    ],
    "strongest": "cli:codex",
    "stronger": "cli:codex",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -115794,7 +115794,7 @@
    ],
    "strongest": "cli:codex",
    "stronger": "cli:codex",
-   "spread": "openai:sol",
+   "spread": "cli:codex",
    "fit": [
     null,
     90.0,
@@ -119443,7 +119443,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     65,
@@ -119969,7 +119969,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "mock:local",
+   "spread": "cli:codex",
    "fit": [
     null,
     65,
@@ -122019,7 +122019,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -122536,7 +122536,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -127199,7 +127199,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -127717,7 +127717,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     70.0,
@@ -129270,7 +129270,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -129787,7 +129787,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -134450,7 +134450,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -134968,7 +134968,7 @@
    ],
    "strongest": "glm:glm-5.3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     80.0,
@@ -136521,7 +136521,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     90.0,
@@ -137038,7 +137038,7 @@
    ],
    "strongest": "kimi:k3",
    "stronger": "kimi:k3",
-   "spread": "deepseek:flash",
+   "spread": null,
    "fit": [
     null,
     90.0,

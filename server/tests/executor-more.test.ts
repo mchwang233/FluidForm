@@ -636,6 +636,29 @@ test("a step past its provider's share goes to another provider", async () => {
   assert.ok(data.reason === "spread_across_providers" && data.model_id === "deepseek:flash");
 });
 
+test("each membership CLI is a provider of its own, and a free one goes to another free one", async () => {
+  settings.max_steps_per_provider = 2;
+  const cli = (id: string) => ModelProfileSchema.parse({ id, provider: "cli", display_name: id, channel: "cli", context_window: 1_000_000,
+    input_per_million: 0, output_per_million: 0, scores: { coding: 92, planning: 85, reliability: 90 } });
+  const [agy, claude] = [cli("cli:agy"), cli("cli:claude")];
+  const step = (id: string, status = "pending", model = agy.id) => TaskNodeSchema.parse({ id, title: id, instructions: "i", capability: "coding", model_id: model,
+    status, quality_threshold: 80 });
+  const db = new Database(join(folder(), "cli.db"));
+  db.saveRun(ExecutionRunSchema.parse({ id: "r", prompt: "p", status: "running", budget_usd: 5, use_cli: true,
+    plan: { summary: "s", nodes: [step("a", "running"), step("b", "running", claude.id), step("c")] } }));
+  const executor = new Executor(db, { configuredModels: (ids: Iterable<string>) => new Set(ids) } as never, lookup(agy, claude, CHEAP));
+  let run = db.getRun("r")!;
+  // One step on agy, one on claude: agy has room though both are "cli".
+  await executor.spread(run, run.plan.nodes[2]);
+  assert.equal(run.plan.nodes[2].model_id, agy.id);
+  db.saveRun(ExecutionRunSchema.parse({ ...run, plan: { ...run.plan, nodes: [step("a", "running"), step("b", "running"), step("c")] } }));
+  run = db.getRun("r")!;
+  await executor.spread(run, run.plan.nodes[2]);
+  // Two on agy: the next goes to claude, free as well, not to a paid API model.
+  assert.equal(run.plan.nodes[2].model_id, claude.id);
+  settings.max_steps_per_provider = 0;
+});
+
 test("a step stays when its provider has room or no other fits", async () => {
   settings.max_steps_per_provider = 2;
   let [db, executor] = started("t", [spreadStep("a", "running"), spreadStep("b")]);

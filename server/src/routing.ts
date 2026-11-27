@@ -136,17 +136,18 @@ function formatPython(value: number): string {
   return Number.isInteger(value) ? `${value}.0` : String(value);
 }
 
-/** Another model for ``node`` while the providers in ``busy`` carry enough of the task's running
- *  steps: one of another API provider that clears the node's threshold, chosen as routeNode would
- *  choose, for at most settings.spread_cost_factor times the cost of the node's own model. null
- *  when there is no such model: the node then stays where it is. */
+/** Another model for ``node`` while the providers in ``busy`` (by ``vendor``: an API model's provider,
+ *  a membership CLI itself) carry enough of the task's running steps: one of another provider or CLI
+ *  that clears the node's threshold, chosen as routeNode would choose, for at most
+ *  settings.spread_cost_factor times the cost of the node's own model (a free CLI goes to another free
+ *  one). null when there is no such model: the node then stays where it is. */
 export async function spreadTo(node: TaskNode, models: ModelProfile[], configured: Set<string>, busy: Set<string>,
   needsVision = false): Promise<ModelProfile | null> {
   const current = models.find((model) => model.id === node.model_id);
   // Without pricing there is no cost to stay within.
   if (!current || !pricing.enabled()) return null;
-  const candidates = eligibleForNode(node, models, configured, needsVision).filter((model) => model.channel !== "cli"
-    && !busy.has(model.provider) && score(model, node.capability) >= node.quality_threshold);
+  const candidates = eligibleForNode(node, models, configured, needsVision).filter((model) => model.id !== current.id
+    && !busy.has(vendor(model)) && score(model, node.capability) >= node.quality_threshold);
   const costs = await costsFor(node, [current, ...candidates]);
   const ceiling = costOf(costs, current) * settings.spread_cost_factor;
   const pool = candidates.filter((model) => costOf(costs, model) <= ceiling + 1e-12);
@@ -156,6 +157,9 @@ export async function spreadTo(node: TaskNode, models: ModelProfile[], configure
   }
   return minBy(pool, (model) => [costOf(costs, model), -score(model, node.capability)]);
 }
+
+/** Whose quota, rate limits and outages a model shares: its provider's, or a membership CLI's own. */
+export const vendor = (model: Pick<ModelProfile, "id" | "channel" | "provider">): string => (model.channel === "cli" ? model.id : model.provider);
 
 /** The models scoring within settings.hard_score_margin of the best for the node's capability. */
 export function closeToBest(pool: ModelProfile[], node: TaskNode): ModelProfile[] {

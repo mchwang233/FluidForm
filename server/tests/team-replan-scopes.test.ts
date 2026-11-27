@@ -52,6 +52,33 @@ test("the team is decided before any tasks are planned", async () => {
   assert.equal(plan.nodes[0].employee_id, "builder");
 });
 
+test("a team all on one provider is sent back once, and kept the second time", async () => {
+  const pool = [...models(), ModelProfileSchema.parse({ ...models()[0], id: "other:build", provider: "other" })];
+  const three = (id: string) => ["a", "b", "c"].map((name) => EmployeeSchema.parse({ id: name, name, role: `${name} 模块`, model_id: id, capabilities: ["coding"] }));
+  for (const [second, kept] of [[three("other:build"), "other:build"], [three("test:build"), "test:build"]] as const) {
+    const said: string[] = [];
+    const say = async (text: string) => {
+      said.push(text);
+      return JSON.stringify({ team_brief: "约定", employees: said.length === 1 ? three("test:build") : second });
+    };
+    const plan = await teamPlanning.form(say, "实现三个模块", pool, new Set(pool.map((m) => m.id)));
+    assert.equal(said.length, 2);
+    assert.ok(said[0].includes("different provider") && said[1].includes("all 3 employees use test"));
+    assert.equal(plan.employees[0].model_id, kept);
+  }
+  // A reason given, or no other provider to go to, is not sent back.
+  const once: string[] = [];
+  await teamPlanning.form(async (text) => {
+    once.push(text);
+    return JSON.stringify({ team_brief: "约定", single_model_reason: "只有它装了许可证", employees: three("test:build") });
+  }, "实现", pool, new Set(pool.map((m) => m.id)));
+  await teamPlanning.form(async (text) => {
+    once.push(text);
+    return JSON.stringify({ team_brief: "约定", employees: three("test:build") });
+  }, "实现", models(), configured());
+  assert.equal(once.length, 2);
+});
+
 test("delegation is atomic, gives the work to another employee and waits for its delivery", async () => {
   const run = runWithTeam();
   const children = (await teamPlanning.delegate(run, run.plan.nodes[0], request(), models(), configured()));

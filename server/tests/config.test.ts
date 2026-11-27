@@ -106,7 +106,8 @@ test("defaults that matter on their own", () => {
   // The URG probe of task 72e1d53b exited normally after 2143.923 seconds; a 30-minute call
   // limit could not cover that long regression and cut the platform repair short.
   assert.ok(plain.repair_call_minutes * 60 > 2143.923);
-  assert.equal(plain.max_steps_per_provider, 0); // spreading steps over providers is off unless set
+  // At most two running steps on one provider or CLI: one quota or outage stops only those (2026-11-27).
+  assert.equal(plain.max_steps_per_provider, 2);
 });
 
 test("settings are FLUIDFORM_*, and the former SUPER_PARTNER_* still read, the new name winning", () => {

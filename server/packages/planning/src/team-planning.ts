@@ -7,9 +7,19 @@ import { type Employee, EmployeeSchema, type ExecutionRun, type ModelProfile, ro
 import { PlanProblem, type Say, scopeProblems, taskNode } from "./planner.js";
 import { minBy, pyDumps } from "../../../src/py.js";
 import { checkAcyclic } from "./replan.js";
-import { NoEligibleModelError } from "../../../src/routing.js";
+import { NoEligibleModelError, vendor } from "../../../src/routing.js";
 import * as skills from "../../../src/skills.js";
 import { ancestors, CAPABILITIES, digest, member, refreshSkills, route } from "../../../src/team.js";
+
+/** Employees from this many on all with one provider are sent back once (SPREAD_RULE). */
+export const SPREAD_CHECK_MIN_EMPLOYEES = 3;
+
+
+// 2026-11-27: a lead gave all five employees its own CLI, and earlier one CLI's five-hour quota stopped
+// every step it carried at once; a check by the model that did the work is no independent check.
+const SPREAD_RULE = "Spread the team over models of different providers where they are suitable: one provider's "
+  + "quota, rate limit or outage then stops only part of the work. Give an employee who checks or verifies others' "
+  + "work a model of a different provider than theirs. If one model must do all of it, say why in single_model_reason. ";
 
 /** A separate lead decision, completed before the tasks are planned. */
 export async function form(say: Say, request: string, models: ModelProfile[], configured: Set<string>): Promise<TaskPlan> {
@@ -33,16 +43,20 @@ export async function form(say: Say, request: string, models: ModelProfile[], co
     + "Capabilities are responsibilities, not invented improvements to a model's scores. Use only catalog models "
     + "and capabilities coding/planning/research/chinese/tool_use/structured_output. Keep independent verification "
     + "with a suitable separate employee when needed. An employee may also work on several independent tasks at "
-    + "the same time, each in a session of its own. Choose skills "
+    + "the same time, each in a session of its own. " + SPREAD_RULE + "Choose skills "
     + "by exact names from the library; skill_tools lists additional tool knowledge to prepare through the existing "
     + "skill reuse/discovery workflow. Never invent an installed skill. In team_brief record the shared goal, "
     + "constraints, interface ownership and acceptance responsibilities. Return only JSON: "
-    + '{"team_brief":"shared agreement", "employees":[{"id":"builder","name":"job title","role":"...",'
+    + '{"team_brief":"shared agreement", "single_model_reason":"only if one provider must do all the work: why", "employees":[{"id":"builder","name":"job title","role":"...",'
     + '"model_id":"catalog id","capabilities":["coding"],"skills":[],"skill_tools":[],"reason":"..."}]}\n'
     + "Available models:\n" + pyDumps(catalog, false)
     + "\nAvailable skills:\n" + pyDumps(library.map((s) => ({ name: s.name, description: s.description, tools: s.tools })), false)
     + "\nUser request and project context:\n" + request;
+  const vendors = new Set(available.filter((m) => m.supports_tools || m.channel === "cli").map(vendor));
+  const byId = new Map(available.map((m) => [m.id, m]));
+  let asked = 0;
   const read = (payload: any): TaskPlan => {
+    asked += 1;
     const raw = payload?.employees;
     if (!Array.isArray(raw) || !(raw.length >= 1 && raw.length <= settings.team_max_employees)) throw new PlanProblem("choose a bounded, nonempty employee team");
     const employees: Employee[] = raw.map((item) => EmployeeSchema.parse(item));
@@ -59,6 +73,13 @@ export async function form(say: Say, request: string, models: ModelProfile[], co
     const brief = payload.team_brief;
     if (typeof brief !== "string" || !brief.trim() || [...brief].length > 16000) {
       throw new PlanProblem("team_brief must contain the shared project agreement (at most 16000 characters)");
+    }
+    // Asked once, in the correction round: a team that must stay with one provider is then kept as is.
+    const used = new Set(employees.map((e) => vendor(byId.get(e.model_id)!)));
+    const reason = typeof payload.single_model_reason === "string" ? payload.single_model_reason.trim() : "";
+    if (asked === 1 && !reason && employees.length >= SPREAD_CHECK_MIN_EMPLOYEES && used.size === 1 && vendors.size > 1) {
+      throw new PlanProblem(`all ${employees.length} employees use ${[...used][0]}: spread them over suitable models of `
+        + "other providers, with verification on a different provider than the work it checks, or give single_model_reason");
     }
     const plan = TaskPlanSchema.parse({ summary: "", nodes: [], employees, team_brief: brief.trim() });
     refreshSkills(plan, library);

@@ -23,7 +23,7 @@ import { formatG, fixed, head, pyDumps, pyIsoformat, pyRound } from "./py.js";
 import * as quality from "./quality.js";
 import { ModelUnavailable } from "./quota.js";
 import { turnsFor } from "./recovery.js";
-import { canAct, eligibleForNode, NoEligibleModelError, nodeCost, routeNode, spreadTo, costsFor } from "./routing.js";
+import { canAct, eligibleForNode, NoEligibleModelError, nodeCost, routeNode, spreadTo, costsFor, vendor } from "./routing.js";
 import * as pricing from "./pricing.js";
 import { collect } from "./routing-feedback.js";
 import * as scopes from "./scopes.js";
@@ -686,18 +686,22 @@ export class Executor extends Preflighting {
     }
   }
 
-  /** Keep one API provider from carrying all of the task's running steps, so that its outage or rate
-   *  limit does not stop them all: past ``max_steps_per_provider`` the step goes to another provider's
-   *  model when one fits (routing.spreadTo). */
+  /** Keep one provider (an API provider, or one membership CLI) from carrying all of the task's running
+   *  steps, so that its outage or quota does not stop them all: past ``max_steps_per_provider`` the step
+   *  goes to another provider's model when one fits (routing.spreadTo). */
   async spread(run: ExecutionRun, node: TaskNode): Promise<void> {
     if (run.plan.employees.length) return; // the lead owns employee model assignments
     const cap = settings.max_steps_per_provider;
-    const provider = (node.model_id || "").split(":", 1)[0];
-    if (!cap || !node.model_id || provider === "cli" || provider === "mock") return;
+    const of = (id: string | null) => {
+      const model = id ? this.modelLookup[id] : undefined;
+      return model ? vendor(model) : (id || "").split(":", 1)[0];
+    };
+    const provider = of(node.model_id);
+    if (!cap || !node.model_id || provider === "mock") return;
     const running = new Map<string, number>();
     for (const item of run.plan.nodes) {
       if (item.status === "running" && item.id !== node.id) {
-        const name = (item.model_id || "").split(":", 1)[0];
+        const name = of(item.model_id);
         running.set(name, (running.get(name) ?? 0) + 1);
       }
     }
