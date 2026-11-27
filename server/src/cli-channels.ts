@@ -395,6 +395,8 @@ export class CliChannelRegistry {
     const spec = specFor(channel.id)!;
     const executable = deps.which(channel.executable);
     if (!executable) throw new CliError(`${channel.executable} is no longer installed`);
+    // A repair is told so: it may then write outside its folder.
+    if (repair) call = { ...call, repair: true };
     const argv = [executable, ...channel.args!(call)];
     const input = channel.stdin!(call);
     const stdin = input === null ? null : Buffer.from(input, "utf8");

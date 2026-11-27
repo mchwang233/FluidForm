@@ -1541,6 +1541,14 @@ button.platform-card:hover{border-color:light-dark(#cfcfd4,#3a3a40)}
 .lead-panel .lead-repair .dx-chip{background:none;padding:0;color:var(--faint)}
 .lead-panel .lead-repair .dx-chip::before{content:"· "}
 .lead-panel .lead-repair p{margin:6px 0 0}
+/* The platform engineer's own diagnoses, the check before the start, a stop at a limit: in the lead's thread, as its repairs are. */
+.lead-diagnosis:not(details){padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)}
+.lead-diagnosis:not(details).waiting{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.lead-diagnosis-head,.lead-diagnosis>summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.lead-diagnosis-head small,.lead-diagnosis>summary small{color:var(--faint);margin-left:auto}
+.lead-panel .lead-diagnosis .dx-chip{background:none;padding:0;color:var(--faint)}
+.lead-panel .lead-diagnosis .dx-chip::before{content:"· "}
+.lead-diagnosis>details,.lead-diagnosis .dx-msg{margin-top:8px}
 .lead-panel .lead-repair button.ghost,.lead-panel .lead-repair button.link{background:none;border:0;padding:0;color:var(--muted);font-size:12.5px;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line)}
 .lead-panel .lead-repair button.ghost:hover,.lead-panel .lead-repair button.link:hover{color:var(--text)}
 .lead-panel .lead-repair .engineer-actions{margin-top:6px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}

@@ -11,11 +11,11 @@ export type Diagnosis = {
   scope?: string; reply_to?: string | null; question?: string | null; choices?: string[];
   messages?: DiagnosisMessage[]; error?: string | null; created_at: string;
 };
-type RunLike = {
+export type RunLike = {
   status: string; diagnoses?: Diagnosis[]; waiting_diagnosis_id?: string | null; maintenance_id?: string | null;
   plan: { nodes: { id: string; title: string }[] };
 };
-type ModelLike = { id: string; display_name: string };
+export type ModelLike = { id: string; display_name: string };
 export type SendReply = (diagnosisId: string, body: { text: string; choice?: string; attachments?: string[] }) => Promise<string | null>;
 
 const VERDICTS: Record<string, { label: string; tone: string; note: (model: string, item: Diagnosis) => string }> = {
@@ -35,7 +35,7 @@ const VERDICTS: Record<string, { label: string; tone: string; note: (model: stri
 const CALLED_BY: Record<string, string> = { manual: "你请来的", auto: "失败后请来", lead_repair: "负责人请来", preflight: "执行前检查请来", artifact_contract: "到了上限" };
 
 /** Diagnoses grouped into conversations: a reply's follow-up joins the one it answers. */
-function conversations(list: Diagnosis[]): Diagnosis[][] {
+export function conversations(list: Diagnosis[]): Diagnosis[][] {
   const byId = new Map(list.map(item => [item.id, item]));
   const rootOf = (item: Diagnosis) => {
     const seen = new Set<string>();
@@ -172,12 +172,55 @@ export function Composer({ item, waiting, disabled, onReply, sendLabel = "发送
 }
 
 /** Diagnoses as a conversation: the model's findings, your replies, and a reply box on the latest. */
+/** A finished record with nothing in it (no report, advice, question, error or reply): not shown. */
+export function saysNothing(item: Diagnosis): boolean {
+  return item.status === "done" && ![item.report, item.advice, item.question, item.error, item.user_action].some(text => text && String(text).trim())
+    && !(item.messages ?? []).length;
+}
+
+/** Who a conversation is with: the check before the task starts, FluidForm's own stop at a limit, or the platform engineer. */
+export function speaker(item: Diagnosis): string {
+  return item.trigger === "preflight" ? "执行前检查" : item.trigger === "artifact_contract" ? "FluidForm" : "平台工程师";
+}
+
+/** One conversation with the platform engineer (or the check before the start, or FluidForm's stop at a
+ *  limit) inside the lead's conversation, where the task's whole story is told: no card of its own. What
+ *  finished and only informs is one folded line; what waits for you has its reply box right there. */
+export function DiagnosisThread({ thread, run, models, onReply }: { thread: Diagnosis[]; run: RunLike; models: ModelLike[]; onReply: SendReply }) {
+  const provided = useProvided();
+  const last = thread[thread.length - 1], status = chip(run, last), who = speaker(thread[0]);
+  const name = (item: Diagnosis) => models.find(m => m.id === item.model_id)?.display_name ?? item.model_id ?? (item.trigger === "artifact_contract" ? "FluidForm" : "—");
+  const nodeTitle = (item: Diagnosis) => run.plan.nodes.find(n => n.id === item.node_id)?.title;
+  const waiting = run.waiting_diagnosis_id === last.id;
+  // What it found may need you: a stop it could not get past, or a question.
+  const needsYou = waiting || last.verdict === "blocked" || last.verdict === "unable";
+  const busy = (run.diagnoses ?? []).some(item => item.status === "running") || !!run.maintenance_id || last.verdict === "platform_pending";
+  const body = <>
+    {thread.map(item => <React.Fragment key={item.id}>
+      <AssistantMessage item={item} model={name(item)} node={nodeTitle(item)} run={run} />
+      {(item.messages ?? []).map((message, i) => <UserMessage key={i} message={message} />)}
+    </React.Fragment>)}
+    {needsYou && last.status !== "running" && has(provided, "diagnosis") && <Composer key={last.id} item={last} waiting={waiting} disabled={busy} onReply={onReply} />}
+  </>;
+  const head = <><b>{who}</b><span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
+    <small>{when(thread[0].created_at)}</small></>;
+  if (who !== "平台工程师" && last.status === "done" && !needsYou) {
+    return <details className="lead-fold lead-diagnosis" aria-label={who}><summary>{head}</summary>{body}</details>;
+  }
+  return <div className={`lead-diagnosis${waiting ? " waiting" : ""}`} aria-label={who}><div className="lead-diagnosis-head">{head}</div>{body}</div>;
+}
+
 export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models: ModelLike[]; onReply: SendReply }) {
   const groups = conversations(run.diagnoses ?? []), provided = useProvided();
-  const [index, setIndex] = useState(groups.length - 1), [open, setOpen] = useState(true);
+  const thread0 = groups[groups.length - 1];
+  // A finished check before the start, or a stop at a limit, is one folded line under the conversation;
+  // the platform engineer's conversations stay open, as what they found may need you.
+  const unfinished = (items?: Diagnosis[]) => !!items && (speaker(items[0]) === "平台工程师" || items[items.length - 1].status !== "done"
+    || run.waiting_diagnosis_id === items[items.length - 1].id);
+  const [index, setIndex] = useState(groups.length - 1), [open, setOpen] = useState(unfinished(thread0));
   const lastId = run.diagnoses?.[run.diagnoses.length - 1]?.id;
   // A new diagnosis or reply brings the newest conversation back into view.
-  useEffect(() => { setIndex(groups.length - 1); setOpen(true); }, [groups.length, lastId]);
+  useEffect(() => { setIndex(groups.length - 1); setOpen(unfinished(groups[groups.length - 1])); }, [groups.length, lastId]);
   const thread = groups[Math.min(Math.max(index, 0), groups.length - 1)];
   if (!thread) return null;
   const last = thread[thread.length - 1], status = chip(run, last), latest = index >= groups.length - 1;
@@ -186,9 +229,10 @@ export function DiagnosisPanel({ run, models, onReply }: { run: RunLike; models:
   const nodeTitle = (item: Diagnosis) => run.plan.nodes.find(n => n.id === item.node_id)?.title;
   const busy = (run.diagnoses ?? []).some(item => item.status === "running") || !!run.maintenance_id || last.verdict === "platform_pending";
   const waiting = run.waiting_diagnosis_id === last.id;
-  return <section className={`diagnosis-card dx-panel${waiting ? " waiting" : ""}`} aria-label="平台工程师">
+  const who = speaker(thread[0]);
+  return <section className={`diagnosis-card dx-panel${waiting ? " waiting" : ""}`} aria-label={who}>
     <div className="diagnosis-head">
-      <b>平台工程师{(last.scope === "fluidform" || last.scope === "super_partner") ? " · 改 FluidForm 本身" : ""}</b>
+      <b>{who}{who === "平台工程师" && (last.scope === "fluidform" || last.scope === "super_partner") ? " · 改 FluidForm 本身" : ""}</b>
       <span className={`dx-chip ${status.tone}`}>{status.tone === "busy" && <i className="pulse" aria-hidden="true" />}{status.label}</span>
       {groups.length > 1 && <span className="diagnosis-nav">
         <button type="button" className="ghost" disabled={index <= 0} onClick={() => setIndex(i => i - 1)} aria-label="上一次">‹</button>

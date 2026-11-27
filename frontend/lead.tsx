@@ -3,7 +3,7 @@ import { canChat, has, useProvided } from "./provided";
 import { Icon } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type Attachment } from "./attachments";
-import { Composer, Failure, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
+import { Composer, conversations, DiagnosisThread, Failure, UserMessage, when, type Diagnosis, type SendReply } from "./diagnosis";
 import type { EngineerJob, EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, EngineerEntry, JoinEngineer, MENTION, tellEngineer, useEngineerJobs, type Act } from "./lead-engineer";
 import { ToolLog, type ToolCall } from "./plan-graph";
@@ -74,12 +74,16 @@ type Entry =
   | { kind: "decision"; at: string; item: Decision }
   | { kind: "question"; at: string; item: Diagnosis }
   | { kind: "message"; at: string; item: LeadMessage }
-  | { kind: "engineer"; at: string; job: EngineerJob; message: EngineerMessage; first: boolean; last: boolean };
+  | { kind: "engineer"; at: string; job: EngineerJob; message: EngineerMessage; first: boolean; last: boolean }
+  | { kind: "diagnosis"; at: string; thread: Diagnosis[] };
 
 /** The task's conversation: its lead (everything it decided and why, its questions to you) and,
  * once brought in, the platform engineer (its plans, questions and progress); a box to write to them. */
-export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer }: {
+export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer, others = [] }: {
   apiBase: string; run: RunLike; models: ModelLike[]; onReply: SendReply; onAsk: AskLead; onOpenEngineer?: (jobId: string) => void;
+  /** The task's other conversations (the platform engineer's own diagnoses, the check before the start,
+   *  a stop at a limit), told here in their place in time rather than in a box of their own. */
+  others?: Diagnosis[];
 }) {
   const [joining, setJoining] = useState(false);
   const signal = `${run.status}|${run.updated_at ?? ""}|${run.lead_messages?.length ?? 0}|${run.decisions?.length ?? 0}|${run.engineer_job_id ?? ""}`;
@@ -92,6 +96,7 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
     ...(run.lead_messages ?? []).map(item => ({ kind: "message" as const, at: item.created_at, item })),
     ...jobs.flatMap(job => (job.messages ?? []).map((message, index, all) => ({
       kind: "engineer" as const, at: message.created_at, job, message, first: index === 0, last: index === all.length - 1 }))),
+    ...conversations(others).map(thread => ({ kind: "diagnosis" as const, at: thread[0].created_at, thread })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   const engineerWaiting = jobs.some(job => ENGINEER_WAITING.has(job.status));
   const end = useRef<HTMLDivElement>(null), shown = useRef({ run: "", count: -1 }), following = useRef(true);
@@ -118,7 +123,8 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
   // A chat: only a conversation with one model, which answers under its own name.
   const chat = run.kind === "chat" ? model(run.supervisor?.model_id) : null;
   const provided = useProvided();
-  const status = chat ? (answering ? { label: "思考中", tone: "busy" } : { label: "对话中", tone: "ok" }) : waiting || repairs.some(item => item.id === run.waiting_diagnosis_id) ? { label: "等你回复", tone: "warn" }
+  const status = chat ? (answering ? { label: "思考中", tone: "busy" } : { label: "对话中", tone: "ok" })
+    : waiting || [...repairs, ...others].some(item => item.id === run.waiting_diagnosis_id) ? { label: "等你回复", tone: "warn" }
     : engineerWaiting ? { label: "平台工程师等你", tone: "warn" }
     : thinking ? { label: "判断中", tone: "busy" } : repairing ? { label: "修复中", tone: "busy" }
     : answering ? { label: "思考中", tone: "busy" }
@@ -130,6 +136,8 @@ export function LeadPanel({ apiBase, run, models, onReply, onAsk, onOpenEngineer
     : entry.kind === "question"
       ? <QuestionMessage key={entry.item.id} item={entry.item} step={entry.item.node_id ? title(entry.item.node_id) : undefined}
           waiting={entry.item.id === waiting?.id} onReply={onReply} />
+      : entry.kind === "diagnosis"
+        ? <DiagnosisThread key={`diagnosis-${entry.thread[0].id}`} thread={entry.thread} run={run} models={models} onReply={onReply} />
       : entry.kind === "engineer"
         ? <EngineerEntry key={`${entry.job.id}-${entry.at}-${entry.first}`} job={entry.job} message={entry.message} first={entry.first}
             last={entry.last} act={act} onOpenEngineer={onOpenEngineer} />

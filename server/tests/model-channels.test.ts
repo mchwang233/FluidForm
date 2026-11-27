@@ -60,7 +60,11 @@ test("agy runs its commands without its own reviewer or prompts: FluidForm's san
   // Auto mode's reviewer could send commands out of agy's sandbox anyway; Default mode with every
   // command allowed never waits for an approval nobody can give.
   assert.equal(settingsJson.agentMode, "");
-  assert.deepEqual(settingsJson.permissions.allow, ["command(*)"]);
+  // Its file tools read anywhere (the sandbox decides what there is): a read waiting for an approval is
+  // denied headless and agy answers nothing. Only a repair may write outside its folder.
+  assert.deepEqual(settingsJson.permissions.allow, ["command(*)", "read_file(/)"]);
+  const repairArgs = agyArgs(call("/w", { repair: true }));
+  assert.deepEqual(JSON.parse(repairArgs[repairArgs.indexOf("--settings") + 1]).permissions.allow, ["command(*)", "read_file(/)", "write_file(/)"]);
   assert.ok(given.includes("accept-edits"), "a step edits without asking");
   const lead = agyArgs(call("/w", { lead: true, sessionId: "c-9", readable: ["/att"] }));
   assert.ok(!lead.includes("accept-edits"));
@@ -76,6 +80,15 @@ test("agy's answer is the stream's result: text, usage and conversation", () => 
   assert.equal(failed.error, "invalid model selection");
   assert.equal(failed.quota, false);
   assert.equal(agyParse("").error, "agy printed no answer");
+});
+
+test("an empty answer from agy is no answer: what it said along the way, or why it said nothing", () => {
+  const step = (index: number, text: string) => JSON.stringify({ event: "step_update", step_update: { step_index: index, step_type: "agent_response", text_delta: text } });
+  const spoke = agyParse([step(2, "First "), step(2, "draft"), step(5, "Final "), step(5, "report"), result({ response: "" })].join("\n"));
+  assert.equal(spoke.text, "Final report");
+  assert.equal(spoke.error, null);
+  const silent = agyParse(result({ response: "", denied_actions: [{ action: "read_file", display_name: "ReadFile" }] }));
+  assert.equal(silent.error, "agy 没有给出回答（被拒绝的操作：ReadFile）");
 });
 
 test("agy's quota message is a quota, and FluidForm reads it as one", async () => {

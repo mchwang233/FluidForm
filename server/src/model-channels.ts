@@ -27,6 +27,8 @@ export type ChannelCall = {
   sessionId: string | null;
   /** Folders outside ``cwd`` it is to read (attachments). */
   readable: string[];
+  /** It repairs the environment, outside every sandbox (it may write anywhere the user may). */
+  repair?: boolean;
 };
 
 export type ChannelUsage = { input_tokens?: number; output_tokens?: number; cached_input_tokens?: number };

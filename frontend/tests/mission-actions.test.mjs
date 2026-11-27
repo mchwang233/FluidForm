@@ -1932,6 +1932,37 @@ test("a failed reply keeps the selected option and text for retry", async t => {
   assert.match(document.querySelector('[role="alert"]').textContent, /当前诊断仍在进行/);
 });
 
+test("the lead and the platform engineer share one conversation; what has nothing to say is not in it", async t => {
+  const run = mission("lead-task", "running");
+  run.supervisor = { model_id: "cli:codex" };
+  run.diagnoses = [
+    { id: "p1", trigger: "preflight", model_id: "cli:agy", status: "done", report: "", created_at: "2026-11-27T06:11:00Z" },
+    { id: "c1", trigger: "artifact_contract", node_id: "a", status: "done", report: "达到声明工具调用上限 50，停止工作包。", created_at: "2026-11-27T06:20:00Z" },
+  ];
+  const { state, document, click, act } = await setup(t, [run], [], { openComposer: false });
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("对话")));
+  // One box: the lead's. An empty check and a stop the lead decides about are not in it.
+  const boxes = () => [...document.querySelectorAll(".diagnosis-card")];
+  assert.deepEqual(boxes().map(node => node.getAttribute("aria-label")), ["负责人"]);
+  assert.equal(document.querySelectorAll(".lead-diagnosis").length, 0);
+  // A check that found something, and the platform engineer's own diagnosis waiting for you, in its place in time.
+  state.records[0] = { ...state.records[0], waiting_diagnosis_id: "m1", diagnoses: [
+    { id: "p2", trigger: "preflight", model_id: "cli:agy", status: "done", report: "缺少 vcs 的许可证", created_at: "2026-11-27T06:30:00Z" },
+    { id: "m1", trigger: "manual", model_id: "cli:claude", status: "done", report: "许可证服务没有启动", verdict: "blocked", user_action: "请启动 lmgrd",
+      created_at: "2026-11-27T06:40:00Z" },
+  ] };
+  await act(async () => state.poll());
+  assert.deepEqual(boxes().map(node => node.getAttribute("aria-label")), ["负责人"], "still one conversation");
+  const lead = boxes()[0];
+  const [check, engineer] = [...lead.querySelectorAll(".lead-diagnosis")];
+  assert.equal(check.getAttribute("aria-label"), "执行前检查");
+  assert.equal(check.tagName, "DETAILS", "a finished check is one folded line");
+  assert.equal(engineer.getAttribute("aria-label"), "平台工程师");
+  assert.match(engineer.textContent, /许可证服务没有启动/);
+  assert.ok(engineer.querySelector("textarea"), "what waits for you is answered right there");
+  assert.match(lead.querySelector(".diagnosis-head").textContent, /等你回复/);
+});
+
 test("diagnosis reply remains available for legacy reports without choices", async t => {
   const run = interactiveDiagnosis([]);
   delete run.waiting_diagnosis_id;

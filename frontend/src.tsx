@@ -11,7 +11,7 @@ import { ResultPage, type ChangeOptions } from "./result-page";
 import { MarkdownView } from "./markdown";
 import { ProblemsPage } from "./problems";
 import { MemoryPage, ProfilePicker } from "./memory";
-import { DiagnosisPanel, type Diagnosis } from "./diagnosis";
+import { DiagnosisPanel, saysNothing, type Diagnosis } from "./diagnosis";
 import { LeadPanel, hasLead, leadRepairIds, type AskLead, type Decision, type LeadMessage, type LeadThinking } from "./lead";
 import { ProjectField, rememberProject } from "./project-picker";
 import { EngineerPage } from "./engineer";
@@ -334,8 +334,10 @@ export function greeting(mode:"auto"|"task"|"chat",hour=new Date().getHours()):s
 function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deletingId,cancellingId,onConfirm,onChoose,onResume,onCancel,onDelete,onOpenModel,onPause,onDiagnose,onReply,onAsk,onOpenEngineer,onChange,onNetwork,parent,onOpenRun}:{loading?:boolean;onUpdated:(run:Run)=>void;onPromote:(run:Run,options:PromoteOptions)=>Promise<string|null>;onToChat:(run:Run)=>Promise<string|null>;onAsk:(run:Run,text:string,attachments?:string[])=>Promise<string|null>;onOpenEngineer:(jobId:string)=>void;onNetwork:SetNetwork;onChange:(run:Run,prompt:string,budget:number,options:ChangeOptions)=>Promise<string|null>;parent?:Run;onOpenRun:(run:Run)=>void;run:Run|null;models:Model[];onOpenModel:(model:Model)=>void;onPause:(run:Run)=>Promise<string|null>;onDiagnose:(run:Run)=>Promise<string|null>;onReply:ReplyToDiagnosis;deletingId:string|null;cancellingId:string|null;onConfirm:(run:Run,budget:number)=>Promise<string|null>;onChoose:(run:Run,picks:string[])=>Promise<string|null>;onResume:(run:Run,budget:number)=>Promise<string|null>;onCancel:(run:Run)=>void;onDelete:(run:Run)=>void}) {
   const [budget,setBudget]=useState(run?.budget_usd??2),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const provided=useProvided(),chatOn=canChat(provided);
-  // The task's conversation: its lead, and diagnoses no lead ran or asked for.
-  const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id));
+  // The task's conversation: its lead, and diagnoses no lead ran or asked for: not one that says
+  // nothing, nor, where a lead decides, a step's stop at its limit (the lead's decision says why).
+  const diagnoses=(run?.diagnoses??[]).filter(item=>item.trigger!=="lead"&&!leadRepairIds(run?.diagnoses).has(item.id)
+    &&!saysNothing(item)&&!(run&&hasLead(run)&&item.trigger==="artifact_contract"));
   const hasChat=!!run&&(hasLead(run)||diagnoses.length>0);
   const waiting=run&&hasChat?waitingForYou(run):null;
   const [tab,setTab]=useState<Tab>(defaultTab(run?.status??"",!!waiting)),picked=useRef(false),tabsTop=useRef<HTMLDivElement>(null),[now,setNow]=useState(()=>Date.now());
@@ -407,9 +409,10 @@ function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deleting
     {run.error&&run.status!=="succeeded"&&<div className="error">{run.error}</div>}
     {waiting&&tab!=="chat"&&<div className="chat-alert" role="status"><span>{waiting}</span><button type="button" className="primary" onClick={()=>pick("chat")}>去回复</button></div>}
     <div ref={tabsTop} className="task-tabs-anchor" aria-hidden="true"/><nav className="task-tabs" aria-label="任务内容">{([...(hasChat?[["chat","对话"]]:[]),["progress","进度"],...(has(provided,"team")||run.plan.employees?.length?[["team","员工"]]:[]),["result","结果"],["details","详情"]] as [Tab,string][]).map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>pick(id)}>{label}{id==="chat"&&waiting&&<i className="tab-dot" title="在等你回复"/>}</button>)}</nav>
-    {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={((text,files)=>onAsk(run,text,files)) satisfies AskLead} onOpenEngineer={onOpenEngineer}/>}
-    {/* Diagnoses that run when no lead decides, or that the lead sends to repair something. */}
-    {tab==="chat"&&<DiagnosisPanel run={{...run,diagnoses}} models={models} onReply={(id,body)=>onReply(run,id,body)}/>}
+    {/* One conversation: the lead's, with the platform engineer's and the other records in it. */}
+    {tab==="chat"&&hasLead(run)&&<LeadPanel apiBase={API} run={run} models={models} onReply={(id,body)=>onReply(run,id,body)} onAsk={((text,files)=>onAsk(run,text,files)) satisfies AskLead} onOpenEngineer={onOpenEngineer} others={diagnoses}/>}
+    {/* Without a lead, the platform engineer's conversation is the task's. */}
+    {tab==="chat"&&!hasLead(run)&&<DiagnosisPanel run={{...run,diagnoses}} models={models} onReply={(id,body)=>onReply(run,id,body)}/>}
     {tab==="progress"&&<PlanView apiBase={API} runId={run.id} runStatus={run.status} nodes={nodes} parts={run.plan.parts} inProject={!!run.project_dir} models={models} onOpenProfile={onOpenModel} reworkRounds={run.rework_rounds}/>}
     {tab==="team"&&<TeamPage apiBase={API} runId={run.id} runStatus={run.status} employees={run.plan.employees} nodes={nodes} parts={run.plan.parts} brief={run.plan.team_brief} models={models} onOpenModel={onOpenModel}/>}
     {tab==="result"&&<CapabilityProposals<Run> apiBase={API} runId={run.id} proposals={run.capability_proposals??[]} onUpdated={onUpdated}/>}
