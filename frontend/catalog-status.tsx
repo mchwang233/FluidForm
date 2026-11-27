@@ -73,15 +73,15 @@ export function CatalogStatus({ apiBase }: { apiBase: string }) {
     } catch (error) { setError(error instanceof Error ? error.message : "启动同步失败"); }
     finally { setPending(false); }
   }
+  const aa = status?.benchmarks?.sources.artificial_analysis;
   if (status?.disabled) return <section className="catalog-sync" aria-label="模型目录自动更新">
     <div className="catalog-sync-heading"><div><h3>模型目录自动更新</h3><p>模型调研已停用</p></div></div>
     <p className="catalog-sync-summary" role="status">目录、价格和评分保持上次的结果；在能力里打开模型调研后恢复更新。</p>
   </section>;
-  const aa = status?.benchmarks?.sources.artificial_analysis;
   const failed = Object.values(status?.providers ?? {}).some(item => item.public_status === "error")
     || Object.values(status?.benchmarks?.sources ?? {}).some(item => item.status === "error");
   return <section className="catalog-sync" aria-label="模型目录自动更新">
-    <div className="catalog-sync-heading"><div><h3>模型目录自动更新</h3><p>{status ? status.auto_sync ? `每 ${status.interval_hours} 小时检查 · 启动时补查到期更新` : "自动更新已关闭，可手动更新" : "正在读取同步设置…"}</p></div><button onClick={refresh} disabled={pending || status?.running}>{pending || status?.running ? "正在更新…" : "立即更新"}</button></div>
+    <div className="catalog-sync-heading"><div><h3>模型目录自动更新</h3><p>{status ? <>{status.auto_sync ? `模型目录和价格每 ${status.interval_hours} 小时检查` : "模型目录自动检查已关闭"} · {aa?.auto === false ? "评分不自动更新" : `评分每 ${aa?.every_days ?? 7} 天由模型读取 Artificial Analysis`}</> : "正在读取同步设置…"}</p></div><button onClick={refresh} disabled={pending || status?.running}>{pending || status?.running ? "正在更新…" : "立即更新"}</button></div>
     <p className="catalog-sync-summary" role="status">{status?.running ? "正在获取最新目录，已有模型仍可使用。" : status?.last_finished_at ? `上次检查 ${dateLabel(status.last_finished_at)} · 新增 ${status.added ?? 0} 个模型` : "首次更新完成后，将显示各家模型与同步结果。"}{status?.next_sync_at && <span>下次检查 {dateLabel(status.next_sync_at)}（应用运行期间）</span>}</p>
     {error && <p className="catalog-sync-error" role="alert">{error}</p>}
     {/* The details matter only when something failed; then they open by themselves. */}

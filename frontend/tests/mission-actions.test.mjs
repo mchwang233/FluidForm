@@ -913,6 +913,8 @@ test("the 模型 page's sources list the providers in use, by the server's names
   const names = [...document.querySelectorAll(".catalog-provider b")].map(node => node.firstChild.textContent);
   assert.deepEqual(names, ["DeepSeek", "Kimi（月之暗面）", "Artificial Analysis"], "only what the server lists, no fixed provider table");
   assert.doesNotMatch(document.querySelector(".catalog-sync").textContent, /SuperCLUE|BFCL|API_KEY|重启/);
+  // The catalog's and the scores' own pace, each said.
+  assert.match(document.querySelector(".catalog-sync-heading").textContent, /模型目录和价格每 1 小时检查 · 评分每 7 天由模型读取 Artificial Analysis/);
   // Who read the leaderboard, and its weekly reading, switched off and on where it is shown.
   const aaRow = [...document.querySelectorAll(".catalog-provider")].find(node => node.textContent.includes("Artificial Analysis"));
   assert.match(aaRow.textContent, /由 deepseek-flash 读取网页 · \$0\.074/);

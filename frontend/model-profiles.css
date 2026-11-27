@@ -33,6 +33,11 @@
 .public-benchmark-heading select,.public-comparison-filters select {background:var(--panel);color:var(--text);padding:9px;border:1px solid var(--line);border-radius:7px;font-size:11px;max-width:100%}
 .public-benchmark-model {font-size:11px;color:var(--faint);line-height:1.8;margin:12px 0}.public-benchmark-model strong {font-weight:400;color:var(--text)}
 .public-benchmark-visuals {display:grid;grid-template-columns:1fr;gap:20px;margin:12px 0 20px}.public-benchmark-visuals.has-radar {grid-template-columns:minmax(0,1fr) minmax(210px,.9fr);align-items:center}
+/* In the 模型 page's detail column (about 350px) the radar goes above the scores, the column's whole width. */
+.models-detail .public-benchmark-visuals.has-radar {grid-template-columns:1fr}
+.models-detail .public-radar {max-width:none;width:100%}
+.models-detail .public-radar svg {max-width:none}
+.models-detail .public-radar .radar-label {font-size:14px}.models-detail .public-radar .radar-axis-value {font-size:13px}
 .public-radar svg {overflow:visible}.public-radar .radar-label {font-size:12px}
 .public-radar-heading {display:flex;justify-content:space-between;align-items:center;gap:10px;max-width:420px;margin:0 auto 8px;color:var(--text);font-size:12px}.public-radar-heading b {font-weight:500}.public-radar-heading span {color:var(--faint);font-size:10px}
 .public-radar .radar-axis-value {fill:var(--text);font:12px ui-monospace,monospace}.public-radar .is-missing {stroke-dasharray:4 4}.public-radar text.is-missing,.public-radar .is-missing .radar-axis-value {fill:var(--faint)}.radar-partial {stroke:var(--line);stroke-width:2;fill:none}.radar-empty-label {font-size:12px;fill:var(--muted)}
