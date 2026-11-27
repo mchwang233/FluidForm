@@ -17,6 +17,8 @@ type ProviderStatus = {
   added?: number;
 };
 type SyncStatus = {
+  /** Model research is off: nothing is looked up. */
+  disabled?: boolean;
   running: boolean;
   auto_sync: boolean;
   interval_hours: number;
@@ -65,6 +67,10 @@ export function CatalogStatus({ apiBase, benchmarkSource = DEFAULT_BENCHMARK_SOU
     } catch (error) { setError(error instanceof Error ? error.message : "启动同步失败"); }
     finally { setPending(false); }
   }
+  if (status?.disabled) return <section className="catalog-sync" aria-label="模型目录自动更新">
+    <div className="catalog-sync-heading"><div><h3>模型目录自动更新</h3><p>模型调研已停用</p></div></div>
+    <p className="catalog-sync-summary" role="status">目录、价格和评分保持上次的结果；在能力里打开模型调研后恢复更新。</p>
+  </section>;
   const failed = Object.values(status?.providers ?? {}).some(item => item.public_status === "error")
     || Object.values(status?.benchmarks?.sources ?? {}).some(item => item.status === "error");
   return <section className="catalog-sync" aria-label="模型目录自动更新">

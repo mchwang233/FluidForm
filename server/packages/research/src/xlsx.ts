@@ -1,7 +1,7 @@
 // Reading a sheet of an .xlsx workbook (what benchmarks.ts needs of openpyxl, read_only and data_only):
 // each row's cached values, by column, without evaluating formulas or following external links.
 // Numbers styled as dates become Dates, as openpyxl reads them.
-import { ZipFile } from "./zip.js";
+import { ZipFile } from "../../../src/zip.js";
 
 export type Cell = string | number | boolean | Date | null;
 

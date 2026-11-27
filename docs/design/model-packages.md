@@ -216,6 +216,41 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
   - Codex（不联网）：许可证连不上（"Operation not permitted"）。这是原来就有的：不联网的 Codex 会封掉所有网络套接字。
   - Codex（联网）：许可证 UP，外网 200。
 
+## 模型调研
+
+### 为什么
+
+模型目录同步、排行榜抓取和调度评分原来都写在核心里（`catalog-sync.ts`、`benchmarks.ts`、`scoring.ts`）。用户希望"模型调研、模型评分、模型价格"也作为一个能力，叫做"模型调研"。
+
+### 改动
+
+- **`server/packages/research`**：扩展，提供 `research`。
+  - `catalog-sync.ts`、`benchmarks.ts`、`scoring.ts`、`html-tables.ts`、`xlsx.ts` 用 `git mv` 原样搬进 `src/`，只改了导入路径。
+  - 入口 `start(db, models)`：先按排行榜上次的结果重新评分，再开始定期同步，返回 `Research`（`status`、`trigger`、`close`、`matchModels`）。
+- **核心 `research.ts`**：
+  - `begin`：服务启动后、或在能力页打开时启动。数据库换了（测试里另一个 FluidForm），会先停掉旧的。
+  - `end`：停用或关服务时停下。
+  - `current`：给 `/api/models/sync` 和模型页的排行榜成绩用。
+- **留在核心**：`catalog.seedCatalog`（给目录播种）和 `AA_SOURCE`（没有评分的模型不列出、不调度）。
+- **停用时**：
+  - 不再更新目录、价格和成绩，它们都保持最后一次的结果；
+  - `GET /api/models/sync` 返回 `disabled`；
+  - `POST` 返回 409，并说明要在能力里打开；
+  - 模型页的"模型目录自动更新"显示"模型调研已停用"，不显示"立即更新"。
+- `PROVIDABLE` 和标签里加上 `research`（模型调研），并加上 `uses.research()`。
+- **计价**（`pricing` 服务包，算钱、估价、预算）没有变。"模型价格"指的是调研查到的各模型单价，它们写进目录，再由计价使用。
+
+### 测试
+
+- `server/tests/research.test.ts`：开着时同步状态正常；关掉后立即停下，接口返回 `disabled`，手动更新返回 409，各模型评分不变；重新打开后不用重启就恢复。
+- 前端 `mission-actions`："with model research off, the 模型 page says …"。
+- 原有的 `catalog-sync`、`benchmarks`、`scoring`、`golden` 测试只改了导入路径，全部通过。
+- 原来有 3 处测试替换了 `api.catalogSync.start`，免得启动时联网；现在改为把 `catalog_auto_sync` 设为 false，效果相同。
+
+### 风险
+
+停用期间新出的模型没有评分，不会被调度。重新打开后，等下一次同步就会补上。
+
 ## 后续
 
 - Codex 不联网时连不上许可证（见上），这是原来就有的问题。要修，可以把不联网的 Codex 步骤也放进只转发许可证端口的独立网络。

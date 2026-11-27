@@ -891,6 +891,20 @@ test("the 模型 page lists models by what they are doing for you, and the chose
   assert.equal(page.querySelectorAll(".models-row").length, 1);
 });
 
+test("with model research off, the 模型 page says the catalog, prices and scores stay as they were", async t => {
+  const models = [{ id: "deepseek:flash", display_name: "DeepSeek-V4.1-Flash", provider: "deepseek", channel: "api", configured: true, enabled: true,
+    input_per_million: 0.15, output_per_million: 0.6, context_window: 1_048_576, routing_ready: true, benchmarks: [],
+    scores: { coding: 82, planning: 70, research: 74, chinese: 88, tool_use: 79, structured_output: 75, reliability: 60 } }];
+  const { state, document, click, act } = await setup(t, [], models, { openComposer: false });
+  state.catalogSync = { disabled: true, running: false, auto_sync: false, interval_hours: 0 };
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent.trim() === "模型"));
+  await settle();
+  const card = document.querySelector(".catalog-sync");
+  assert.match(card.textContent, /模型调研已停用.*目录、价格和评分保持上次的结果/s);
+  assert.ok(![...card.querySelectorAll("button")].some(node => node.textContent.includes("立即更新")), "nothing to update now");
+});
+
 test("a capability package is uploaded, given its secrets, enabled after confirming what it reaches, and uninstalled", async t => {
   const { state, window, document, button, click, act } = await setup(t, [], [], { openComposer: false });
   const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });

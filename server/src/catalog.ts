@@ -3,6 +3,7 @@
 // package (server/packages/<id>/capability.json, builtinModels).
 // Routing scores come only from Artificial Analysis (scoring); only the offline demo model carries
 // fixed scores.
+import type { Database } from "./db.js";
 import * as extensions from "./extensions.js";
 import { type ModelProfile, ModelProfileSchema } from "./models.js";
 
@@ -25,3 +26,16 @@ export function ownModels(): ModelProfile[] {
 export function builtinModels(): ModelProfile[] {
   return [...ownModels(), ...extensions.shipped.flatMap((item) => item.models).map((model) => ModelProfileSchema.parse(model))];
 }
+
+/** The catalog: what is saved, with the seed's missing entries added. Restarting must preserve
+ *  discoveries and user choices (model research, packages/research, finds the rest). */
+export function seedCatalog(db: Database): Record<string, ModelProfile> {
+  const models: Record<string, ModelProfile> = Object.fromEntries(db.listModels().map((model) => [model.id, model]));
+  const missing = builtinModels().filter((model) => !(model.id in models));
+  db.saveModels(missing);
+  for (const model of missing) models[model.id] = model;
+  return models;
+}
+
+/** Where routing scores come from (model research's scoring): a model without them is not listed or routed. */
+export const AA_SOURCE = "artificial_analysis";

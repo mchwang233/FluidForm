@@ -6,10 +6,12 @@
 // for that capability. Membership CLIs run whatever model the account defaults to, so each
 // inherits the scores of the strongest AA-scored model from the same vendor.
 import { isDeepStrictEqual } from "node:util";
-import { type CapabilityScore, CapabilityScoreSchema, type ModelProfile } from "./models.js";
-import { formatG, pyRound } from "./py.js";
+import { type CapabilityScore, CapabilityScoreSchema, type ModelProfile } from "../../../src/models.js";
+import { formatG, pyRound } from "../../../src/py.js";
 
-export const AA_SOURCE = "artificial_analysis";
+import { AA_SOURCE } from "../../../src/catalog.js";
+
+export { AA_SOURCE };
 export const INTELLIGENCE = "artificial_analysis_intelligence_index";
 // AA metrics behind each routing capability. AA has no Chinese-language or structured-output
 // evaluation, so those two follow the overall intelligence index.

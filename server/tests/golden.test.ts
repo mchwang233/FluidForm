@@ -23,7 +23,7 @@ import { ModelProfileSchema, TaskNodeSchema } from "../src/models.js";
 import { formatG, pyDumps, pyRegex, pyRound, shlexQuote, shlexSplit } from "../src/py.js";
 import { remembering } from "./helpers/chat-package.js";
 import { expectedCost, feedbackKey, note } from "../src/routing-feedback.js";
-import { applyAaScores } from "../src/scoring.js";
+import { applyAaScores } from "../packages/research/src/scoring.js";
 import { inputBound, retryAfter } from "../src/call-control.js";
 import { settings } from "../src/config.js";
 import * as diagnosis from "../src/diagnosis.js";

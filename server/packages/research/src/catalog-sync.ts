@@ -1,15 +1,14 @@
 // Refresh model metadata without inventing quality scores or making inference calls.
 import type { BenchmarkCatalog } from "./benchmarks.js";
-import { builtinModels } from "./catalog.js";
-import type { Database } from "./db.js";
-import { type Fetcher, get, HttpStatusError, RequestTimeout, TransportError, within } from "./fetching.js";
-import { fromPythonIso, pythonIso } from "./lax.js";
-import { type ModelProfile, ModelProfileSchema, utcnow } from "./models.js";
-import { pyRegex } from "./py.js";
+import type { Database } from "../../../src/db.js";
+import { type Fetcher, get, HttpStatusError, RequestTimeout, TransportError, within } from "../../../src/fetching.js";
+import { fromPythonIso, pythonIso } from "../../../src/lax.js";
+import { type ModelProfile, ModelProfileSchema, utcnow } from "../../../src/models.js";
+import { pyRegex } from "../../../src/py.js";
 import { rescore } from "./scoring.js";
-import * as apiProviders from "./api-providers.js";
-import { PROVIDER_ENV } from "./secret-names.js";
-import { Mutex, sleep, Task } from "./tasks.js";
+import * as apiProviders from "../../../src/api-providers.js";
+import { PROVIDER_ENV } from "../../../src/secret-names.js";
+import { Mutex, sleep, Task } from "../../../src/tasks.js";
 
 export const PUBLIC_CATALOG_URL = "https://models.dev/api.json";
 // Match the regions used by providers.ts; never take credential destinations from remote data.
@@ -23,14 +22,6 @@ export const limits = { REQUEST: 20, PUBLIC: 35, OFFICIAL: 45, SCHEDULE_POLL: 30
 
 type Json = Record<string, any>;
 
-/** Seed only missing entries. Restarting must preserve discoveries and user choices. */
-export function seedCatalog(db: Database): Record<string, ModelProfile> {
-  const models: Record<string, ModelProfile> = Object.fromEntries(db.listModels().map((model) => [model.id, model]));
-  const missing = builtinModels().filter((model) => !(model.id in models));
-  db.saveModels(missing);
-  for (const model of missing) models[model.id] = model;
-  return models;
-}
 
 export function number(value: unknown, { positive = false } = {}): number | null {
   return typeof value === "number" && Number.isFinite(value) && (positive ? value > 0 : value >= 0) ? value : null;

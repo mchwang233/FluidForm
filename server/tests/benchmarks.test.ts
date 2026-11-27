@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { beforeEach, test } from "node:test";
 import { gzipSync } from "node:zlib";
 import { AA_KEY_ENV, AA_PUBLIC_URL, AA_URL, BenchmarkCatalog, BFCL_DATA_URL, BFCL_FIELDS, BFCL_URL, matchResults, parseAa, parseAaPublic, parseBfcl,
-  parseSuperclue, SUPERCLUE_FIELDS, SUPERCLUE_URL } from "../src/benchmarks.js";
+  parseSuperclue, SUPERCLUE_FIELDS, SUPERCLUE_URL } from "../packages/research/src/benchmarks.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { get } from "../src/fetching.js";

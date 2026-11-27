@@ -230,7 +230,7 @@ test("cross-site writes are refused, but the console's and the CLI's pass", asyn
 
 test("startup pauses interrupted runs instead of resuming them", async () => {
   const { api } = taskApi(folder());
-  api.catalogSync.start = () => {};
+  settings.catalog_auto_sync = false; // model research looks nothing up at start
   for (const [runId, status] of [["running", "running"], ["queued", "queued"]]) {
     api.db.saveRun(ExecutionRunSchema.parse({ id: runId, prompt: "demo", status, budget_usd: 1, plan: { summary: "demo", nodes: [] } }));
   }

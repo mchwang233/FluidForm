@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CapabilityScoreSchema, type ModelProfile, ModelProfileSchema, routingReady } from "../src/models.js";
 import { pyRound } from "../src/py.js";
-import { AA_SOURCE, applyAaScores, type BenchmarkRow, INTELLIGENCE, SCORE_RANGES } from "../src/scoring.js";
+import { AA_SOURCE, applyAaScores, type BenchmarkRow, INTELLIGENCE, SCORE_RANGES } from "../packages/research/src/scoring.js";
 
 const aaRow = (index: number, details: Record<string, number> = {}): BenchmarkRow => ({
   source: AA_SOURCE, metrics: Object.entries({ [INTELLIGENCE]: index, ...details }).map(([key, value]) => ({ key, value })),

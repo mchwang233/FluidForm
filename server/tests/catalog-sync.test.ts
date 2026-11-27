@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { beforeEach, test } from "node:test";
-import { CatalogSync, OFFICIAL_URLS, PUBLIC_CATALOG_URL, PUBLIC_PROVIDERS, publicModels, seedCatalog } from "../src/catalog-sync.js";
+import { CatalogSync, OFFICIAL_URLS, PUBLIC_CATALOG_URL, PUBLIC_PROVIDERS, publicModels } from "../packages/research/src/catalog-sync.js";
+import { seedCatalog } from "../src/catalog.js";
 import { Database } from "../src/db.js";
 import { pythonIso } from "../src/lax.js";
 import { ModelProfileSchema, TaskNodeSchema } from "../src/models.js";

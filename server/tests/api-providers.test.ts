@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import * as apiProviders from "../src/api-providers.js";
-import { PROVIDERS } from "../src/benchmarks.js";
+import { PROVIDERS } from "../packages/research/src/benchmarks.js";
 import { builtinModels, ownModels } from "../src/catalog.js";
-import { OFFICIAL_URLS, PUBLIC_PROVIDERS } from "../src/catalog-sync.js";
+import { OFFICIAL_URLS, PUBLIC_PROVIDERS } from "../packages/research/src/catalog-sync.js";
 import { ProviderRegistry, reasoningFields } from "../src/providers.js";
 import { PROVIDER_ENV } from "../src/secret-names.js";
 

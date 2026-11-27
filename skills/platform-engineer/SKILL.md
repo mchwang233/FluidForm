@@ -37,6 +37,7 @@ FluidForm gives it to the platform engineer for every component it plans or buil
    - a model or channel: a model package in `server/packages/<id>`; `providers.ts` (the API wire protocols), `cli-channels.ts` (running CLIs);
      a new membership CLI is a model package, `server/packages/<id>` like `server/packages/agy` (`model-channels.ts`);
      a new API provider is a package with only a `capability.json`, like `server/packages/kimi` (`api-providers.ts`);
+     the catalogs, prices, leaderboards and routing scores are model research, `server/packages/research` (`research.ts`);
      follow `skills/model-channel/SKILL.md`: measure its sandbox, output and quota messages first;
    - a tool for API models: `agent.ts` (`Workspace`, its tool list and sandbox);
    - a skill: a folder under `skills/` with a `SKILL.md`;

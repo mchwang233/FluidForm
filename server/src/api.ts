@@ -7,11 +7,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import * as files from "./attachments.js";
-import { BenchmarkCatalog } from "./benchmarks.js";
 import * as capabilities from "./capabilities.js";
 import * as packages from "./capability-packages.js";
 import { CapabilityAutomations } from "./automations.js";
-import { CatalogSync, seedCatalog } from "./catalog-sync.js";
+import { seedCatalog } from "./catalog.js";
 import * as cliQuota from "./cli-quota.js";
 import { settings } from "./config.js";
 import { ContractError } from "./contracts.js";
@@ -33,7 +32,7 @@ import * as publish from "./publish.js";
 import * as retrospect from "./retrospect.js";
 import { briefWriter, fitAndRoute, NoEligibleModelError } from "./routing.js";
 import * as pricing from "./pricing.js";
-import { rescore } from "./scoring.js";
+import * as research from "./research.js";
 import { keepLoadingKeys, setProviderKey } from "./secrets.js";
 import { cutOffSafely } from "./self-repair.js";
 import * as supervisor from "./supervisor.js";
@@ -193,8 +192,6 @@ export class Api {
   models: Record<string, ModelProfile>;
   providers: ProviderRegistry;
   executor: Executor;
-  readonly benchmarks: BenchmarkCatalog;
-  readonly catalogSync: CatalogSync;
   readonly automations: CapabilityAutomations;
   /** The service packages: capabilities FluidForm itself uses (services.ts). */
   readonly services = new ServiceHost();
@@ -214,10 +211,6 @@ export class Api {
     this.models = seedCatalog(this.db);
     this.providers = new ProviderRegistry(this.db, this.models);
     this.executor = new Executor(this.db, this.providers, this.models);
-    this.benchmarks = new BenchmarkCatalog(this.db);
-    rescore(this.models, this.benchmarks, this.db);
-    this.catalogSync = new CatalogSync(this.db, this.models, { autoSync: settings.catalog_auto_sync,
-      intervalHours: settings.catalog_sync_interval_hours, benchmarks: this.benchmarks });
     this.automations = new CapabilityAutomations(this);
     // Every price, estimate, budget check and charge is asked of the pricing package.
     // (Unless it is already answered: tests answer with the package's code in-process.)
@@ -230,7 +223,8 @@ export class Api {
   start(): void {
     const { db, executor } = this;
     db.interruptModelCalls();
-    this.catalogSync.start();
+    // The catalog, prices and scores kept up to date, when model research is on (research.ts).
+    void research.begin(db, this.models);
     const resuming: string[] = [];
     for (const run of db.listRuns()) {
       if (run.status === "queued" || run.status === "running") {
@@ -313,7 +307,7 @@ export class Api {
     await this.automations.runner.stopAll();
     await this.services.stopAll();
     await this.executor.shutdown();
-    await this.catalogSync.close();
+    await research.end();
   }
 
   getTask(runId: string): ExecutionRun {

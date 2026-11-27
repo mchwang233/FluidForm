@@ -34,4 +34,6 @@ export const uses = {
   preflight: () => settings.preflight && available("preflight"),
   /** Steps are given the skills for the tools they name. */
   skills: () => available("skills"),
+  /** The providers' catalogs, prices and leaderboards are looked up, and the models scored from them. */
+  research: () => available("research"),
 };

@@ -1,0 +1,10 @@
+{
+  "id": "research",
+  "name": "模型调研",
+  "kind": "extension",
+  "provides": [
+    "research"
+  ],
+  "version": "1.0.0",
+  "summary": "定期查各家模型目录（新模型、上下文长度、价格），抓公开排行榜成绩（Artificial Analysis、SuperCLUE、BFCL），据此给模型打调度分。停用后不再更新，目录、价格和评分保持最后一次的结果；新出的模型没有评分，不会被调度。"
+}

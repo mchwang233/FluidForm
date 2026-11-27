@@ -31,7 +31,7 @@ type Runtimes = { available: boolean; missing: string; capabilities: Record<stri
 const KIND: Record<string, string> = { tool: "工具", automation: "自动化", service: "服务", interface: "界面", extension: "扩展" };
 // The capabilities FluidForm itself uses, as the page names them (server: service-names.ts).
 const PROVIDED: Record<string, string> = { chat: "聊天", pricing: "计价", planning: "规划", team: "员工", lead: "负责人", review: "验收",
-  diagnosis: "诊断", engineer: "平台工程师", learning: "复盘与经验", preflight: "执行前检查", skills: "技能" };
+  diagnosis: "诊断", engineer: "平台工程师", learning: "复盘与经验", preflight: "执行前检查", skills: "技能", research: "模型调研" };
 // A model package provides its models: "model:cli:agy" reads 模型 agy, "model:api:kimi" 模型 kimi.
 const named = (names: string[] = []) => names.map(name => PROVIDED[name] ?? (/^model:(cli|api):/.test(name) ? `模型 ${name.split(":")[2]}` : name)).join("、");
 const STATUS: Record<Capability["status"], string> = { active: "可用", disabled: "已停用", failed: "检查未通过" };

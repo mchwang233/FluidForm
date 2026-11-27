@@ -22,7 +22,7 @@ import * as quality from "../src/quality.js";
 import { remembering } from "./helpers/chat-package.js";
 import * as retrospect from "../src/retrospect.js";
 import { stepKey } from "../src/review.js";
-import { AA_SOURCE } from "../src/scoring.js";
+import { AA_SOURCE } from "../packages/research/src/scoring.js";
 import * as secrets from "../src/secrets.js";
 import { ZipFile } from "../src/zip.js";
 import { answered, chatting } from "./helpers/chatting.js";
@@ -216,7 +216,7 @@ function interrupted(api: Api, runId: string, fields: Record<string, unknown> = 
 
 test("a task cut off by a restart goes on by itself", async () => {
   const { api } = taskApi(folder());
-  api.catalogSync.start = () => {};
+  settings.catalog_auto_sync = false; // model research looks nothing up at start
   settings.resume_after_restart = true;
   const started: string[] = [];
   api.executor.start = (runId) => void started.push(runId);
@@ -237,7 +237,7 @@ test("a task cut off by a restart goes on by itself", async () => {
 
 test("without the setting every cut-off task waits", async () => {
   const { api } = taskApi(folder());
-  api.catalogSync.start = () => {};
+  settings.catalog_auto_sync = false; // model research looks nothing up at start
   const started: string[] = [];
   api.executor.start = (runId) => void started.push(runId);
   interrupted(api, "free");

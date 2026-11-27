@@ -6,6 +6,7 @@ import { after } from "node:test";
 import { Api } from "../../src/api.js";
 import { buildApp } from "../../src/app.js";
 import { settings } from "../../src/config.js";
+import * as research from "../../src/research.js";
 
 export type Answer = { status_code: number; headers: Record<string, any>; text: string; content: Buffer; json(): any };
 type Options = { json?: unknown; params?: Record<string, unknown>; content?: Buffer | string; headers?: Record<string, string> };
@@ -35,7 +36,7 @@ export function taskApi(folder: string): { api: Api; client: Client } {
     return { status_code: answer.statusCode, headers: answer.headers, text: answer.body, content: answer.rawPayload, json: () => JSON.parse(answer.body) };
   };
   after(async () => {
-    await api.catalogSync.close();
+    await research.end();
     await app.close();
     api.db.close();
   });

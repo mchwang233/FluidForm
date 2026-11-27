@@ -40,7 +40,8 @@ import { taskFolder } from "./folders.js";
 import { briefWriter } from "./routing.js";
 import * as retrospect from "./retrospect.js";
 import { eligibleForNode, NoEligibleModelError, routeNode } from "./routing.js";
-import { AA_SOURCE } from "./scoring.js";
+import { AA_SOURCE } from "./catalog.js";
+import * as research from "./research.js";
 import * as secretStore from "./secrets.js";
 import { configuredProviders, deleteProviderKey, keyringUnavailable } from "./secrets.js";
 import { SECRET_ENV } from "./secret-names.js";
@@ -462,7 +463,7 @@ export function buildApp(api: Api): FastifyInstance {
   // Only models with Artificial Analysis results (CLIs inherit them) are shown and routed.
   app.get("/api/models", async () => {
     const configured = providers().configuredModels(Object.keys(api.models));
-    const matches = api.benchmarks.matchModels(Object.values(api.models));
+    const matches = research.current()?.matchModels(Object.values(api.models)) ?? new Map<string, unknown[]>();
     const statuses = providers().cli.statuses;
     // A model package's model shows only while its package is on.
     const offered = (id: string) => (id.startsWith("cli:") || id.startsWith("mock:") ? !modelChannels.ownerOf(id) || modelChannels.channelFor(id) !== null
@@ -473,10 +474,14 @@ export function buildApp(api: Api): FastifyInstance {
     }));
   });
 
-  app.get("/api/models/sync", async () => api.catalogSync.status());
+  // Model research's look-ups; without it, nothing is looked up (the page says so).
+  const RESEARCH_OFF = { disabled: true, running: false, auto_sync: false, interval_hours: 0 };
+  app.get("/api/models/sync", async () => research.current()?.status() ?? RESEARCH_OFF);
   app.post("/api/models/sync", async (_request, reply) => {
-    api.catalogSync.trigger();
-    return reply.code(202).send(api.catalogSync.status());
+    const running = research.current();
+    if (!running) throw new HttpError(409, "模型调研已停用：在能力里打开它才能更新模型目录、价格和评分。");
+    running.trigger();
+    return reply.code(202).send(running.status());
   });
 
   const updateModel = (modelId: string, enabled: boolean) => {
@@ -1193,6 +1198,11 @@ export function buildApp(api: Api): FastifyInstance {
       // What waited while it was off goes on.
       if (item.id === "engineer") executor().engineerKick();
       else if (item.id === "learning") executor().restoreLearning();
+    }
+    // Model research starts looking things up when it is switched on, and stops when it is off.
+    if (extension && item.provides.includes("research")) {
+      if (body.enabled) await research.begin(db, api.models);
+      else await research.end();
     }
     if (runs && body.enabled && item.entry) runner().start(item);
     else if (runs) await runner().stop(item.id);
