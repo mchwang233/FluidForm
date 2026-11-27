@@ -224,7 +224,7 @@ export class Api {
     const { db, executor } = this;
     db.interruptModelCalls();
     // The catalog, prices and scores kept up to date, when model research is on (research.ts).
-    void research.begin(db, this.models);
+    void research.begin(db, this.models, this.researchReader);
     const resuming: string[] = [];
     for (const run of db.listRuns()) {
       if (run.status === "queued" || run.status === "running") {
@@ -299,6 +299,15 @@ export class Api {
     // Membership CLIs priced by their subscription: refresh their price and quota pressure.
     this.background.push(new Task((signal) => cliQuota.keepApplying(this.models, this.providers.quota, undefined, signal)));
   }
+
+  /** The model that reads the leaderboard's page for model research: the cheapest API model with a large
+   *  enough context, at low effort (as for a project brief); its cost is charged as FluidForm's own. */
+  readonly researchReader: research.Reader = async (prompt, signal) => {
+    const model = await briefWriter(Object.values(this.models), this.configured(false), { countOnly: true });
+    if (!model) throw new Error("没有可用的 API 模型来读榜单");
+    const result = await this.providers.complete(model.id, prompt, { effort: "low", signal });
+    return { text: result.text ?? "", cost_usd: await triage.costOf(model, result), model_id: model.id };
+  };
 
   /** api.ts's lifespan, its end. */
   async close(): Promise<void> {

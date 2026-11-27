@@ -23,7 +23,9 @@ type SyncStatus = {
   providers?: Record<string, ProviderStatus>;
   benchmarks?: {
     matched_models: number;
-    sources: Record<string, { name: string; status?: string; error?: string | null; count?: number; matched_models: number; last_success_at?: string; latest_published_at?: string | null; collection_method?: string; with_details?: number }>;
+    sources: Record<string, { name: string; status?: string; error?: string | null; count?: number; matched_models: number; last_success_at?: string; latest_published_at?: string | null; collection_method?: string; with_details?: number;
+      /** Read by itself once every ``every_days`` (its switch). */ auto?: boolean; every_days?: number;
+      /** The model that read the page last, and what that cost. */ read_by?: string | null; read_cost_usd?: number | null }>;
   };
 };
 
@@ -37,6 +39,15 @@ export function CatalogStatus({ apiBase }: { apiBase: string }) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [saving, setSaving] = useState<"" | "saving" | "saved">("");
+  async function setAuto(auto: boolean) {
+    setSaving("saving"); setError("");
+    try {
+      const response = await fetch(`${apiBase}/api/models/sync/leaderboard`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ auto }) });
+      if (!response.ok) throw new Error(`保存失败（${response.status}）`);
+      setStatus(await response.json()); setSaving("saved");
+    } catch (error) { setError(error instanceof Error ? error.message : "保存失败"); setSaving(""); }
+  }
   useEffect(() => {
     const controller = new AbortController();
     async function poll() {
@@ -86,7 +97,11 @@ export function CatalogStatus({ apiBase }: { apiBase: string }) {
     })}{aa && <div className={`catalog-provider ${aa.status === "error" ? "has-error" : ""}`}>
         <b>Artificial Analysis<span>{aa.matched_models} 个模型有成绩</span></b>
         <small>{aa.status === "ok" ? `评分已更新 · ${dateLabel(aa.last_success_at)}` : aa.status === "error" ? "更新失败，沿用上次评分" : "等待同步"}</small>
+        {aa.collection_method === "model_read" && <small>由 {aa.read_by?.split(":").pop() ?? "模型"} 读取网页{typeof aa.read_cost_usd === "number" ? ` · $${aa.read_cost_usd.toFixed(3)}` : ""}</small>}
         {aa.error && <p>{aa.error}</p>}
+        <label className="catalog-auto"><span>每 {aa.every_days ?? 7} 天自动读取{saving && <small>{saving === "saving" ? "保存中…" : "已保存"}</small>}</span>
+          <button type="button" role="switch" aria-checked={aa.auto !== false} aria-label="每周自动读取 Artificial Analysis"
+            className={`models-switch${aa.auto !== false ? " on" : ""}`} disabled={saving === "saving"} onClick={() => setAuto(aa.auto === false)}><span /></button></label>
       </div>}</div>
     <p className="catalog-source-note">规格和参考价来自 <a href="https://models.dev/" target="_blank" rel="noreferrer">Models.dev</a>，评分来自 <a href="https://artificialanalysis.ai/leaderboards/models" target="_blank" rel="noreferrer">Artificial Analysis</a>。</p>
     </details>

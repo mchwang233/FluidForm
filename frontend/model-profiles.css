@@ -20,6 +20,8 @@
 .catalog-provider small,.catalog-provider time {display:block;color:var(--faint);font-size:10px;line-height:1.6;margin-top:5px}
 .catalog-provider time {font-size:9px;color:var(--faint)}
 .catalog-provider p,.catalog-sync-error {font-size:11px;color:var(--danger);line-height:1.7;margin-bottom:0}
+.catalog-auto {display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;font-size:11px;color:var(--muted)}
+.catalog-auto small {display:inline;margin:0 0 0 6px;color:var(--faint)}
 .catalog-provider.has-error {border-color:color-mix(in srgb,var(--danger) 40%,var(--line))}
 .catalog-source-note {font-size:11px;color:var(--faint);line-height:1.8;margin:13px 0 0}
 .catalog-source-note a {color:var(--text)}

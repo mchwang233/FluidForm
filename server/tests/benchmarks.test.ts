@@ -185,7 +185,7 @@ test("a source's failure keeps its previous scores without leaking the error's b
   await catalog.refresh(fake(publicResponse));
   const previous = JSON.stringify([...catalog.matchModels([model()])]);
   const previousAa = catalog.cache.artificial_analysis.results;
-  await catalog.refresh(fake(() => text("secret-key", 503)));
+  await catalog.refresh(fake(() => text("secret-key", 503)), undefined, { force: true }); // read again now, as 立即更新 does
   assert.equal(JSON.stringify([...catalog.matchModels([model()])]), previous);
   assert.ok(catalog.cache.artificial_analysis.last_success_at);
   assert.ok(!JSON.stringify(catalog.status([model()])).includes("secret-key"));

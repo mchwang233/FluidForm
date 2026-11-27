@@ -112,8 +112,9 @@ export class CatalogSync {
       next_sync_at: this.autoSync ? this.state.next_sync_at ?? null : null, benchmarks: this.benchmarks ? this.benchmarks.status(Object.values(this.models)) : null };
   }
 
-  trigger(): void {
-    if (!this.task || this.task.done) this.task = new Task((signal) => this.refresh(signal));
+  /** Look everything up now; ``force``: the leaderboard too, though it is not due (立即更新). */
+  trigger(force = false): void {
+    if (!this.task || this.task.done) this.task = new Task((signal) => this.refresh(signal, force));
   }
 
   start(): void {
@@ -235,7 +236,7 @@ export class CatalogSync {
     return added;
   }
 
-  async refresh(signal?: AbortSignal): Promise<Json> {
+  async refresh(signal?: AbortSignal, force = false): Promise<Json> {
     if (this.lock.locked) return this.status();
     await this.lock.run(async () => {
       const started = new Date();
@@ -276,7 +277,7 @@ export class CatalogSync {
         states[provider] = state;
       };
       const jobs: Promise<void>[] = Object.keys(PUBLIC_PROVIDERS).filter((provider) => apiProviders.inUse(provider)).map(syncProvider);
-      if (this.benchmarks) jobs.push(this.benchmarks.refresh(this.fetch, signal));
+      if (this.benchmarks) jobs.push(this.benchmarks.refresh(this.fetch, signal, { force }));
       await Promise.all(jobs);
       if (signal?.aborted) throw signal.reason;
       // New AA results or newly listed models can change routing scores.

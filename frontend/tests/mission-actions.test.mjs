@@ -432,6 +432,12 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       return json({ ...state.models.find(model => model.id === body.model_id), enabled: body.enabled });
     }
     if (path === "/api/models/usage") return json({ days: 30, models: state.modelUsage ?? {} });
+    if (path === "/api/models/sync/leaderboard" && options.method === "PUT") {
+      const { auto } = JSON.parse(options.body);
+      (state.leaderboardSwitches ??= []).push(auto);
+      state.catalogSync.benchmarks.sources.artificial_analysis.auto = auto;
+      return json(state.catalogSync);
+    }
     if (path === "/api/models/sync") return json(state.catalogSync ?? { last_checked_at: null, providers: [] });
     if (path === "/api/models") return json(state.models);
     if (path === "/api/providers") return json(state.providers);
@@ -899,13 +905,23 @@ test("the 模型 page's sources list the providers in use, by the server's names
   const { state, document, click, act } = await setup(t, [], models, { openComposer: false });
   state.catalogSync = { running: false, auto_sync: true, interval_hours: 1,
     providers: { deepseek: { name: "DeepSeek", public_status: "ok", official_status: "ok", count: 3 }, kimi: { name: "Kimi（月之暗面）", public_status: "error", public_error: "timeout", official_status: "not_supported" } },
-    benchmarks: { matched_models: 1, sources: { artificial_analysis: { name: "Artificial Analysis", status: "ok", matched_models: 1, count: 200 } } } };
+    benchmarks: { matched_models: 1, sources: { artificial_analysis: { name: "Artificial Analysis", status: "ok", matched_models: 1, count: 200,
+      collection_method: "model_read", read_by: "deepseek:deepseek-flash", read_cost_usd: 0.0741, auto: true, every_days: 7 } } } };
   const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent.trim() === "模型"));
   await settle();
   const names = [...document.querySelectorAll(".catalog-provider b")].map(node => node.firstChild.textContent);
   assert.deepEqual(names, ["DeepSeek", "Kimi（月之暗面）", "Artificial Analysis"], "only what the server lists, no fixed provider table");
   assert.doesNotMatch(document.querySelector(".catalog-sync").textContent, /SuperCLUE|BFCL|API_KEY|重启/);
+  // Who read the leaderboard, and its weekly reading, switched off and on where it is shown.
+  const aaRow = [...document.querySelectorAll(".catalog-provider")].find(node => node.textContent.includes("Artificial Analysis"));
+  assert.match(aaRow.textContent, /由 deepseek-flash 读取网页 · \$0\.074/);
+  const auto = aaRow.querySelector("[role=switch]");
+  assert.equal(auto.getAttribute("aria-checked"), "true");
+  await click(auto);
+  await settle();
+  assert.deepEqual(state.leaderboardSwitches, [false]);
+  assert.match(aaRow.textContent, /已保存/);
   // A model's details: its Artificial Analysis results, not a second radar of the routing scores.
   const detail = document.querySelector(".models-detail");
   assert.match(detail.textContent, /Artificial Analysis 成绩/);

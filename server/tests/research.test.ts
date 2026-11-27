@@ -25,8 +25,14 @@ test("model research is a capability: off, nothing is looked up and the scores s
     assert.ok("benchmarks" in status, "its look-ups are reported");
     const set = (enabled: boolean) => client.patch("/api/capabilities/research", { json: { enabled, confirmed: true }, headers: ORIGIN });
 
+    // The leaderboard's weekly reading has its own switch.
+    const weekly = (auto: boolean) => client.put("/api/models/sync/leaderboard", { json: { auto }, headers: ORIGIN });
+    assert.equal((await weekly(false)).json().benchmarks.sources.artificial_analysis.auto, false);
+    assert.equal((await client.get("/api/models/sync")).json().benchmarks.sources.artificial_analysis.auto, false);
+    assert.equal((await weekly(true)).json().benchmarks.sources.artificial_analysis.auto, true);
     const scored = Object.values(api.models).map((model) => model.scores);
     assert.equal((await set(false)).status_code, 200);
+    assert.equal((await weekly(true)).status_code, 409, "nothing to switch while research is off");
     assert.ok(!uses.research());
     assert.equal(research.current(), null, "switched off, it stops at once");
     assert.equal((await client.get("/api/models/sync")).json().disabled, true);

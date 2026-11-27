@@ -1,4 +1,6 @@
 // Public benchmark results, kept separate from the application's routing presets.
+import { log } from "../../../src/log.js";
+import { readPage, type Reader } from "./model-read.js";
 import * as apiProviders from "../../../src/api-providers.js";
 import { createHash } from "node:crypto";
 import { settings } from "../../../src/config.js";
@@ -36,7 +38,7 @@ export type BenchmarkResult = {
   published_at: string | null;
   fetched_at: string;
   metrics: BenchmarkMetric[];
-  collection_method: "dataset" | "api" | "public_page";
+  collection_method: "dataset" | "api" | "public_page" | "model_read";
 };
 
 /** A matched result as it is told: the result and how it was matched to the model. */
@@ -356,6 +358,13 @@ export function matchResults(models: ModelProfile[], results: BenchmarkResult[])
 
 type Entry = Record<string, any>;
 
+/** Days between two readings of the leaderboard, when it is read by itself (its ``auto`` on). */
+export const AA_EVERY_DAYS = 7;
+/** After a reading that failed, the next by itself waits this many hours. */
+export const AA_RETRY_HOURS = 24;
+const DAY = 86_400_000;
+const since = (iso: unknown) => (typeof iso === "string" && Number.isFinite(Date.parse(iso)) ? Date.now() - Date.parse(iso) : Infinity);
+
 function failure(error: unknown): string {
   if (error instanceof HttpStatusError) return `HTTP ${error.status}`;
   if (error instanceof RequestTimeout) return "请求超时";
@@ -365,9 +374,32 @@ function failure(error: unknown): string {
 
 export class BenchmarkCatalog {
   cache: Record<string, Entry>;
+  // Who read the page last (a model's id) and what it cost; null when no model read it.
+  private read: { model_id: string | null; cost_usd: number } | null = null;
 
-  constructor(readonly db: Database) {
+  /** ``reader``: a model FluidForm calls to read the leaderboard's page (model-read.ts); without one,
+   *  the page is parsed by code. */
+  constructor(readonly db: Database, readonly reader: Reader | null = null) {
     this.cache = db.loadBenchmarkCache() as Record<string, Entry>;
+  }
+
+  /** Whether the leaderboard is read by itself every AA_EVERY_DAYS (on unless switched off). */
+  get auto(): boolean {
+    return this.cache.artificial_analysis?.auto !== false;
+  }
+
+  setAuto(on: boolean): void {
+    const entry = { ...(this.cache.artificial_analysis ?? {}), auto: on };
+    this.db.saveBenchmarkCache("artificial_analysis", entry);
+    this.cache.artificial_analysis = entry;
+  }
+
+  /** Whether reading it by itself is due: on, and a week since it last succeeded (a day after a failure). */
+  due(): boolean {
+    const entry = this.cache.artificial_analysis ?? {};
+    if (!this.auto) return false;
+    if (entry.status === "error" && since(entry.checked_at) < AA_RETRY_HOURS * 3_600_000) return false;
+    return since(entry.last_success_at) >= AA_EVERY_DAYS * DAY;
   }
 
   results(): BenchmarkResult[] {
@@ -388,6 +420,7 @@ export class BenchmarkCatalog {
         ...Object.fromEntries(Object.entries(this.cache[source] ?? {}).filter(([key]) => key !== "results")), name,
         matched_models: [...matched.values()].filter((rows) => rows.some((row) => row.source === source)).length,
         configured: source === "artificial_analysis" ? Boolean(aaKey()) : true,
+        auto: source === "artificial_analysis" ? this.auto : undefined, every_days: AA_EVERY_DAYS,
       }])),
     };
   }
@@ -398,7 +431,22 @@ export class BenchmarkCatalog {
 
   async aa(fetcher: Fetcher, signal: AbortSignal): Promise<BenchmarkResult[]> {
     const key = aaKey();
-    if (!key) return parseAaPublic((await this.get(fetcher, AA_PUBLIC_URL, signal)).text());
+    this.read = null;
+    if (!key) {
+      const page = (await this.get(fetcher, AA_PUBLIC_URL, signal)).text();
+      if (!this.reader) return parseAaPublic(page);
+      // A model reads it; the parser written for the page is only what is left when that goes wrong.
+      try {
+        const reading = await readPage(this.reader, page, this.cache.artificial_analysis?.count ?? 0, signal);
+        this.read = { model_id: reading.model_id, cost_usd: reading.cost_usd };
+        return reading.results;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        this.read = { model_id: null, cost_usd: 0 };
+        log.warning(`reading the Artificial Analysis page with a model failed, parsing it instead: ${(error as Error)?.message ?? error}`);
+        return parseAaPublic(page);
+      }
+    }
     const results: BenchmarkResult[] = [];
     let version: unknown = null;
     for (let page = 1; page <= 20; page += 1) {
@@ -424,17 +472,20 @@ export class BenchmarkCatalog {
     throw new Error("Too many benchmark pages");
   }
 
-  async refresh(fetcher: Fetcher, outer?: AbortSignal): Promise<void> {
+  /** Read the leaderboard when it is due (``force``: now, as 立即更新 asks). */
+  async refresh(fetcher: Fetcher, outer?: AbortSignal, { force = false } = {}): Promise<void> {
+    if (!force && !this.due()) return;
     const sync = async (source: string, fetchRows: (fetcher: Fetcher, signal: AbortSignal) => Promise<BenchmarkResult[]>) => {
       const previous = this.cache[source] ?? {};
       const entry: Entry = { ...previous, checked_at: pythonNow() };
       try {
-        const rows = await within(60, (signal) => fetchRows.call(this, fetcher, signal), outer);
+        // A model reading the page takes minutes; the parser, seconds.
+        const rows = await within(this.reader ? 900 : 60, (signal) => fetchRows.call(this, fetcher, signal), outer);
         if (!rows.length || new Set(rows.map((row) => row.id)).size !== rows.length) throw new Error("Empty or duplicate results");
         const published = rows.map((row) => row.published_at).filter((value): value is string => Boolean(value)).sort();
         Object.assign(entry, { status: "ok", error: null, last_success_at: pythonNow(), results: rows, count: rows.length,
           with_details: rows.filter((row) => row.metrics.some((m) => m.benchmark)).length, collection_method: rows[0].collection_method,
-          latest_published_at: published.at(-1) ?? null });
+          latest_published_at: published.at(-1) ?? null, read_by: this.read?.model_id ?? null, read_cost_usd: this.read?.cost_usd ?? null });
       } catch (error) {
         if (outer?.aborted) return;
         Object.assign(entry, { status: "error", error: `${failure(error)}，保留上次评分` });

@@ -64,6 +64,7 @@ export function hostName(host: string): string {
 
 const text = (max: number) => z.string().max(max);
 const ids = z.array(z.string()).default(() => []);
+const LeaderboardSwitch = z.object({ auto: z.boolean() });
 const NetworkAccess = z.object({ allow: z.boolean() });
 const LeadQuestion = z.object({ message: text(20_000).default(""), attachments: ids });
 const ConfirmTask = z.object({ budget_usd: z.number().gt(0).lte(10_000).nullish().default(null) });
@@ -478,6 +479,14 @@ export function buildApp(api: Api): FastifyInstance {
   // Model research's look-ups; without it, nothing is looked up (the page says so).
   const RESEARCH_OFF = { disabled: true, running: false, auto_sync: false, interval_hours: 0 };
   app.get("/api/models/sync", async () => research.current()?.status() ?? RESEARCH_OFF);
+  // Whether model research reads the leaderboard by itself, once a week.
+  app.put("/api/models/sync/leaderboard", async (request) => {
+    const body = parse(LeaderboardSwitch, request.body);
+    const running = research.current();
+    if (!running) throw new HttpError(409, "模型调研已停用：在能力里打开它才能设置。");
+    running.setAuto(body.auto);
+    return running.status();
+  });
   app.post("/api/models/sync", async (_request, reply) => {
     const running = research.current();
     if (!running) throw new HttpError(409, "模型调研已停用：在能力里打开它才能更新模型目录、价格和评分。");
@@ -1202,7 +1211,7 @@ export function buildApp(api: Api): FastifyInstance {
     }
     // Model research starts looking things up when it is switched on, and stops when it is off.
     if (extension && item.provides.includes("research")) {
-      if (body.enabled) await research.begin(db, api.models);
+      if (body.enabled) await research.begin(db, api.models, api.researchReader);
       else await research.end();
     }
     if (runs && body.enabled && item.entry) runner().start(item);

@@ -12,14 +12,19 @@ import { providerOf } from "./provided.js";
 export type Research = {
   /** How the last and next look-ups went (GET /api/models/sync). */
   status(): Record<string, unknown>;
-  /** Look everything up now. */
+  /** Look everything up now, the leaderboard too. */
   trigger(): void;
+  /** Whether the leaderboard is read by itself once a week. */
+  setAuto(on: boolean): void;
   close(): Promise<void>;
   /** Each model's leaderboard results, for the models page. */
   matchModels(models: ModelProfile[]): Map<string, unknown[]>;
 };
 
-type Code = { start(db: Database, models: Record<string, ModelProfile>): Research };
+/** One call of a model for the research (reading the leaderboard's page): its answer, its cost, the model. */
+export type Reader = (prompt: string, signal: AbortSignal) => Promise<{ text: string; cost_usd: number; model_id: string }>;
+
+type Code = { start(db: Database, models: Record<string, ModelProfile>, reader: Reader | null): Research };
 
 let running: Research | null = null;
 let runningFor: Database | null = null;
@@ -29,13 +34,13 @@ let starting: Promise<void> | null = null;
 export const current = (): Research | null => running;
 
 /** Start it if its package is on and it is not running: once FluidForm has started, and when it is switched on. */
-export async function begin(db: Database, models: Record<string, ModelProfile>): Promise<void> {
+export async function begin(db: Database, models: Record<string, ModelProfile>, reader: Reader | null = null): Promise<void> {
   const id = providerOf("research");
   // Another FluidForm in this process (a test's) had it: that one's research stops first.
   if (running && runningFor !== db) await end();
   if (!id || running) return starting ?? undefined;
   starting = extensions.load<Code>(id).then((code) => {
-    running = code.start(db, models);
+    running = code.start(db, models, reader);
     runningFor = db;
   }).catch((error) => {
     log.error(`model research did not start: ${(error as Error)?.stack ?? error}`);
