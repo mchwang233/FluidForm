@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { channel as agy, parse as agyParse, args as agyArgs, stdin as agyStdin, HOSTS } from "../packages/agy/src/index.js";
 import { sandboxAvailable } from "../src/agent.js";
-import { builtinModels, catalogModels } from "../src/catalog.js";
+import { builtinModels, ownModels } from "../src/catalog.js";
 import * as cli from "../src/cli-channels.js";
 import { CliChannelRegistry, CliError, keepsConversations, specFor } from "../src/cli-channels.js";
 import { settings } from "../src/config.js";
@@ -98,8 +98,8 @@ test("a model package's CLI that fails without an answer reports what it printed
 });
 
 test("the agy package's model is in the catalog, and its package says what it brings", () => {
-  const model = catalogModels().find((item) => item.id === "cli:agy");
-  assert.ok(!builtinModels().some((item) => item.id === "cli:agy"), "the built-in seed stays as it was");
+  const model = builtinModels().find((item) => item.id === "cli:agy");
+  assert.ok(!ownModels().some((item) => item.id === "cli:agy"), "it comes with its package, not FluidForm's own seed");
   assert.ok(model);
   assert.equal(model.channel, "cli");
   assert.equal(model.provider, "google");

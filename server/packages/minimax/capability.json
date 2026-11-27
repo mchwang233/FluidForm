@@ -1,0 +1,36 @@
+{
+  "id": "minimax",
+  "name": "MiniMax",
+  "kind": "extension",
+  "provides": [
+    "model:api:minimax"
+  ],
+  "version": "1.0.0",
+  "summary": "MiniMax 的 API 模型：填好密钥后可以做步骤、验收、当负责人。停用后不再调度它的模型，密钥保留。",
+  "provider": {
+    "id": "minimax",
+    "label": "MiniMax",
+    "key_env": "MINIMAX_API_KEY",
+    "wire": "openai",
+    "chat_url": "https://api.minimax.io/v1/chat/completions",
+    "models_url": "https://api.minimax.io/v1/models",
+    "catalog": "minimax",
+    "aliases": [
+      "minimax",
+      "稀宇科技"
+    ]
+  },
+  "models": [
+    {
+      "id": "minimax:MiniMax-M2.7",
+      "provider": "minimax",
+      "display_name": "MiniMax M2.7",
+      "context_window": 204800,
+      "input_per_million": 1,
+      "output_per_million": 4,
+      "supports_vision": false,
+      "pricing_verified": false,
+      "source_url": "https://platform.minimax.io/docs/api-reference/api-overview"
+    }
+  ]
+}

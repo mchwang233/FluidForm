@@ -1,0 +1,35 @@
+{
+  "id": "doubao",
+  "name": "豆包",
+  "kind": "extension",
+  "provides": [
+    "model:api:doubao"
+  ],
+  "version": "1.0.0",
+  "summary": "豆包 的 API 模型：填好密钥后可以做步骤、验收、当负责人。停用后不再调度它的模型，密钥保留。",
+  "provider": {
+    "id": "doubao",
+    "label": "豆包",
+    "key_env": "ARK_API_KEY",
+    "wire": "openai",
+    "chat_url": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+    "models_url": "https://ark.cn-beijing.volces.com/api/v3/models",
+    "catalog": "volcengine",
+    "aliases": [
+      "字节跳动",
+      "bytedance",
+      "火山引擎"
+    ]
+  },
+  "models": [
+    {
+      "id": "doubao:doubao-pro",
+      "provider": "doubao",
+      "display_name": "Doubao Pro",
+      "context_window": 128000,
+      "input_per_million": 0.4,
+      "output_per_million": 1.2,
+      "pricing_verified": false
+    }
+  ]
+}

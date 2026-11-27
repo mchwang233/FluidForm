@@ -4,13 +4,13 @@
 
 接入 agy（Antigravity CLI）时，要改的地方散落在 `cli-channels.ts` 的 `CLI_SPECS`、`catalog.ts` 的种子表，以及各处 `if (modelId === "cli:…")` 的分支里。没有开关，加一个 CLI 就要改核心源码。用户希望模型也像其他能力一样，可以装、可以开关；核心只保留 DeepSeek 作为保底。
 
-这一步先定下"模型包"的格式和核心的接口，agy 是第一个模型包。现有的 Codex、Claude、Gemini、Qwen 和 API 模型先不动，后面再一个一个搬（见"后续"）。
+第 1 步定下"模型包"的格式和核心的接口，agy 是第一个模型包。第 2 步把 DeepSeek 以外的 API 厂商都做成了包（见"API 厂商包"）。Codex、Claude、Gemini、Qwen 后面再一个一个搬（见"后续"）。
 
 ## 分工
 
 | 包里（`server/packages/<id>`） | 核心里（`server/src/model-channels.ts`） |
 |---|---|
-| `capability.json`：`kind: "extension"`、`provides: ["model:cli:<名字>"]`、`models`（目录条目） | 读清单里的 `models`，给目录播种（`catalog.catalogModels`） |
+| `capability.json`：`kind: "extension"`、`provides: ["model:cli:<名字>"]`、`models`（目录条目） | 读清单里的 `models`，给目录播种（`catalog.builtinModels`） |
 | `src/index.ts` 导出 `channel: ModelChannel` 并 `register` 它：参数、stdin、怎么读输出、额度报错、登录目录（`state`）、模型域名（`hosts`） | 每次调用的沙箱（`withSandbox`）、网络、超时、记账、额度标记 |
 | 不运行任何命令 | 包停用时它的模型不出现在模型页，不被调度，也不能当负责人 |
 
@@ -67,7 +67,7 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
 
 - agy 的参数：提示词走 stdin（30 万字符也不放进命令行参数）；Default 模式放行 `command(*)`；步骤用 `accept-edits`，负责人不用；负责人用 `--conversation` 接着对话。
 - agy 的输出：正确读出文本、用量和会话 id；失败时给出错误；额度报错被认作 quota。
-- 目录：`catalogModels` 里有 `cli:agy`，`builtinModels` 不变（黄金测试照旧）；包的清单写的是 `model:cli:agy`。
+- 目录：`builtinModels` 里有 `cli:agy`，核心自带的 `ownModels` 里没有；包的清单写的是 `model:cli:agy`。
 - 开关：关掉后没有状态、没有规格、不能当负责人；不用重启就能看出变化。
 - 沙箱（假 CLI）：
   - 没有 bwrap 就拒绝运行。
@@ -83,7 +83,63 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
 - `hosts` 是实测出来的。agy 升级后如果换了域名，不联网的调用会失败，日志里会写"拦下了访问 …"。到时把新域名加进包里。
 - agy 的用量里，`input_tokens` 是否包含缓存命中不清楚。现在按"不包含"记：缓存单独记，不加进输入。
 
+## API 厂商包（第 2 步）
+
+### 为什么
+
+每个 API 厂商的知识原来散在 8 处：
+- `secret-names` 的密钥变量名；
+- `app.ts` 的显示名；
+- `catalog-sync` 的公开目录名和官方目录 URL；
+- `providers.ts` 的检查 URL、对话 URL、推理参数特例、输出上限字段名；
+- `benchmarks` 的厂商别名；
+- `quota` 的厂商名单；
+- `catalog.ts` 的种子模型。
+
+加一个厂商，这 8 处都要改，也没有开关。
+
+### 改动
+
+- **`server/src/api-providers.ts`**：厂商注册表。
+  - `CORE` 是 DeepSeek，核心自带，关不掉。
+  - 其他厂商都来自随附包的 `capability.json` 里的 `provider` 字段。
+  - `declared` 是全部厂商（包关着也算），`active()` / `inUse()` / `ofModel()` 只算开着的。
+  - `KEY_ENV` 是全部厂商的密钥变量名。
+- **8 个厂商包**：`server/packages/{openai,anthropic,google,qwen,doubao,glm,minimax,kimi}`。
+  - 每个包只有一个 `capability.json`，没有代码：`kind: "extension"`、`provides: ["model:api:<id>"]`，加上 `provider` 和 `models`。
+  - `provider` 写明：显示名、密钥变量、协议（`openai` / `anthropic` / `gemini`）、对话 URL、模型列表 URL、是否读官方目录、公开目录名、别名、可选的推理档位（`efforts`）、输出上限字段名。
+  - `extensions.load` 遇到没有代码的包就直接返回空对象。
+- **协议留在核心**：OpenAI 兼容、Anthropic、Gemini 三种请求和流式代码都不动，按包声明的 `wire` 分派。Anthropic 和 Gemini 的请求 URL 仍写在协议代码里，所以每种协议只对应一个厂商。
+- **各处表格改为由注册表推导**：
+  - `PROVIDER_ENV` = `KEY_ENV`，包关着也保留，钥匙串照样读、照样存；
+  - `PUBLIC_PROVIDERS` / `OFFICIAL_URLS`：目录同步只遍历开着的厂商；
+  - 基准测试的 `PROVIDERS` 别名；
+  - 额度判断里的 `request failed` 厂商名单；
+  - 显示名；
+  - `testProvider`；
+  - `reasoningFields`：Anthropic 和 Gemini 按协议处理；DeepSeek 原样传；其他厂商取 `efforts` 里不低于所请求档位的第一档，没有就取最高档。
+- **种子模型**：`catalog.SEED` 只留会员 CLI、DeepSeek 和演示模型，其余随包带来（`builtinModels` = `ownModels` 加上各包的 `models`）。
+- **包关掉时**：
+  - 它的模型不可用（`configuredModels`），调用会报"没有启用"；
+  - 不出现在 `/api/providers` 和 `/api/models` 里；
+  - 密钥保留，重新打开就能用。
+
+### 测试
+
+`server/tests/api-providers.test.ts`：
+- DeepSeek 自带，其他厂商来自包；
+- 密钥变量名和原来一样（已保存的密钥照样读得到）；
+- 目录来源、官方 URL、排行榜别名和原来一样；
+- 9 个厂商 × 9 种推理档位，结果和原来的函数逐一相同；
+- 包关掉后模型不可用、调用被拒、密钥保留，DeepSeek 关不掉。
+
+黄金测试改为按原 Python 后端的顺序比较 `builtinModels()`：搬到包里的种子模型逐字段相同。`task-core` 里列出的随附扩展加上了 8 个厂商包。
+
+### 风险
+
+- 能力页多了 8 张厂商卡片。
+- 图片生成和网页搜索（MCP 服务器、`web_search_models`）的密钥不经过厂商包的开关：关掉 GLM 的包，只是不再调度它的对话模型。
+
 ## 后续
 
-1. API 模型逐个搬成包（OpenAI、Kimi、GLM、MiniMax 等）。核心只留 DeepSeek。
-2. Codex、Claude、Gemini、Qwen 逐个搬成包，每个都先过一遍 `skills/model-channel/SKILL.md` 的实测。Gemini 和 Qwen 现在没有沙箱，搬过来以后就会套上核心的沙箱。
+Codex、Claude、Gemini、Qwen 逐个搬成包，每个都先过一遍 `skills/model-channel/SKILL.md` 的实测。Gemini 和 Qwen 现在没有沙箱，搬过来以后就会套上核心的沙箱。

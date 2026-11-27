@@ -2,6 +2,7 @@
 // docs/design/task-capabilities.md): provided by an active service package, or by an extension
 // shipped with FluidForm that is on (extensions.ts). Kept apart from services.ts, which runs the
 // packages, so that any part of FluidForm can ask without importing that.
+import * as apiProviders from "./api-providers.js";
 import * as capabilities from "./capabilities.js";
 import * as extensions from "./extensions.js";
 import type { Capability } from "./models.js";
@@ -17,6 +18,8 @@ export function current(): Capability[] {
   if (kept?.key !== key) kept = { key, library: capabilities.library() };
   return kept.library;
 }
+
+apiProviders.readSwitchesWith(() => current());
 
 /** The active service package that provides ``name``, or null. */
 export function packageFor(name: string, library: Capability[] = current()): Capability | null {

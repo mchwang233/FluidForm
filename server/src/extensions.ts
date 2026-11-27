@@ -12,7 +12,8 @@ import type { Capability } from "./models.js";
 export const KIND = "extension";
 
 /** ``models``: the catalog entries of the models a model package brings (model-channels.ts). */
-export type Extension = { id: string; name: string; provides: string[]; models: Record<string, unknown>[] };
+/** ``provider``: how to reach the API provider a model package brings (api-providers.ts). */
+export type Extension = { id: string; name: string; provides: string[]; models: Record<string, unknown>[]; provider: Record<string, unknown> | null };
 
 function read(folder: string): Extension[] {
   if (!existsSync(folder)) return [];
@@ -24,7 +25,8 @@ function read(folder: string): Extension[] {
       const given = JSON.parse(readFileSync(path, "utf8"));
       if (given.kind === KIND) {
         const models = Array.isArray(given.models) ? given.models.filter((item: unknown) => item && typeof item === "object") : [];
-        found.push({ id: String(given.id), name: String(given.name), provides: given.provides.map(String), models });
+        const provider = given.provider && typeof given.provider === "object" && !Array.isArray(given.provider) ? given.provider : null;
+        found.push({ id: String(given.id), name: String(given.name), provides: given.provides.map(String), models, provider });
       }
     } catch (error) {
       log.error(`could not read the shipped package ${entry.name}: ${(error as Error).message}`);
@@ -53,6 +55,8 @@ const loaded = new Map<string, Promise<any>>();
 /** The code of the shipped extension ``id``: never from the data folder, where only its switch is. */
 export async function load<T>(id: string): Promise<T> {
   if (!byId(id)) throw new Error(`no shipped extension ${id}`);
+  // A package that only declares (an API model provider's) has no code.
+  if (!existsSync(entry(id))) return {} as T;
   // Kept, not imported again: import() looks at the disk each time.
   let loading = loaded.get(id);
   if (!loading) {

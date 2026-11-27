@@ -113,8 +113,8 @@ function manifest(raw: Buffer, files: string[]): Capability {
   // What a service gives FluidForm itself, and what any package needs first (services.ts).
   const provides = [...new Set(list(given.provides))];
   const requires = [...new Set(list(given.requires))];
-  // A model package (model-channels.ts) provides the model it brings: "model:cli:<name>".
-  const model = (name: string) => kind === extensions.KIND && /^model:cli:[a-z0-9][a-z0-9-]{0,39}$/.test(name);
+  // A model package provides the models it brings: "model:cli:<name>" (model-channels.ts) or "model:api:<provider>" (api-providers.ts).
+  const model = (name: string) => kind === extensions.KIND && /^model:(?:cli|api):[a-z0-9][a-z0-9-]{0,39}$/.test(name);
   const unknown = [...provides.filter((name) => !model(name)), ...requires].filter((name) => !PROVIDABLE.has(name));
   if (unknown.length) throw new PackageError(`没有这种能力：${unknown.join("、")}（可以写的是 ${[...PROVIDABLE].join("、")}）。`);
   if (kind === "service") {

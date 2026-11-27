@@ -1,0 +1,37 @@
+{
+  "id": "kimi",
+  "name": "Kimi（月之暗面）",
+  "kind": "extension",
+  "provides": [
+    "model:api:kimi"
+  ],
+  "version": "1.0.0",
+  "summary": "Kimi（月之暗面） 的 API 模型：填好密钥后可以做步骤、验收、当负责人。停用后不再调度它的模型，密钥保留。",
+  "provider": {
+    "id": "kimi",
+    "label": "Kimi（月之暗面）",
+    "key_env": "MOONSHOT_API_KEY",
+    "wire": "openai",
+    "chat_url": "https://api.moonshot.cn/v1/chat/completions",
+    "models_url": "https://api.moonshot.cn/v1/models",
+    "catalog": "moonshotai-cn",
+    "aliases": [
+      "moonshotai",
+      "月之暗面",
+      "kimi"
+    ]
+  },
+  "models": [
+    {
+      "id": "kimi:kimi-k3",
+      "provider": "kimi",
+      "display_name": "Kimi K3",
+      "context_window": 1000000,
+      "input_per_million": 3,
+      "output_per_million": 15,
+      "supports_vision": true,
+      "pricing_verified": false,
+      "source_url": "https://platform.kimi.com/docs/api/overview"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 // Public benchmark results, kept separate from the application's routing presets.
+import * as apiProviders from "./api-providers.js";
 import { createHash } from "node:crypto";
 import { settings } from "./config.js";
 import type { Database } from "./db.js";
@@ -69,11 +70,9 @@ export function normalized(value: string): string {
   return value.normalize("NFKC").toLowerCase().replaceAll("ß", "ss").replace(/[\s._-]+/g, "");
 }
 
-export const PROVIDERS: Record<string, string> = {
-  openai: "openai", anthropic: "anthropic", google: "google", googledeepmind: "google", deepseek: "deepseek", 深度求索: "deepseek",
-  alibaba: "qwen", alibabacloud: "qwen", 阿里巴巴: "qwen", 阿里云: "qwen", 字节跳动: "doubao", bytedance: "doubao", 火山引擎: "doubao",
-  zai: "glm", zhipuai: "glm", 智谱ai: "glm", 智谱: "glm", minimax: "minimax", 稀宇科技: "minimax", moonshotai: "kimi", 月之暗面: "kimi", kimi: "kimi",
-};
+// What leaderboards call each provider's maker (api-providers.ts aliases), formatting differences removed.
+export const PROVIDERS: Record<string, string> = Object.fromEntries(apiProviders.declared
+  .flatMap((item) => (item.aliases ?? []).map((alias) => [normalized(alias), item.id])));
 
 const SETTINGS = /^(?:FC(?: thinking)?|Prompt(?: \+ Thinking)?|(?:minimal|low|medium|high|xhigh|max)(?: with fallback)?|non[- ]reasoning|reasoning|thinking)$/i;
 

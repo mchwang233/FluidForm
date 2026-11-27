@@ -1,0 +1,35 @@
+{
+  "id": "google",
+  "name": "Google Gemini",
+  "kind": "extension",
+  "provides": [
+    "model:api:google"
+  ],
+  "version": "1.0.0",
+  "summary": "Google Gemini 的 API 模型：填好密钥后可以做步骤、验收、当负责人。停用后不再调度它的模型，密钥保留。",
+  "provider": {
+    "id": "google",
+    "label": "Google Gemini",
+    "key_env": "GEMINI_API_KEY",
+    "wire": "gemini",
+    "models_url": "https://generativelanguage.googleapis.com/v1beta/models",
+    "official": true,
+    "catalog": "google",
+    "aliases": [
+      "google",
+      "googledeepmind"
+    ]
+  },
+  "models": [
+    {
+      "id": "google:gemini-pro",
+      "provider": "google",
+      "display_name": "Gemini Pro",
+      "context_window": 1000000,
+      "input_per_million": 2,
+      "output_per_million": 12,
+      "supports_vision": true,
+      "pricing_verified": false
+    }
+  ]
+}

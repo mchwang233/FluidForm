@@ -1,6 +1,7 @@
 // FluidForm's HTTP API, served by Fastify: the local-only guard, and
 // the routes the console uses. What they work with is the Api (api.ts).
 import * as extensions from "./extensions.js";
+import * as apiProviders from "./api-providers.js";
 import * as modelChannels from "./model-channels.js";
 import { uses } from "./features.js";
 import { createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -42,7 +43,7 @@ import { eligibleForNode, NoEligibleModelError, routeNode } from "./routing.js";
 import { AA_SOURCE } from "./scoring.js";
 import * as secretStore from "./secrets.js";
 import { configuredProviders, deleteProviderKey, keyringUnavailable } from "./secrets.js";
-import { PROVIDER_ENV, SECRET_ENV } from "./secret-names.js";
+import { SECRET_ENV } from "./secret-names.js";
 import * as skills from "./skills.js";
 import * as supervisor from "./supervisor.js";
 import * as team from "./team.js";
@@ -161,10 +162,6 @@ export const SHOWN_CHANGED_FILES = 50;
 export const SHOWN_COMMAND_CHARS = 300;
 export const CHANGEABLE = FINISHED;
 
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: "OpenAI", anthropic: "Anthropic Claude", google: "Google Gemini", deepseek: "DeepSeek", qwen: "通义千问", doubao: "豆包",
-  glm: "智谱 GLM", minimax: "MiniMax", kimi: "Kimi（月之暗面）",
-};
 
 /** Give a failed or stopped node fresh attempts; the next one sees why the last one failed, and the
  *  latest diagnosis's advice. */
@@ -468,7 +465,8 @@ export function buildApp(api: Api): FastifyInstance {
     const matches = api.benchmarks.matchModels(Object.values(api.models));
     const statuses = providers().cli.statuses;
     // A model package's model shows only while its package is on.
-    const offered = (id: string) => !modelChannels.ownerOf(id) || modelChannels.channelFor(id) !== null;
+    const offered = (id: string) => (id.startsWith("cli:") || id.startsWith("mock:") ? !modelChannels.ownerOf(id) || modelChannels.channelFor(id) !== null
+      : apiProviders.inUse(id.split(":", 1)[0]));
     return Object.values(api.models).filter((model) => model.scores_source === AA_SOURCE && offered(model.id)).map((model) => ({
       ...model, configured: configured.has(model.id), routing_ready: routingReady(model), benchmarks: matches.get(model.id) ?? [],
       auth_type: model.channel === "cli" ? statuses[model.id]?.auth_type ?? null : "api_key",
@@ -513,8 +511,9 @@ export function buildApp(api: Api): FastifyInstance {
     const configured = new Set(configuredProviders());
     const locked = keyringUnavailable();
     // A key may be saved in the keyring, which is locked: it loads once unlocked.
-    return Object.keys(PROVIDER_ENV).map((provider) => ({ id: provider, name: PROVIDER_LABELS[provider], configured: configured.has(provider),
-      keyring_locked: !configured.has(provider) && locked }));
+    // FluidForm's own provider and those whose model packages are on.
+    return apiProviders.active().map(({ id, label }) => ({ id, name: label, configured: configured.has(id),
+      keyring_locked: !configured.has(id) && locked }));
   });
 
   app.delete<{ Params: { provider: string } }>("/api/providers/:provider/key", async (request) => {

@@ -390,7 +390,13 @@ const CALLS: Record<string, (c: Case) => { result: unknown; after: unknown[] } |
   "triage.read_kind": (c) => ({ result: readKind(c.args[0]), after: [] }),
   "call_control.retry_after": (c) => ({ result: retryAfter(c.args[0], c.args[1]), after: [] }),
   "call_control.input_bound": (c) => ({ result: inputBound(c.args[0]), after: [] }),
-  "catalog.builtin_models": () => ({ result: builtinModels().map(({ effective_at, discovered_at, ...rest }) => rest), after: [] }),
+  // The seed is FluidForm's own models and its packages' (builtinModels): the same models, in the order
+  // the Python backend listed them, less those it never had.
+  "catalog.builtin_models": () => {
+    const order = (load("catalog")[0].result as { id: string }[]).map((model) => model.id);
+    return { result: builtinModels().filter((model) => order.includes(model.id))
+      .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map(({ effective_at, discovered_at, ...rest }) => rest), after: [] };
+  },
 };
 
 /** The recorded file with each changed result put in place as text, so the rest stays as Python

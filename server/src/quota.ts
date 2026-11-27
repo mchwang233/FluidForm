@@ -4,6 +4,7 @@
 // an insufficient balance. Such a model is marked exhausted until the reset time the message gives,
 // or for a default cooldown, and configured models leave it out, so every routing decision picks a
 // backup instead.
+import * as apiProviders from "./api-providers.js";
 import { createHash } from "node:crypto";
 import type { Database } from "./db.js";
 import { fromPythonIso, pythonIso } from "./lax.js";
@@ -18,7 +19,7 @@ const RATE_LIMIT = pyRegex(String.raw`rate.?limit|too many requests|returned 429
 const MINUTE = 60_000;
 export const RATE_LIMIT_COOLDOWN = 5 * MINUTE;
 const UNAVAILABLE = pyRegex(String.raw`returned (?:408|500|502|503|504|529)\b|service[_ ]unavailable|overloaded_error`
-  + String.raw`|\b(?:openai|anthropic|google|deepseek|qwen|doubao|glm|minimax|kimi) request failed:`, "i");
+  + String.raw`|\b(?:${apiProviders.declared.map((item) => item.id).join("|")}) request failed:`, "i");
 export const DEFAULT_COOLDOWN = 60 * MINUTE;
 export const MAX_COOLDOWN = 7 * 24 * 60 * MINUTE;
 

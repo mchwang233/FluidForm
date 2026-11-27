@@ -14,6 +14,11 @@ quota, its login folders (`state`) and model hosts (`hosts`). It runs no command
 call in its own sandbox for it (`withSandbox`), which is the boundary whatever the CLI's own sandbox
 does. Follow `server/packages/agy`.
 
+A new **API provider** is a package with only a `capability.json` (`provides: ["model:api:<id>"]`,
+`provider` and `models`; `api-providers.ts`), like `server/packages/kimi`. If it speaks the
+OpenAI-compatible wire, nothing else changes: give its URLs, key variable, the efforts it accepts
+(`efforts`) and its output-limit field. A new wire protocol is core work in `providers.ts`.
+
 Each built-in CLI brings **its own sandbox**, and each one behaves differently. Never assume;
 measure every item below on the real CLI before writing code, and keep the measured answers in the
 design note.

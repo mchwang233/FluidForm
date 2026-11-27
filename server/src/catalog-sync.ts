@@ -1,21 +1,23 @@
 // Refresh model metadata without inventing quality scores or making inference calls.
 import type { BenchmarkCatalog } from "./benchmarks.js";
-import { catalogModels } from "./catalog.js";
+import { builtinModels } from "./catalog.js";
 import type { Database } from "./db.js";
 import { type Fetcher, get, HttpStatusError, RequestTimeout, TransportError, within } from "./fetching.js";
 import { fromPythonIso, pythonIso } from "./lax.js";
 import { type ModelProfile, ModelProfileSchema, utcnow } from "./models.js";
 import { pyRegex } from "./py.js";
 import { rescore } from "./scoring.js";
+import * as apiProviders from "./api-providers.js";
 import { PROVIDER_ENV } from "./secret-names.js";
 import { Mutex, sleep, Task } from "./tasks.js";
 
 export const PUBLIC_CATALOG_URL = "https://models.dev/api.json";
 // Match the regions used by providers.ts; never take credential destinations from remote data.
-export const PUBLIC_PROVIDERS: Record<string, string> = { openai: "openai", anthropic: "anthropic", google: "google", deepseek: "deepseek", qwen: "alibaba-cn",
-  doubao: "volcengine", glm: "zhipuai", minimax: "minimax", kimi: "moonshotai-cn" };
-export const OFFICIAL_URLS: Record<string, string> = { openai: "https://api.openai.com/v1/models", anthropic: "https://api.anthropic.com/v1/models",
-  google: "https://generativelanguage.googleapis.com/v1beta/models", deepseek: "https://api.deepseek.com/models" };
+// Every known provider's (api-providers.ts, on or off); a sync reads only those in use.
+export const PUBLIC_PROVIDERS: Record<string, string> = Object.fromEntries(apiProviders.declared.filter((item) => item.catalog)
+  .map((item) => [item.id, item.catalog!]));
+export const OFFICIAL_URLS: Record<string, string> = Object.fromEntries(apiProviders.declared.filter((item) => item.official)
+  .map((item) => [item.id, item.models_url]));
 // Seconds: one request; the public catalog; one provider's official catalog.
 export const limits = { REQUEST: 20, PUBLIC: 35, OFFICIAL: 45, SCHEDULE_POLL: 30 };
 
@@ -24,7 +26,7 @@ type Json = Record<string, any>;
 /** Seed only missing entries. Restarting must preserve discoveries and user choices. */
 export function seedCatalog(db: Database): Record<string, ModelProfile> {
   const models: Record<string, ModelProfile> = Object.fromEntries(db.listModels().map((model) => [model.id, model]));
-  const missing = catalogModels().filter((model) => !(model.id in models));
+  const missing = builtinModels().filter((model) => !(model.id in models));
   db.saveModels(missing);
   for (const model of missing) models[model.id] = model;
   return models;
@@ -154,10 +156,11 @@ export class CatalogSync {
   async officialModels(provider: string, key: string, signal?: AbortSignal): Promise<Record<string, Json>> {
     let headers: Record<string, string> = { Authorization: `Bearer ${key}` };
     const params: Record<string, string | number> = {};
-    if (provider === "anthropic") {
+    const wire = apiProviders.byId(provider)?.wire;
+    if (wire === "anthropic") {
       headers = { "x-api-key": key, "anthropic-version": "2023-06-01" };
       params.limit = 1000;
-    } else if (provider === "google") {
+    } else if (wire === "gemini") {
       headers = { "x-goog-api-key": key };
       params.pageSize = 1000;
     }
@@ -165,12 +168,12 @@ export class CatalogSync {
     const cursors = new Set<string>();
     for (let page = 0; page < 100; page += 1) {
       const payload = await this.getJson(OFFICIAL_URLS[provider], { headers, params }, signal);
-      const entries = payload[provider === "google" ? "models" : "data"];
+      const entries = payload[wire === "gemini" ? "models" : "data"];
       if (!Array.isArray(entries)) throw new TypeError("Missing models");
       for (const entry of entries) {
         if (!dict(entry)) throw new TypeError("Invalid model");
         let rawId: unknown;
-        if (provider === "google") {
+        if (wire === "gemini") {
           if (!(Array.isArray(entry.supportedGenerationMethods) ? entry.supportedGenerationMethods : []).includes("generateContent")) continue;
           rawId = String(entry.name ?? "").replace(/^models\//, "");
         } else rawId = entry.id;
@@ -188,7 +191,7 @@ export class CatalogSync {
         if (shutdown && shutdown <= utcnow().slice(0, 10)) data.catalog_status = "retired";
         result[identifier] = data;
       }
-      const cursor = provider === "google" ? payload.nextPageToken : payload.has_more ? payload.last_id : null;
+      const cursor = wire === "gemini" ? payload.nextPageToken : payload.has_more ? payload.last_id : null;
       if (!cursor) {
         if (payload.has_more) throw new Error("Missing pagination cursor");
         if (!Object.keys(result).length) throw new Error("Empty model catalog");
@@ -196,7 +199,7 @@ export class CatalogSync {
       }
       if (cursors.has(cursor)) throw new Error("Repeated pagination cursor");
       cursors.add(cursor);
-      params[provider === "google" ? "pageToken" : "after_id"] = cursor;
+      params[wire === "gemini" ? "pageToken" : "after_id"] = cursor;
     }
     throw new Error("Catalog pagination limit exceeded");
   }
@@ -278,7 +281,7 @@ export class CatalogSync {
         }
         states[provider] = state;
       };
-      const jobs: Promise<void>[] = Object.keys(PUBLIC_PROVIDERS).map(syncProvider);
+      const jobs: Promise<void>[] = Object.keys(PUBLIC_PROVIDERS).filter((provider) => apiProviders.inUse(provider)).map(syncProvider);
       if (this.benchmarks) jobs.push(this.benchmarks.refresh(this.fetch, signal));
       await Promise.all(jobs);
       if (signal?.aborted) throw signal.reason;

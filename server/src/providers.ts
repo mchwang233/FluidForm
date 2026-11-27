@@ -22,6 +22,7 @@ import * as progress from "./progress.js";
 import { formatG, head, pyDumps, pyRegex, pyRound } from "./py.js";
 import { REVIEW_MARKER } from "./quality.js";
 import { ModelUnavailable, QuotaTracker } from "./quota.js";
+import * as apiProviders from "./api-providers.js";
 import { PROVIDER_ENV } from "./secret-names.js";
 import * as streaming from "./streaming.js";
 
@@ -235,7 +236,8 @@ export class ProviderRegistry {
   configuredModels(modelIds: Iterable<string>): Set<string> {
     const configured = new Set(["mock:local", ...this.cli.availableModelIds()]);
     for (const modelId of modelIds) {
-      const env = PROVIDER_ENV[modelId.split(":", 1)[0]];
+      // Its provider in use (its package on) and its key set.
+      const env = apiProviders.ofModel(modelId)?.key_env;
       if (env && process.env[env]) configured.add(modelId);
     }
     return new Set([...configured].filter((modelId) => !this.quota.exhausted(modelId)));
@@ -245,7 +247,7 @@ export class ProviderRegistry {
   toolLimitCapabilities(modelId: string): { counting_unit: string | null; hard_limit: boolean } {
     if (modelId.startsWith("cli:")) return CliChannelRegistry.toolLimitCapabilities(modelId);
     const model = this.models[modelId];
-    if (!(modelId.split(":", 1)[0] in PROVIDER_ENV) || !settings.api_agent || (model && (model.channel === "cli" || model.supports_tools === false))) {
+    if (!apiProviders.byId(modelId.split(":", 1)[0]) || !settings.api_agent || (model && (model.channel === "cli" || model.supports_tools === false))) {
       return { counting_unit: null, hard_limit: false };
     }
     return { ...TOOL_LIMIT_REQUIREMENTS };
@@ -403,8 +405,10 @@ export class ProviderRegistry {
       agent.overrun = overrun;
     }
     try {
-      if (provider === "anthropic") return await this.anthropic(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
-      if (provider === "google") return await this.gemini(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
+      const wire = apiProviders.ofModel(modelId)?.wire;
+      if (!wire) throw new ProviderError(`${provider} 没有启用：在能力里打开它的模型包。`);
+      if (wire === "anthropic") return await this.anthropic(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
+      if (wire === "gemini") return await this.gemini(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
       return await this.openaiCompatible(provider, model, prompt, images, agent, spend_ok, agent ? conversation : null, effort, signal, dialogue);
     } finally {
       agent?.close(); // this attempt's /tmp
@@ -412,22 +416,18 @@ export class ProviderRegistry {
   }
 
   async testProvider(provider: string): Promise<string> {
-    const urls: Record<string, string> = {
-      openai: "https://api.openai.com/v1/models", anthropic: "https://api.anthropic.com/v1/models", deepseek: "https://api.deepseek.com/models",
-      qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1/models", doubao: "https://ark.cn-beijing.volces.com/api/v3/models",
-      glm: "https://open.bigmodel.cn/api/paas/v4/models", minimax: "https://api.minimax.io/v1/models", kimi: "https://api.moonshot.cn/v1/models",
-    };
-    if (provider !== "google" && !(provider in urls)) throw new ProviderError(`Unsupported provider: ${provider}`);
-    const key = process.env[PROVIDER_ENV[provider]];
+    const declared = apiProviders.byId(provider);
+    if (!declared) throw new ProviderError(`Unsupported provider: ${provider}`);
+    const key = process.env[declared.key_env];
     if (!key) throw new ProviderError(`No API key is configured for ${provider}`);
     const timeout = AbortSignal.timeout(settings.api_request_timeout * 1000);
     let response: Response;
-    if (provider === "google") {
-      response = await this.fetch(`https://generativelanguage.googleapis.com/v1beta/models?${new URLSearchParams({ key })}`, { signal: timeout });
-    } else if (provider === "anthropic") {
-      response = await this.fetch(urls[provider], { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: timeout });
+    if (declared.wire === "gemini") {
+      response = await this.fetch(`${declared.models_url}?${new URLSearchParams({ key })}`, { signal: timeout });
+    } else if (declared.wire === "anthropic") {
+      response = await this.fetch(declared.models_url, { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: timeout });
     } else {
-      response = await this.fetch(urls[provider], { headers: { Authorization: `Bearer ${key}` }, signal: timeout });
+      response = await this.fetch(declared.models_url, { headers: { Authorization: `Bearer ${key}` }, signal: timeout });
     }
     const text = await response.text();
     if (response.status >= 400) throw new ProviderError(`Connection test failed (${response.status}): ${head(text, 200)}`);
@@ -897,15 +897,10 @@ export class ProviderRegistry {
 
   private openaiCompatible(provider: string, model: string, prompt: string, images: Attachment[], agent: agentTools.Workspace | null,
     spendOk: SpendOk | null, conversation: Conversation | null, effort: string | null, signal?: AbortSignal, dialogue: Dialogue | null = null): Promise<ProviderResult> {
-    const urls: Record<string, string> = {
-      openai: "https://api.openai.com/v1/chat/completions", deepseek: "https://api.deepseek.com/chat/completions",
-      qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", doubao: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
-      glm: "https://open.bigmodel.cn/api/paas/v4/chat/completions", minimax: "https://api.minimax.io/v1/chat/completions",
-      kimi: "https://api.moonshot.cn/v1/chat/completions",
-    };
-    const url = urls[provider];
+    const declared = apiProviders.byId(provider);
+    const url = declared?.wire === "openai" ? declared.chat_url : undefined;
     if (!url) throw new ProviderError(`Unsupported provider: ${provider}`);
-    const env = PROVIDER_ENV[provider];
+    const env = declared!.key_env;
     const step: Step = async (state, stepSignal) => {
       if (state.history === null || state.history === undefined) {
         state.history = state.system ? [{ role: "system", content: state.system }] : [];
@@ -923,7 +918,7 @@ export class ProviderRegistry {
       if (followup) state.history.push({ role: "user", content: followup });
       const body: Json = { model, messages: state.history, ...this.reasoning(provider, model, effort) };
       if (state.tools.length) body.tools = state.tools.map((tool: Json) => ({ type: "function", function: tool }));
-      const field = provider === "openai" ? "max_completion_tokens" : "max_tokens";
+      const field = declared!.max_tokens_field ?? "max_tokens";
       Object.assign(body, { stream: true, stream_options: { include_usage: true } });
       const response = await this.send(provider, `${provider}:${model}`, url, body, (target, limit) => {
         target[field] = limit;
@@ -1022,13 +1017,14 @@ export class ProviderRegistry {
 
 /** [input, output, cached, cache write, whether the usage was reported]. */
 export function responseUsage(provider: string, data: Json): [number, number, number, number, boolean] {
-  const usage = (provider === "google" ? data.usageMetadata : data.usage) || {};
-  if (provider === "anthropic") {
+  const wire = apiProviders.byId(provider)?.wire ?? provider;
+  const usage = (wire === "gemini" ? data.usageMetadata : data.usage) || {};
+  if (wire === "anthropic") {
     const cached = usage.cache_read_input_tokens ?? 0;
     const written = usage.cache_creation_input_tokens ?? 0;
     return [(usage.input_tokens ?? 0) + cached + written, usage.output_tokens ?? 0, cached, written, "input_tokens" in usage && "output_tokens" in usage];
   }
-  if (provider === "google") {
+  if (wire === "gemini") {
     return [usage.promptTokenCount ?? 0, (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0), usage.cachedContentTokenCount ?? 0, 0,
       "promptTokenCount" in usage && "candidatesTokenCount" in usage];
   }
@@ -1048,18 +1044,19 @@ const EFFORT_REJECTED = pyRegex("reasoning|effort|thinking|output_config|思考|
 export const EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /** Request fields asking ``provider``'s model for ``effort``: Anthropic's output_config, Gemini's
- *  thinking level, and reasoning_effort for OpenAI and the providers compatible with it (DeepSeek and
- *  others take the whole scale; GLM only low, high and max; OpenAI tops out at xhigh). */
+ *  thinking level, and reasoning_effort for the OpenAI-compatible wire, scaled to the efforts the
+ *  provider takes (its package's ``efforts``: GLM only low, high and max; OpenAI tops out at xhigh),
+ *  or as given (DeepSeek, ``raw_effort``). */
 export function reasoningFields(provider: string, effort: string): Json {
-  let level = EFFORTS.includes(effort) ? effort : effort === "ultra" ? "max" : "medium";
+  const level = EFFORTS.includes(effort) ? effort : effort === "ultra" ? "max" : "medium";
   const rank = (name: string) => EFFORTS.indexOf(name);
-  if (provider === "anthropic") return { output_config: { effort: ({ none: "low", minimal: "low" } as Json)[level] ?? level } };
-  if (provider === "google") return { generationConfig: { thinkingConfig: { thinkingLevel: rank(level) <= rank("low") ? "low" : "high" } } };
-  if (provider === "deepseek") return { reasoning_effort: effort };
-  // GLM 5.x always thinks and takes only low, high or max (2026-10-21: "medium" is a 400).
-  if (provider === "glm") return { reasoning_effort: rank(level) <= rank("low") ? "low" : rank(level) <= rank("high") ? "high" : "max" };
-  if (provider === "openai" && level === "max") level = "xhigh";
-  return { reasoning_effort: level };
+  const declared = apiProviders.byId(provider);
+  if (declared?.wire === "anthropic") return { output_config: { effort: ({ none: "low", minimal: "low" } as Json)[level] ?? level } };
+  if (declared?.wire === "gemini") return { generationConfig: { thinkingConfig: { thinkingLevel: rank(level) <= rank("low") ? "low" : "high" } } };
+  if (declared?.raw_effort) return { reasoning_effort: effort };
+  // The next effort it takes from the one asked for, or its most.
+  const takes = (declared?.efforts ?? EFFORTS).filter((name) => EFFORTS.includes(name)).sort((a, b) => rank(a) - rank(b));
+  return { reasoning_effort: takes.find((name) => rank(name) >= rank(level)) ?? takes[takes.length - 1] ?? level };
 }
 
 /** Take the reasoning effort out of a request body; whether it had one. */
