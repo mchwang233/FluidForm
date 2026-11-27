@@ -34,7 +34,7 @@ FluidForm gives it to the platform engineer for every component it plans or buil
    - something people or other apps use through FluidForm (a chat app's bot, an integration with an
      outside service, a background service): a capability package, as
      `skills/capability-package/SKILL.md` says. Kept inside its folder, it goes live without a restart;
-   - a model or channel: `server/src/catalog.ts` (models), `providers.ts` (API), `cli-channels.ts` (`CLI_SPECS`);
+   - a model or channel: a model package in `server/packages/<id>`; `providers.ts` (the API wire protocols), `cli-channels.ts` (running CLIs);
      a new membership CLI is a model package, `server/packages/<id>` like `server/packages/agy` (`model-channels.ts`);
      a new API provider is a package with only a `capability.json`, like `server/packages/kimi` (`api-providers.ts`);
      follow `skills/model-channel/SKILL.md`: measure its sandbox, output and quota messages first;

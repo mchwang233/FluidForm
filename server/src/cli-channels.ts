@@ -1,29 +1,23 @@
-// Membership CLIs as models: Codex and Claude Code here, run in their own sandboxes for steps, in a
-// conversation for the task's lead, or on the host for a repair; the others come from model packages
-// (model-channels.ts), run in FluidForm's sandbox.
+// Membership CLIs as models. Every CLI comes from a model package (model-channels.ts): Codex and
+// Claude Code keep their own measured sandboxes (the package builds the command, FluidForm runs it),
+// the others run in FluidForm's sandbox. This module runs them: in their own process group, with
+// timeouts, progress checks, live activity and a trace, in a conversation for the task's lead, or on
+// the host for a repair.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync,
-  statSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import * as activity from "./activity.js";
-import { ownNetwork, proxyListenScript, sandboxPorts } from "./agent.js";
+import { ownNetwork, sandboxPorts } from "./agent.js";
 import { path as attachmentPath } from "./attachments.js";
-import * as calls from "./calls.js";
 import { settings } from "./config.js";
 import { ArtifactBlocked } from "./contracts.js";
 import * as environment from "./environment.js";
 import type { Attachment } from "./models.js";
+import * as modelChannels from "./model-channels.js";
 import * as progress from "./progress.js";
 import { formatG, isObject, pyDumps, pyRegex, pyStr, splitlines, tail } from "./py.js";
-import * as modelChannels from "./model-channels.js";
-import { compactContext } from "./team.js";
-
-// Bound the full UTF-8 input conservatively, leaving room for CLI/protocol wrapping.
-export const CODEX_INPUT_LIMIT = 1048576;
-export const CODEX_INPUT_RESERVE = 65536;
 
 /** Required context cannot fit: block for replanning, not model/availability fallback. */
 export class InputTooLarge extends ArtifactBlocked {
@@ -36,76 +30,11 @@ export class CliError extends Error {
 }
 
 export const inputTooLarge = (error: unknown) => String((error as Error)?.message ?? error).toLowerCase().includes("input_too_large");
-const bytes = (text: string) => Buffer.byteLength(text, "utf8");
-
-export function codexInput(prompt: string, { retry = false } = {}): string {
-  const limit = CODEX_INPUT_LIMIT - CODEX_INPUT_RESERVE;
-  const before = prompt;
-  let text = prompt;
-  if (retry || bytes(text) > limit) text = compactContext(text, retry ? 1024 : 32768);
-  calls.warning(`Codex input: chars ${before.length} -> ${text.length}, UTF-8 bytes ${bytes(before)} -> ${bytes(text)}; `
-    + `limit ${CODEX_INPUT_LIMIT}, reserve ${CODEX_INPUT_RESERVE}, retry=${retry ? "True" : "False"}`);
-  calls.save();
-  if (bytes(text) > limit || (retry && text === before)) {
-    throw new InputTooLarge("input_too_large: 必须保留的要求、验收标准或未决事项无法安全缩减；请负责人拆分上下文。禁止原样重试或切换模型绕过。");
-  }
-  return text;
-}
-
 export type CliSpec = { id: string; executable: string; auth_command: string[]; invoke_args: string[]; fallback_model_id: string };
 export type CliStatus = { id: string; installed: boolean; authenticated: boolean; auth_type: string | null; version: string | null; error: string | null };
 export type Usage = { input_tokens?: number; output_tokens?: number; cached_input_tokens?: number; cache_write_tokens?: number };
 /** What a CLI answered, with the usage it reported (Python's UsageText). */
 export type CliText = { text: string; usage: Usage };
-
-// Claude Code runs shell commands inside its own bubblewrap sandbox: writes only in the working
-// directory (and /tmp), no network, and no way to ask for an unsandboxed command. Sandboxed commands
-// need no approval, which a background run could never give; file edits are accepted.
-export const CLAUDE_SANDBOX_SETTINGS = pyDumps({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false } });
-// A task that allows the network: sandboxed commands may reach any domain except this machine,
-// whose services (this application's API among them) stay closed.
-export const CLAUDE_NETWORK_SETTINGS = pyDumps({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false,
-  network: { allowedDomains: ["*"], deniedDomains: ["localhost", "127.0.0.1", "::1"] } } });
-/** ``args`` with Claude Code's sandbox settings opened to this machine's recorded host ports (a
- *  license server, say): its proxy reaches a local port only as the ``host:port`` listed in
- *  allowedDomains (a bare host would open them all), and the bridge that listens on them inside each
- *  command needs to bind (allowLocalBinding; agent.proxyListenScript). Every other local service
- *  stays closed: with the internet, 127.0.0.1 leaves the deny list, which would win over the listed
- *  ports, and "*" never covers a local address. */
-export function withHostPorts(args: string[], ports: number[]): string[] {
-  if (!ports.length) return args;
-  return args.map((arg) => {
-    if (arg !== CLAUDE_SANDBOX_SETTINGS && arg !== CLAUDE_NETWORK_SETTINGS) return arg;
-    const given = JSON.parse(arg);
-    const network = given.sandbox.network ?? {};
-    network.allowedDomains = [...(network.allowedDomains ?? []), ...ports.map((port) => `127.0.0.1:${port}`)];
-    if (network.deniedDomains) network.deniedDomains = network.deniedDomains.filter((host: string) => host !== "127.0.0.1");
-    network.allowLocalBinding = true;
-    return pyDumps({ ...given, sandbox: { ...given.sandbox, network } });
-  });
-}
-
-/** ``work`` with an env file for Claude Code (CLAUDE_ENV_FILE) that bridges ``ports`` into each of its
- *  sandboxed commands, removed afterwards; ``work`` gets the variables to add (none without ports). */
-export async function withClaudeBridge<T>(ports: number[], work: (env: Record<string, string>) => Promise<T>): Promise<T> {
-  if (!ports.length) return work({});
-  const folder = mkdtempSync(join(tmpdir(), "sp-claude-"));
-  const file = join(folder, "env.sh");
-  try {
-    writeFileSync(file, proxyListenScript(ports, process.env.CLAUDE_ENV_FILE ?? ""), { mode: 0o644 });
-    return await work({ CLAUDE_ENV_FILE: file });
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-}
-
-// Repairing the environment: Claude Code without its sandbox and without asking for approval. The
-// whole CLI runs under bubblewrap instead, which only blocks gaining root (see repairCommand).
-export const CLAUDE_REPAIR_SETTINGS = pyDumps({ sandbox: { enabled: false } });
-export const REPAIR_ARGS: Record<string, string[]> = {
-  "cli:claude": ["-p", "--output-format", "json", "--permission-mode", "bypassPermissions", "--settings", CLAUDE_REPAIR_SETTINGS, "--no-session-persistence"],
-  "cli:codex": ["exec", "--ephemeral", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "--color", "never", "-"],
-};
 
 /** Why a CLI exited with an error. Claude Code in JSON mode reports errors such as a usage limit in
  *  the ``result`` of its stdout and leaves stderr empty. */
@@ -152,24 +81,14 @@ export function repairCommand(executable: string, args: string[]): string[] {
   return ["bwrap", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--die-with-parent", "--", executable, ...args];
 }
 
-// The task's lead keeps one conversation per task. It reads files and runs sandboxed commands to look
-// things up, but does not edit: the steps' models do the work.
-export const SESSION_ARGS: Record<string, string[]> = {
-  "cli:claude": ["-p", "--output-format", "json", "--permission-mode", "default", "--settings", CLAUDE_SANDBOX_SETTINGS,
-    "--disallowedTools", "Edit,Write,NotebookEdit"],
-  // Its sandbox: the lead's permission profile (codexStepPermissions with lead), added per call.
-  "cli:codex": ["exec", "--json", "--skip-git-repo-check", "--color", "never"],
-};
-export const SESSION_CLIS = new Set(Object.keys(SESSION_ARGS));
 
-/** Whether ``modelId`` keeps a conversation (so it can lead a task): a built-in CLI or a model package's. */
+/** Whether ``modelId`` keeps a conversation (so it can lead a task): its model package says so. */
 export function keepsConversations(modelId: string): boolean {
-  return SESSION_CLIS.has(modelId) || Boolean(modelChannels.channelFor(modelId)?.sessions);
+  return Boolean(modelChannels.channelFor(modelId)?.sessions);
 }
 
-/** The CLI ``modelId`` is: a built-in one, or the one a model package that is on brings; null otherwise. */
+/** The CLI ``modelId`` is, from the model package that is on and brings it; null otherwise. */
 export function specFor(modelId: string): CliSpec | null {
-  if (modelId in CLI_SPECS) return CLI_SPECS[modelId];
   const channel = modelChannels.channelFor(modelId);
   return channel ? { id: channel.id, executable: channel.executable, auth_command: channel.auth_command, invoke_args: [],
     fallback_model_id: channel.fallback_model_id } : null;
@@ -198,33 +117,10 @@ export function trace(path: string | null | undefined, kind: string, values: Rec
   appendFileSync(path, pyDumps({ type: kind, ...values }, false) + "\n");
 }
 
-export function codexOutput(output: string): CliText {
-  let text = "";
-  const usage: Record<string, number> = {};
-  for (const line of splitlines(output)) {
-    let event: unknown;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!isObject(event)) continue;
-    if (event.type === "item.completed" && isObject(event.item) && event.item.type === "agent_message") text = (event.item.text as string) || text;
-    if (event.type === "turn.completed") {
-      for (const [key, value] of Object.entries(cliUsage(event, true))) usage[key] = (usage[key] ?? 0) + (value as number);
-    }
-  }
-  return { text: text || output.trim(), usage };
+/** Where Codex keeps its login and sessions (its quota is read from them, cli-quota.ts). */
+export function codexHome(): string {
+  return process.env.CODEX_HOME || join(homedir(), ".codex");
 }
-
-export const CLI_SPECS: Record<string, CliSpec> = {
-  "cli:codex": { id: "cli:codex", executable: "codex", auth_command: ["login", "status"],
-    invoke_args: ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "workspace-write", "--color", "never", "-"],
-    fallback_model_id: "openai:gpt-5.6-terra" },
-  "cli:claude": { id: "cli:claude", executable: "claude", auth_command: ["auth", "status"],
-    invoke_args: ["-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--settings", CLAUDE_SANDBOX_SETTINGS, "--no-session-persistence"],
-    fallback_model_id: "anthropic:claude-sonnet-5" },
-};
 
 /** Kill the CLI and any tools it spawned; they share the session started for it. */
 function killGroup(child: ChildProcess): void {
@@ -235,241 +131,9 @@ function killGroup(child: ChildProcess): void {
   }
 }
 
-/** Open the CLI's sandbox to the internet. A model package's CLI gets it from model-channels; Codex steps get
- *  it from their permission profile (codexStepPermissions). */
-export function withNetwork(modelId: string, args: string[]): string[] {
-  return modelId === "cli:claude" ? args.map((arg) => (arg === CLAUDE_SANDBOX_SETTINGS ? CLAUDE_NETWORK_SETTINGS : arg)) : args;
-}
-
-// Codex's own features the platform's leads and steps do not use (Codex feature flags).
-export const CODEX_EXTRAS = ["plugins", "apps", "browser_use", "in_app_browser", "computer_use"];
-// Reasoning efforts as Codex names them; the platform's scale maps onto it.
-export const CODEX_EFFORTS: Record<string, string> = { none: "minimal", minimal: "minimal", low: "low", medium: "medium", high: "high",
-  xhigh: "xhigh", max: "max", ultra: "max" };
-// A server's own table in Codex's config: [mcp_servers.name] or [mcp_servers."name"].
-const CODEX_SERVER = pyRegex(String.raw`^\s*\[\s*mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))\s*\]\s*$`, "mg");
-
-export function codexHome(): string {
-  return process.env.CODEX_HOME || join(homedir(), ".codex");
-}
-
-/** The MCP servers the user's Codex config starts, by name, read from $CODEX_HOME/config.toml: the
- *  platform turns each off, since what they are differs from machine to machine. */
-export function codexServers(): string[] {
-  let text: string;
-  try {
-    text = readFileSync(join(codexHome(), "config.toml")).toString("utf8");
-  } catch {
-    return [];
-  }
-  return [...new Set([...text.matchAll(CODEX_SERVER)].map((match) => match[1] ?? match[2]))];
-}
-
-// The permission profile a Codex step runs under (Codex's own sandbox, bubblewrap on Linux): its
-// workspace writable; this account's home (keys, Codex's login, other projects), the platform's data
-// and the other tasks' folders unreadable; the machine's shared /tmp replaced by TMPDIR.
-export const CODEX_STEP_PROFILE = "fluidform-step";
-export const CODEX_LEAD_PROFILE = "fluidform-lead";
-// Folders denied entry by entry: Codex lifts a deny only on a whole entry, not inside one.
-export const MAX_DENIED = 400;
-// /tmp entries a step's profile denies one by one; past this many it denies all of /tmp.
-export const MAX_TMP_ENTRIES = 2000;
-// ...or past this many bytes of their names (a whole -c argument is at most 128 KiB).
-export const MAX_TMP_BYTES = 64 * 1024;
-
-const real = (path: string): string => {
-  const absolute = resolve(path);
-  try {
-    return realpathSync(absolute);
-  } catch {
-    const parent = dirname(absolute);
-    return parent === absolute ? absolute : join(real(parent), absolute.slice(parent.length + 1));
-  }
-};
-const under = (path: string, folder: string) => path !== folder && path.startsWith(folder === "/" ? "/" : folder + sep);
-const isDir = (path: string) => {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-};
-const isLink = (path: string) => {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
-};
-
-/** Deny every entry of ``base`` that is not, or does not lead to, one of ``keep``. */
-function denyExcept(base: string, keeping: string[], rules: Map<string, string>): void {
-  const keep = keeping.filter((path) => path === base || under(path, base));
-  if (!keep.length) {
-    rules.set(base, "deny");
-    return;
-  }
-  if (keep.includes(base) || !isDir(base) || rules.size > MAX_DENIED) return;
-  let entries: string[];
-  try {
-    entries = readdirSync(base).sort().map((name) => join(base, name));
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (isLink(entry)) continue; // what it points to is denied or kept where it is
-    denyExcept(entry, keep, rules);
-  }
-}
-
-/** The folder Codex is installed in (its sandbox helper runs from there). */
-export function codexPackage(): string | null {
-  const found = environment.which(CLI_SPECS["cli:codex"].executable);
-  if (!found) return null;
-  const resolved = real(found);
-  return basename(dirname(resolved)) === "bin" ? dirname(dirname(resolved)) : dirname(resolved);
-}
-
-/** /tmp stays writable, since some tools write there whatever TMPDIR says (URG creates its temporary
- *  files in /tmp and crashes when it cannot), but what is already in it stays unreadable: it is denied
- *  entry by entry. A step's own temporary folder is elsewhere (withPrivateTmp). */
-export function sharedTmp(cwd: string, rules: Map<string, string>, shared = "/tmp", most = MAX_TMP_ENTRIES): void {
-  const tmp = real(shared);
-  if (under(cwd, tmp)) {
-    denyExcept(tmp, [cwd], rules);
-    return;
-  }
-  let entries: string[] | null;
-  try {
-    entries = readdirSync(tmp).map((name) => join(tmp, name)).filter((entry) => !isLink(entry));
-  } catch {
-    entries = null;
-  }
-  // Past this, the profile's one -c argument would be longer than Linux takes (E2BIG, 128 KiB).
-  const size = (entries ?? []).reduce((sum, entry) => sum + Buffer.byteLength(entry) + 16, 0);
-  if (entries === null || entries.length > most || size > MAX_TMP_BYTES) {
-    rules.set(":slash_tmp", "deny");
-    return;
-  }
-  rules.set(tmp, "write");
-  for (const entry of entries.sort()) rules.set(entry, "deny");
-}
-
-/** -c options defining and selecting the profile for a step working in ``cwd`` with its own
- *  ``tmpdir`` (CODEX_STEP_PROFILE), or with ``lead`` for a lead's read-only conversation there
- *  (CODEX_LEAD_PROFILE: the tasks' folders stay readable, so it can look at their results). */
-export function codexStepPermissions(workdir: string, network: boolean, { lead = false, tmpdir = null, readable = [] }:
-  { lead?: boolean; tmpdir?: string | null; readable?: string[] } = {}): string[] {
-  const cwd = real(workdir);
-  // ``readable``: folders a lead's conversation may also read, such as a chat's attachments.
-  const extra = lead ? readable.map(real) : [];
-  const keep = [cwd, join(real(codexHome()), "tmp"), real(environment.toolsDir()), ...extra, ...(tmpdir && !lead ? [real(tmpdir)] : [])];
-  const pkg = codexPackage();
-  if (pkg) keep.push(pkg);
-  const rules = new Map<string, string>();
-  const bases = lead ? [homedir(), settings.data_dir] : [homedir(), settings.data_dir, settings.workspace_root];
-  for (const base of [...new Set(bases.map(real))]) if (base !== "/" && isDir(base)) denyExcept(base, keep, rules);
-  if (lead) {
-    rules.set(cwd, "read");
-    for (const item of extra) rules.set(item, "read");
-  } else {
-    sharedTmp(cwd, rules);
-    rules.set(":tmpdir", "write");
-    rules.set(cwd, "write");
-  }
-  const table = "{ " + [...rules].map(([path, mode]) => `${pyDumps(path)} = ${pyDumps(mode)}`).join(", ") + " }";
-  const name = lead ? CODEX_LEAD_PROFILE : CODEX_STEP_PROFILE;
-  return ["-c", `default_permissions="${name}"`, "-c", `permissions.${name}.extends="${lead ? ":read-only" : ":workspace"}"`,
-    "-c", `permissions.${name}.filesystem=${table}`, ...(network ? ["-c", `permissions.${name}.network={ enabled = true }`] : [])];
-}
-
-/** ``work`` with a temporary folder of a Codex step's own, its TMPDIR, removed afterwards (null
- *  unless ``wanted``). Under the data folder, which every step's profile hides: steps do not see
- *  each other's. */
-export async function withPrivateTmp<T>(wanted: boolean, work: (folder: string | null) => Promise<T>): Promise<T> {
-  if (!wanted) return work(null);
-  const parent = join(real(settings.data_dir), "tmp");
-  mkdirSync(parent, { recursive: true });
-  const folder = mkdtempSync(join(parent, "sp-codex-tmp-"));
-  try {
-    return await work(folder);
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-}
-
-/** Options that make one Codex run the platform's rather than the user's: how hard it thinks, its
- *  service tier, and none of the user's plugins, apps and MCP servers. */
-export function codexSettings(effort: string | null = null, serviceTier = ""): string[] {
-  const options: string[] = [];
-  if (effort) options.push("-c", `model_reasoning_effort="${CODEX_EFFORTS[effort] ?? effort}"`);
-  if (serviceTier) options.push("-c", `service_tier="${serviceTier}"`);
-  if (settings.codex_without_extras) {
-    for (const name of CODEX_EXTRAS) options.push("--disable", name);
-    // Codex splits a -c key on dots and takes quotes literally: only plain names can be addressed.
-    for (const name of deps.codexServers()) if (/^[A-Za-z0-9_-]+$/.test(name)) options.push("-c", `mcp_servers.${name}.enabled=false`);
-  }
-  return options;
-}
-
-// Codex refuses rm -f and the like as dangerous even inside its sandbox (its exec policy), which
-// stops builds and clean-ups; an allow rule in the folder it works in lifts that, and its sandbox
-// still keeps everything outside the folder read-only. rm with wildcards or $(...) stays refused,
-// since Codex cannot tell what it removes (2026-10-21); steps are told to use find -delete.
-export const CODEX_RULES = ".codex/rules/fluidform.rules";
-export const CODEX_ALLOW = 'prefix_rule(pattern=["rm"], decision="allow")\n';
-const ruleUsers = new Map<string, number>();
-
-/** ``work`` with the allow rule in ``cwd`` while Codex works there, then gone again (with any folder
- *  it made), so neither a task's results nor a project keep it. Steps at once in one folder share it. */
-export async function withCodexRules<T>(cwd: string, work: () => Promise<T>): Promise<T> {
-  const rule = join(cwd, CODEX_RULES);
-  let made = [dirname(dirname(rule)), dirname(rule)].filter((folder) => !existsSync(folder));
-  if (!ruleUsers.get(rule)) {
-    try {
-      mkdirSync(dirname(rule), { recursive: true });
-      writeFileSync(rule, CODEX_ALLOW);
-    } catch {
-      made = [];
-    }
-  }
-  ruleUsers.set(rule, (ruleUsers.get(rule) ?? 0) + 1);
-  try {
-    return await work();
-  } finally {
-    ruleUsers.set(rule, ruleUsers.get(rule)! - 1);
-    if (!ruleUsers.get(rule)) {
-      ruleUsers.delete(rule);
-      try {
-        unlinkSync(rule);
-        for (const folder of [...made].reverse()) rmdirSync(folder);
-      } catch {
-        // already gone, or not empty
-      }
-    }
-  }
-}
-
-/** Let the CLI open attached files, which live outside its working directory. */
-export function withAttachments(modelId: string, args: string[], attachments: Attachment[]): string[] {
-  if (!attachments.length) return args;
-  if (modelId === "cli:codex") {
-    // Codex reads the whole disk in its sandbox; images also go in as real image inputs. "--image="
-    // keeps the value from swallowing the trailing "-" (prompt on stdin).
-    const images = attachments.filter((item) => item.kind === "image").map((item) => `--image=${attachmentPath(item)}`);
-    return [args[0], ...images, ...args.slice(1)];
-  }
-  if (modelId === "cli:claude") return [...args, "--add-dir", ...[...new Set(attachments.map((item) => dirname(attachmentPath(item))))].sort()];
-  return args;
-}
-
 // What tests replace.
 export const deps = {
   which: (name: string) => environment.which(name),
-  codexSettings: (effort: string | null = null, serviceTier = "") => codexSettings(effort, serviceTier),
-  codexStepPermissions: (workdir: string, network: boolean, options: { lead?: boolean; tmpdir?: string | null; readable?: string[] } = {}) =>
-    codexStepPermissions(workdir, network, options),
-  codexServers: () => codexServers(),
   repairCommand: (executable: string, args: string[]) => repairCommand(executable, args),
   ownNetwork: (command: string[]) => ownNetwork(command),
   // The host ports a step's sandbox reaches (none without socat, which bridges them).
@@ -499,7 +163,7 @@ export class CliChannelRegistry {
   refresh(): Record<string, CliStatus> {
     const channels = modelChannels.active();
     this.channelsKey = channels.map((channel) => channel.id).sort().join(",");
-    const specs = [...Object.values(CLI_SPECS), ...channels.map((channel) => specFor(channel.id)!)];
+    const specs = channels.map((channel) => specFor(channel.id)!);
     this.cached = Object.fromEntries(specs.map((spec) => [spec.id, this.probe(spec)]));
     return this.cached;
   }
@@ -528,36 +192,6 @@ export class CliChannelRegistry {
     const authenticated = auth.status === 0 && !["not logged in", "unauthenticated", "login required"].some((marker) => output.includes(marker));
     const type = authenticated ? (["chatgpt", "claude.ai", "subscription"].some((word) => output.includes(word)) ? "membership" : "authenticated") : null;
     return { id: spec.id, installed: true, authenticated, auth_type: type, version: shown, error: authenticated ? null : "CLI is installed but not authenticated" };
-  }
-
-  /** Check the fully assembled input and retry only an explicitly rejected, smaller input. */
-  async runInput(spec: CliSpec, command: string[], cwd: string, prompt: string, timeout: number, options: RunOptions = {}): Promise<string> {
-    if (spec.id !== "cli:codex") return this.run(spec, command, cwd, Buffer.from(prompt, "utf8"), timeout, options);
-    let text = codexInput(prompt);
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const output = await this.run(spec, command, cwd, Buffer.from(text, "utf8"), timeout, options);
-        // Some CLI versions emit a failed turn with a zero exit status.
-        for (const line of splitlines(output)) {
-          let event: unknown;
-          try {
-            event = JSON.parse(line);
-          } catch {
-            continue;
-          }
-          if (isObject(event) && (event.type === "turn.failed" || event.type === "error") && inputTooLarge(pyStr(event))) {
-            throw new InputTooLarge("input_too_large: Codex rejected the input");
-          }
-        }
-        return output;
-      } catch (error) {
-        if (!(error instanceof CliError) && !(error instanceof InputTooLarge)) throw error;
-        if (!inputTooLarge(error)) throw error;
-        if (attempt) throw new InputTooLarge("input_too_large: 缩减后仍被拒绝，停止重试，交回负责人拆分上下文。");
-        text = codexInput(text, { retry: true });
-      }
-    }
-    throw new InputTooLarge("input_too_large");
   }
 
   /** Run a CLI command in its own process group and return its output; a failure throws CliError,
@@ -678,111 +312,47 @@ export class CliChannelRegistry {
     return Buffer.concat(out).toString("utf8");
   }
 
-  /** Run ``command`` in ``modelId``'s own sandbox exactly as its steps get it (the step's permission
-   *  profile; a TMPDIR of its own; the environment the platform gives every CLI), without the model:
-   *  its output, and whether it exited 0. Only Codex can (codex sandbox); CliError for any other CLI. */
+  /** What a package with its own sandbox runs its commands through: this registry's ``run`` for
+   *  ``spec``, and the lookups tests replace. */
+  runner(spec: CliSpec): modelChannels.Runner {
+    return {
+      run: (command, cwd, stdin, timeout, options = {}) => this.run(spec, command, cwd, stdin, timeout, options),
+      which: (name) => deps.which(name),
+      hostPorts: () => deps.hostPorts(),
+      ownNetwork: (command) => deps.ownNetwork(command),
+      repairCommand: (executable, args) => deps.repairCommand(executable, args),
+    };
+  }
+
+  /** Run ``command`` in ``modelId``'s own sandbox exactly as its steps get it, without the model: its
+   *  output, and whether it exited 0. Only a CLI whose package can (Codex: codex sandbox); CliError otherwise. */
   async sandboxRun(modelId: string, command: string, cwd: string, timeout: number, network = false): Promise<[string, boolean]> {
-    const executable = modelId === "cli:codex" ? deps.which(CLI_SPECS[modelId].executable) : null;
-    if (!executable) throw new CliError(`${modelId} cannot run a command in its sandbox without the model`);
-    return withPrivateTmp(true, async (tmp) => {
-      let argv = [executable, "sandbox", "-P", CODEX_STEP_PROFILE, "-C", cwd, ...deps.codexStepPermissions(cwd, network, { tmpdir: tmp }),
-        "--", "/bin/bash", "-c", command];
-      // The network a step gets: see completeIn.
-      if (network) argv = await deps.ownNetwork(argv);
-      const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...environment.commandEnv({ ...process.env } as Record<string, string>), TMPDIR: tmp! },
-        stdio: ["ignore", "pipe", "pipe"], detached: true });
-      const chunks: Buffer[] = [];
-      child.stdout!.on("data", (chunk: Buffer) => chunks.push(chunk));
-      child.stderr!.on("data", (chunk: Buffer) => chunks.push(chunk));
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        killGroup(child);
-      }, timeout * 1000);
-      const code = await new Promise<number | null>((done) => child.on("close", done).on("error", () => done(null)));
-      clearTimeout(timer);
-      if (timedOut) return [`Command timed out after ${formatG(timeout)}s`, false];
-      const text = Buffer.concat(chunks).toString("utf8").trim() || "(the command printed no output)";
-      return [code ? `Exit code ${code}\n${text}` : text, !code];
-    });
+    const channel = modelChannels.channelFor(modelId);
+    if (!channel?.own?.sandboxRun) throw new CliError(`${modelId} cannot run a command in its sandbox without the model`);
+    return channel.own.sandboxRun(this.runner(specFor(modelId)!), command, cwd, timeout, network);
   }
 
   /** Say ``prompt`` in the conversation ``sessionId`` (a new one without it), in ``cwd``; the reply
-   *  and the conversation's id. Only SESSION_CLIS keep conversations. Without ``timeout``, Codex
-   *  (which prints its work as it goes) runs while it keeps printing, stopped after lead_idle_minutes
-   *  without output, at most lead_call_max_minutes; Claude Code gets lead_call_max_minutes. With it,
-   *  ``timeout`` is a hard limit. */
+   *  and the conversation's id. Only CLIs whose package keeps conversations. With ``timeout`` it is a
+   *  hard limit; without, each CLI's own pace (Codex while it keeps printing; at most lead_call_max_minutes). */
   async converse(modelId: string, prompt: string, cwd: string, { sessionId = null, timeout = null, effort = null, attachments = [], signal }:
     { sessionId?: string | null; timeout?: number | null; effort?: string | null; attachments?: Attachment[]; signal?: AbortSignal } = {}): Promise<[CliText, string]> {
     const channel = modelChannels.channelFor(modelId);
-    if (channel?.sessions) {
-      const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
-      const call = { prompt, cwd, lead: true, sessionId, readable };
-      let reply: modelChannels.ChannelReply;
-      try {
-        reply = await this.channelRun(channel, call, false, timeout ?? settings.lead_call_max_minutes * 60, { signal });
-      } catch (error) {
-        if (sessionId && error instanceof CliError && SESSION_MISSING.test(error.message)) throw new SessionLost(error.message);
-        throw error;
+    if (!channel?.sessions) throw new CliError(`${modelId} cannot keep a conversation here`);
+    try {
+      if (channel.own) {
+        if (!channel.own.converse) throw new CliError(`${modelId} cannot keep a conversation here`);
+        return await channel.own.converse(this.runner(specFor(modelId)!), { prompt, cwd, sessionId, timeout, effort, attachments, signal });
       }
+      const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
+      const reply = await this.channelRun(channel, { prompt, cwd, lead: true, sessionId, readable }, false,
+        timeout ?? settings.lead_call_max_minutes * 60, { signal });
       if (!reply.sessionId) throw new CliError(`${channel.executable} did not report its conversation id`);
       return [{ text: reply.text, usage: reply.usage }, reply.sessionId];
-    }
-    const spec = CLI_SPECS[modelId];
-    const executable = spec ? deps.which(spec.executable) : null;
-    if (!executable || !(modelId in SESSION_ARGS)) throw new CliError(`${modelId} cannot keep a conversation here`);
-    let sid: string | null;
-    let args: string[];
-    if (modelId === "cli:claude") {
-      sid = sessionId || randomUUID();
-      args = [...SESSION_ARGS[modelId], sessionId ? "--resume" : "--session-id", sid];
-      if (attachments.length) args.push("--add-dir", ...[...new Set(attachments.map((item) => dirname(attachmentPath(item))))].sort());
-      if (effort) {
-        args.push("--effort", effort);
-        const record = calls.row();
-        if (record) record.effective_effort = effort;
-      }
-    } else {
-      sid = sessionId;
-      args = sessionId ? ["exec", "resume", sessionId, "--json", "--skip-git-repo-check", "-"] : [...SESSION_ARGS[modelId], "-"];
-      // `exec resume` parses its own options. Overrides on the outer `exec` are discarded on resume,
-      // restoring the user's effort/tier/plugins instead.
-      const options = [...deps.codexSettings(effort || settings.lead_reasoning_effort, settings.codex_lead_service_tier),
-        ...deps.codexStepPermissions(cwd, false, { lead: true, readable: attachments.map((item) => dirname(attachmentPath(item))) })];
-      const position = sessionId ? 3 : 1;
-      args = [...args.slice(0, position), ...options, ...args.slice(position)];
-      // Images go in as real image inputs ("--image=" keeps the trailing "-" for stdin).
-      if (!sessionId) args = [args[0], ...attachments.filter((item) => item.kind === "image").map((item) => `--image=${attachmentPath(item)}`), ...args.slice(1)];
-      const record = calls.row();
-      if (record) {
-        const chosen = effort || settings.lead_reasoning_effort;
-        record.effective_effort = CODEX_EFFORTS[chosen] ?? chosen;
-      }
-    }
-    calls.save();
-    let output: string;
-    try {
-      const idle = timeout === null && modelId === "cli:codex" ? settings.lead_idle_minutes * 60 : null;
-      output = await this.runInput(spec, [executable, ...args], cwd, prompt, timeout ?? settings.lead_call_max_minutes * 60, { idle, signal });
     } catch (error) {
       if (sessionId && error instanceof CliError && SESSION_MISSING.test(error.message)) throw new SessionLost(error.message);
       throw error;
     }
-    if (modelId === "cli:claude") {
-      const payload = JSON.parse(output);
-      return [{ text: pyStr(payload.result || ""), usage: cliUsage(payload) }, pyStr(payload.session_id || sid)];
-    }
-    for (const line of splitlines(output)) {
-      let event: unknown;
-      try {
-        event = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (isObject(event) && event.type === "thread.started") sid = (event.thread_id as string) || sid;
-    }
-    if (!sid) throw new CliError("codex did not report its conversation id");
-    return [codexOutput(output), sid];
   }
 
   /** Run a CLI in ``cwd``. With ``repair`` it leaves its sandbox to fix the environment; with
@@ -792,35 +362,24 @@ export class CliChannelRegistry {
     effort = null, toolTrace = null, signal }: { timeout?: number; attachments?: Attachment[]; repair?: boolean; network?: boolean;
     watch?: progress.Watch | null; effort?: string | null; toolTrace?: string | null; signal?: AbortSignal } = {}): Promise<CliText> {
     const channel = modelChannels.channelFor(modelId);
-    if (channel) {
-      const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
-      const call = { prompt, cwd, lead: false, sessionId: null, readable };
-      try {
-        const reply = await this.channelRun(channel, call, network, timeout, { watch, toolTrace, signal }, repair);
-        trace(toolTrace, "cli.result", { text: reply.text, model_id: modelId });
-        return { text: reply.text, usage: reply.usage };
-      } catch (error) {
-        trace(toolTrace, "cli.error", { reason: (error as Error).message || (error as Error).name });
-        throw error;
+    if (!channel) throw new CliError(`${modelId} is not a CLI in use`);
+    let text: CliText;
+    try {
+      if (channel.own) {
+        text = await channel.own.complete(this.runner(specFor(modelId)!),
+          { prompt, cwd, timeout, attachments, repair, network, watch, effort, toolTrace, signal });
+      } else {
+        const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
+        const reply = await this.channelRun(channel, { prompt, cwd, lead: false, sessionId: null, readable }, network, timeout,
+          { watch, toolTrace, signal }, repair);
+        text = { text: reply.text, usage: reply.usage };
       }
+    } catch (error) {
+      trace(toolTrace, "cli.error", { reason: (error as Error).message || (error as Error).name });
+      throw error;
     }
-    const spec = CLI_SPECS[modelId];
-    if (!spec) throw new CliError(`${modelId} is not a CLI in use`);
-    const executable = deps.which(spec.executable);
-    if (!executable) throw new CliError(`${spec.executable} is no longer installed`);
-    const args = [...(repair ? REPAIR_ARGS[spec.id] ?? spec.invoke_args : spec.invoke_args)];
-    const step = spec.id === "cli:codex" && !repair;
-    return withPrivateTmp(step, async (tmp) => {
-      let text: CliText;
-      try {
-        text = await this.completeIn(spec, executable, args, step, tmp, prompt, cwd, timeout, attachments, repair, network, watch, effort, toolTrace, signal);
-      } catch (error) {
-        trace(toolTrace, "cli.error", { reason: (error as Error).message || (error as Error).name });
-        throw error;
-      }
-      trace(toolTrace, "cli.result", { text: text.text, model_id: modelId });
-      return text;
-    });
+    trace(toolTrace, "cli.result", { text: text.text, model_id: modelId });
+    return text;
   }
 
   /** One call of a model package's CLI, always in FluidForm's sandbox for it (model-channels.ts),
@@ -831,15 +390,15 @@ export class CliChannelRegistry {
     const spec = specFor(channel.id)!;
     const executable = deps.which(channel.executable);
     if (!executable) throw new CliError(`${channel.executable} is no longer installed`);
-    const argv = [executable, ...channel.args(call)];
-    const input = channel.stdin(call);
+    const argv = [executable, ...channel.args!(call)];
+    const input = channel.stdin!(call);
     const stdin = input === null ? null : Buffer.from(input, "utf8");
     const exit = { code: null as number | null, stderr: "" };
     const stdout = repair
       ? await this.run(spec, deps.repairCommand(argv[0], argv.slice(1)), call.cwd, stdin, timeout, { ...options, exit })
       : await modelChannels.withSandbox(channel, argv, call, network, (command, env) =>
         this.run(spec, command, call.cwd, stdin, timeout, { ...options, extraEnv: { ...(options.extraEnv ?? {}), ...env }, exit }));
-    const reply = channel.parse(stdout);
+    const reply = channel.parse!(stdout);
     if (reply.quota) throw new CliError(`${channel.executable} usage limit reached: ${reply.error}`);
     if (reply.error || exit.code) {
       // What it said in its answer, and, when it exited with an error, what it printed besides.
@@ -847,48 +406,5 @@ export class CliChannelRegistry {
       throw new CliError(`${channel.executable} failed: ${[reply.error, detail].filter(Boolean).join("; ")}`);
     }
     return reply;
-  }
-
-  async completeIn(spec: CliSpec, executable: string, given: string[], step: boolean, tmp: string | null, prompt: string, cwd: string,
-    timeout: number, attachments: Attachment[], repair: boolean, network: boolean, watch: progress.Watch | null, effort: string | null,
-    toolTrace: string | null, signal?: AbortSignal): Promise<CliText> {
-    let args = given;
-    if (step) {
-      // Codex's own sandbox with the step's permission profile instead of workspace-write.
-      const at = args.indexOf("--sandbox");
-      args = [...args.slice(0, at), ...args.slice(at + 2)];
-      args = [args[0], ...deps.codexStepPermissions(cwd, network, { tmpdir: tmp }), ...args.slice(1)];
-    } else if (network && !repair) args = withNetwork(spec.id, args);
-    // A Claude Code step reaches this machine's recorded host ports, and only those (withHostPorts).
-    const ports = spec.id === "cli:claude" && !repair ? await deps.hostPorts() : [];
-    args = withHostPorts(args, ports);
-    args = withAttachments(spec.id, args, attachments);
-    if (spec.id === "cli:codex") {
-      args = [args[0], ...deps.codexSettings(effort), ...args.slice(1)];
-      if (!args.includes("--json")) args.splice(1, 0, "--json");
-    }
-    const stdin: Buffer | null = Buffer.from(prompt, "utf8");
-    // A Codex step allowed the internet gets the network Codex runs in: its own (ownNetwork), so the
-    // internet and this machine's recorded host ports, not every local service.
-    const command = repair ? deps.repairCommand(executable, args)
-      : step && network ? await deps.ownNetwork([executable, ...args]) : [executable, ...args];
-    const stdout = await withClaudeBridge(ports, async (bridge) => {
-      const extraEnv = tmp || ports.length ? { ...(tmp ? { TMPDIR: tmp } : {}), ...bridge } : null;
-      const options: RunOptions = { watch, extraEnv, toolTrace, signal };
-      const run = () => (spec.id === "cli:codex" ? this.runInput(spec, command, cwd, prompt, timeout, options)
-        : this.run(spec, command, cwd, stdin, timeout, options));
-      return step ? withCodexRules(cwd, run) : run();
-    });
-    if (spec.id === "cli:codex") return codexOutput(stdout);
-    const text = stdout.trim();
-    if (spec.id === "cli:claude") {
-      try {
-        const payload = JSON.parse(text);
-        if (isObject(payload)) return { text: pyStr(payload.result || payload.response || payload.text || text), usage: cliUsage(payload) };
-      } catch {
-        // not JSON: the text as it is
-      }
-    }
-    return { text, usage: {} };
   }
 }

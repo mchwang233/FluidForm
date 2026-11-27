@@ -264,7 +264,7 @@ test("Gemini CLI and Qwen Code are model packages, called as they were before", 
     assert.equal(channel.sessions, false, "neither leads a task");
     assert.equal(modelChannels.ownerOf(channel.id)?.provides[0], `model:${channel.id}`);
   }
-  assert.ok(!(("cli:gemini" in cli.CLI_SPECS) || ("cli:qwen" in cli.CLI_SPECS)), "FluidForm no longer has them built in");
+  assert.ok(!ownModels().some((item) => item.channel === "cli"), "FluidForm has no CLI built in");
   assert.ok(builtinModels().some((item) => item.id === "cli:gemini") && builtinModels().some((item) => item.id === "cli:qwen"));
   assert.ok(!ownModels().some((item) => item.id === "cli:gemini" || item.id === "cli:qwen"));
 });

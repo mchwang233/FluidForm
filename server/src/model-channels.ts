@@ -11,6 +11,9 @@ import { DomainProxy, PROXY_PORT } from "./capability-sandbox.js";
 import * as environment from "./environment.js";
 import * as extensions from "./extensions.js";
 import { log } from "./log.js";
+import type { CliText, RunOptions } from "./cli-channels.js";
+import type { Attachment } from "./models.js";
+import type * as progress from "./progress.js";
 import * as provided from "./provided.js";
 
 /** One call of a package's CLI, as FluidForm sets it up. */
@@ -40,7 +43,38 @@ export type ChannelReply = {
   quota: boolean;
 };
 
-/** What a model package's code exports as ``channel`` (its src/index). */
+/** How FluidForm runs a command a package built: in its own process group, with the timeouts,
+ *  progress checks, live activity and trace every CLI gets (CliChannelRegistry.run). */
+export type Runner = {
+  run(command: string[], cwd: string, stdin: Buffer | null, timeout: number, options?: RunOptions): Promise<string>;
+  which(name: string): string | null;
+  /** This machine's recorded host ports (a license server), none without socat. */
+  hostPorts(): Promise<number[]>;
+  /** ``command`` in a network of its own: the internet, the proxies and the host ports (agent.ownNetwork). */
+  ownNetwork(command: string[]): Promise<string[]>;
+  /** ``executable`` on the host as the user, under no_new_privs, to repair the environment. */
+  repairCommand(executable: string, args: string[]): string[];
+};
+
+/** A step's call of a CLI with a sandbox of its own. */
+export type OwnStep = { prompt: string; cwd: string; timeout: number; attachments: Attachment[]; repair: boolean; network: boolean;
+  watch: progress.Watch | null; effort: string | null; toolTrace: string | null; signal?: AbortSignal };
+/** The lead's call: a conversation, continued with ``sessionId``; ``timeout`` null for the CLI's own pace. */
+export type OwnConversation = { prompt: string; cwd: string; sessionId: string | null; timeout: number | null; effort: string | null;
+  attachments: Attachment[]; signal?: AbortSignal };
+
+/** A CLI whose own sandbox has been measured and is kept (Codex, Claude Code): the package builds each
+ *  command with that sandbox's settings, FluidForm runs it. */
+export type OwnSandbox = {
+  complete(runner: Runner, call: OwnStep): Promise<CliText>;
+  converse?(runner: Runner, call: OwnConversation): Promise<[CliText, string]>;
+  /** ``command`` in its sandbox exactly as a step gets it, without the model: its output, and whether it exited 0. */
+  sandboxRun?(runner: Runner, command: string, cwd: string, timeout: number, network: boolean): Promise<[string, boolean]>;
+};
+
+/** What a model package's code exports as ``channel`` (its src/index). Either it gives ``own`` (its
+ *  CLI's own sandbox, kept), or FluidForm runs it in its sandbox (withSandbox) from ``args``,
+ *  ``stdin``, ``parse``, ``state`` and ``hosts``. */
 export type ModelChannel = {
   /** The model id it serves, "cli:<name>"; its catalog entry is in the package's capability.json. */
   id: string;
@@ -51,16 +85,17 @@ export type ModelChannel = {
   fallback_model_id: string;
   /** Whether it keeps a conversation, so it can be a task's lead. */
   sessions: boolean;
+  own?: OwnSandbox;
   /** Folders under the home it keeps its login and state in: the only part of the home it sees, writable. */
-  state: string[];
+  state?: string[];
   /** Hosts it calls its model at: all a call without the internet reaches (through FluidForm's proxy). */
-  hosts: string[];
+  hosts?: string[];
   /** Its arguments for ``call``, after the executable. */
-  args(call: ChannelCall): string[];
+  args?(call: ChannelCall): string[];
   /** What it reads on stdin, or null. */
-  stdin(call: ChannelCall): string | null;
+  stdin?(call: ChannelCall): string | null;
   /** Its answer, from what it printed. */
-  parse(stdout: string): ChannelReply;
+  parse?(stdout: string): ChannelReply;
 };
 
 const registered = new Map<string, ModelChannel>();
@@ -79,6 +114,9 @@ export function channelFor(modelId: string): ModelChannel | null {
   const owner = ownerOf(modelId);
   return channel && owner && provided.deps.extensionOn(owner, provided.current(), `model:${modelId}`) ? channel : null;
 }
+
+/** The executables of every channel loaded, on or off (tests keep real CLIs out of reach with it). */
+export const executables = (): string[] => [...registered.values()].map((channel) => channel.executable);
 
 /** The channels in use now. */
 export function active(): ModelChannel[] {
@@ -119,7 +157,7 @@ export function programFiles(executable: string): string[] {
  *  the folders it is to read; a /tmp of its own. */
 export function fileSystem(channel: ModelChannel, executable: string, call: ChannelCall): string[] {
   const home = real(homedir());
-  const state = channel.state.map((folder) => join(home, folder)).filter(isDir).flatMap((folder) => ["--bind", folder, folder]);
+  const state = (channel.state ?? []).map((folder) => join(home, folder)).filter(isDir).flatMap((folder) => ["--bind", folder, folder]);
   const keepProgram = programFiles(executable).flatMap((path) => ["--ro-bind", path, path]);
   const cwd = real(call.cwd);
   const [outer, inner, masked] = new Workspace(cwd).platformData();
@@ -153,7 +191,7 @@ export async function withSandbox<T>(channel: ModelChannel, argv: string[], call
   const env = { TMPDIR: "/tmp" };
   if (network && !call.lead) return work(await deps.ownNetwork(["bwrap", ...files, "--", ...argv]), env);
   const ports = call.lead ? [] : await deps.hostPorts();
-  const proxy = await new DomainProxy(channel.hosts, (line) => log.info(`${channel.id}: ${line}`)).open();
+  const proxy = await new DomainProxy(channel.hosts ?? [], (line) => log.info(`${channel.id}: ${line}`)).open();
   try {
     return await portBridge(ports, (folder) => {
       // The host ports' sockets and the proxy's, side by side where the listeners inside look.

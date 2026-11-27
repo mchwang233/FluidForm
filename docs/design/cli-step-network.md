@@ -19,7 +19,7 @@ Codex 自己没有"只放行某几个端口"这一档：不联网就禁 TCP，�
 
 - **`agent.ownNetwork`**：给自带沙箱的 CLI 套上一层自己的网络命名空间。pasta 加 `--no-map-gw`，只转发代理端口和 `environment.hostPorts()`（`host_ports` 设置，加上这台机器 `sandbox.json` 里记的端口）。再用 bwrap 把 pasta 里的 root 映射回用户本人，否则 Codex 自己的沙箱起不来（`Failed to start command or shell: Permission denied`）。没有 pasta、或者映射不回用户时，命令原样返回，和以前一样。
 - **真正的管道**：pasta 会把是 socket 的 stdin/stdout/stderr 换成 `/dev/null`，而 Node 给子进程的"管道"就是 socket。所以前面套一层 bash（`REAL_PIPES`），由它建真正的管道，把数据和退出码传回来。喂 stdin 的进程在命令结束后就停掉，调用方不关 stdin 也不会挂住。
-- **`cli-channels.ts`**：允许联网的 Codex 步骤（`completeIn`）和启动前检查用的联网 `sandboxRun` 都经过 `deps.ownNetwork`，所以检查看到的网络和步骤一样。不联网的 Codex、Codex 负责人、Claude、Gemini、Qwen 都不变。
+- **`cli-channels.ts`**（现在在 `server/packages/codex`）：允许联网的 Codex 步骤（`complete`）和启动前检查用的联网 `sandboxRun` 都经过 `deps.ownNetwork`，所以检查看到的网络和步骤一样。不联网的 Codex、Codex 负责人、Claude、Gemini、Qwen 都不变。
 
 改完之后，允许联网的 Codex 步骤：互联网和代理照常可用，`host_ports` 里的端口能连（比如许可证服务），**其他本机服务都连不到**。不联网的 Codex 步骤和以前一样，什么 TCP 都连不了。
 
@@ -46,8 +46,8 @@ Codex 自己没有"只放行某几个端口"这一档：不联网就禁 TCP，�
 
 Claude Code 在 Linux 上给每条沙箱命令一个私有网络，直连本机一律失败；它自己的代理只放行 `allowedDomains` 里写明的 `host:port`（只写主机会打开所有端口，`"*"` 不包括本机地址）。FlexLM 不走代理，所以之前 claude 步骤里的 VCS 一直签不出许可证。
 
-- `cli-channels.withHostPorts`：有记下的端口时，设置里放行 `127.0.0.1:<端口>`，打开 `allowLocalBinding`。联网时把 `127.0.0.1` 从禁止名单拿掉（禁止优先，否则会盖过放行的端口），`localhost`、`::1` 仍禁止。
-- `agent.proxyListenScript` 和 `cli-channels.withClaudeBridge`：生成一个 `CLAUDE_ENV_FILE`（Claude Code 在每条沙箱命令前加载它），在命令的私有网络里为每个端口起 socat，经沙箱代理（HTTP CONNECT，带它的认证）转出去。用户自己的 `CLAUDE_ENV_FILE` 先加载。调用结束就删掉。没有 socat 或没有代理时什么都不做。
+- `withHostPorts`（现在在 `server/packages/claude-code`）：有记下的端口时，设置里放行 `127.0.0.1:<端口>`，打开 `allowLocalBinding`。联网时把 `127.0.0.1` 从禁止名单拿掉（禁止优先，否则会盖过放行的端口），`localhost`、`::1` 仍禁止。
+- `agent.proxyListenScript` 和 `withClaudeBridge`（`server/packages/claude-code`）：生成一个 `CLAUDE_ENV_FILE`（Claude Code 在每条沙箱命令前加载它），在命令的私有网络里为每个端口起 socat，经沙箱代理（HTTP CONNECT，带它的认证）转出去。用户自己的 `CLAUDE_ENV_FILE` 先加载。调用结束就删掉。没有 socat 或没有代理时什么都不做。
 - 只给步骤（`completeIn`，不含修复）。负责人的会话不变。
 
 实测（Claude Code 2.1.332，真实 `complete("cli:claude")`）：不联网、联网两种情况都 `snpslmd: UP`，`vcs -full64` 编译返回 0、`simv` 输出正常；FluidForm 的 API 直连、走代理、写 `localhost` 都连不上，其他本机端口也连不上。

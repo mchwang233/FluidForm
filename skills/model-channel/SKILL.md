@@ -5,8 +5,7 @@ description: How to add or change a model channel in FluidForm itself (an API pr
 
 # Adding a model channel
 
-A channel is how FluidForm runs one model: an API provider (`providers.ts`, `catalog.ts`), a built-in
-CLI (`cli-channels.ts` `CLI_SPECS`, `catalog.ts`), or a **model package** (`server/packages/<id>`,
+A channel is how FluidForm runs one model: DeepSeek's API (FluidForm's own), or a **model package** (`server/packages/<id>`,
 `docs/design/model-packages.md`). A new CLI is a model package: its `capability.json` (kind
 `extension`, `provides: ["model:cli:<name>"]`, its catalog entry in `models`) and its `src/index.ts`,
 which exports a `ModelChannel` (`model-channels.ts`): its arguments, stdin, how to read its output and
@@ -19,7 +18,9 @@ A new **API provider** is a package with only a `capability.json` (`provides: ["
 OpenAI-compatible wire, nothing else changes: give its URLs, key variable, the efforts it accepts
 (`efforts`) and its output-limit field. A new wire protocol is core work in `providers.ts`.
 
-Each built-in CLI brings **its own sandbox**, and each one behaves differently. Never assume;
+A CLI whose own sandbox has been measured can keep it (`ModelChannel.own`, as Codex and Claude Code
+do): the package builds each command with that sandbox's settings and runs it through the `Runner`
+FluidForm gives it. Each CLI's own sandbox behaves differently. Never assume;
 measure every item below on the real CLI before writing code, and keep the measured answers in the
 design note.
 
@@ -57,9 +58,9 @@ How the existing channels meet them (reuse these, do not invent a fourth way):
 
 - **API models**: FluidForm's own bwrap (`agent.ts` `sandboxArgs`); host ports by Unix socket and
   socat (`portBridge`, `listenScript`); the internet through pasta (`networkPrefix`, `--no-map-gw`).
-- **Codex**: its permission profile (`codexStepPermissions`); with the internet, the whole CLI in a
+- **Codex** (`server/packages/codex`): its permission profile (`codexStepPermissions`); with the internet, the whole CLI in a
   network of its own (`agent.ownNetwork`): pasta forwards only the proxies and the host ports.
-- **Claude Code**: its settings (`withNetwork`, `withHostPorts`): only `127.0.0.1:<port>` in
+- **Claude Code** (`server/packages/claude-code`): its settings (`withNetwork`, `withHostPorts`): only `127.0.0.1:<port>` in
   `allowedDomains`, and `CLAUDE_ENV_FILE` (`withClaudeBridge`, `proxyListenScript`) bridges each port
   through its proxy inside each command, because license clients ignore proxies.
 - **Model packages** (agy): FluidForm's bwrap around the whole CLI (`model-channels.withSandbox`):

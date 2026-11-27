@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import * as files from "../src/attachments.js";
 import { builtinModels } from "../src/catalog.js";
-import { withAttachments } from "../src/cli-channels.js";
+import { withAttachments as claudeAttachments } from "../packages/claude-code/src/index.js";
+import { withAttachments as codexAttachments } from "../packages/codex/src/index.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import {
@@ -108,9 +109,9 @@ test("CLI agents are pointed at the attached files", () => {
   taskApi(folder());
   const image = files.save("screen.png", PNG);
   const note = files.save("spec.txt", Buffer.from("spec"));
-  assert.deepEqual(withAttachments("cli:codex", ["exec", "--color", "never", "-"], [image, note]),
+  assert.deepEqual(codexAttachments(["exec", "--color", "never", "-"], [image, note]),
     ["exec", `--image=${files.path(image)}`, "--color", "never", "-"]);
-  const claude = withAttachments("cli:claude", ["-p"], [image, note]);
+  const claude = claudeAttachments(["-p"], [image, note]);
   assert.deepEqual(claude.slice(0, 2), ["-p", "--add-dir"]);
   assert.ok(claude.includes(dirname(files.path(note))));
   assert.ok(files.describe([image, note], true).includes(files.path(note)));

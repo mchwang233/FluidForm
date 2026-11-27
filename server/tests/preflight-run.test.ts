@@ -1,4 +1,5 @@
 // The check before a task's first step, inside the executor: tests/test_preflight.py, ported.
+import * as codex from "../packages/codex/src/index.js";
 import assert from "node:assert/strict";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -170,7 +171,7 @@ test("a tool Codex cannot find stops the task before any step", needsBwrap, asyn
 test("a Codex step reads only its folder and what it needs", () => {
   const home = resolve(fakeHome());
   const cwd = join(settings.workspace_root, "this-task");
-  const rules = resolved(rulesOf(cliChannels.codexStepPermissions(cwd, false)));
+  const rules = resolved(rulesOf(codex.codexStepPermissions(cwd, false)));
   const data = resolve(settings.data_dir);
   const denied = new Set(Object.entries(rules).filter(([, mode]) => mode === "deny").map(([path]) => path));
   for (const path of [join(home, ".ssh"), join(home, "code"), join(home, "notes.txt"), join(home, ".codex", "auth.json"), join(data, "fluidform.db"),
@@ -180,13 +181,13 @@ test("a Codex step reads only its folder and what it needs", () => {
   assert.ok(!denied.has(join(home, ".codex", "tmp")) && !denied.has(join(data, "tools"))); // Codex's helper, the tools
   assert.ok(rules[resolve(cwd)] === "write" && rules[":tmpdir"] === "write");
   // A lead reads, the tasks' folders included, and nothing is written.
-  const lead = rulesOf(cliChannels.codexStepPermissions(join(home, ".codex"), false, { lead: true }));
+  const lead = rulesOf(codex.codexStepPermissions(join(home, ".codex"), false, { lead: true }));
   assert.ok(!Object.values(lead).includes("write") && !Object.keys(lead).some((path) => path.includes("other-task")));
   // A chat's lead may read its own attachments, and no one else's.
   const mine = join(data, "attachments", "mine", "content");
   mkdirSync(mine, { recursive: true });
   mkdirSync(join(data, "attachments", "theirs", "content"), { recursive: true });
-  const chat = resolved(rulesOf(cliChannels.codexStepPermissions(join(home, ".codex"), false, { lead: true, readable: [mine] })));
+  const chat = resolved(rulesOf(codex.codexStepPermissions(join(home, ".codex"), false, { lead: true, readable: [mine] })));
   assert.ok(chat[mine] === "read" && !Object.values(chat).includes("write"));
   assert.equal(chat[join(data, "attachments", "theirs")], "deny");
 });

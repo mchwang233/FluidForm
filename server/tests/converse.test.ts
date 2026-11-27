@@ -59,8 +59,9 @@ test("a conversation message carries attachments to either kind of model", async
   assert.ok((api.history[0] as any).content.includes("KeyError 'id'"));
   // A CLI: told where the files are, allowed to read just those folders, the image given as an image.
   const commands: [string[], string][] = [];
-  registry.cli.runInput = async (_spec, command, _cwd, prompt) => {
-    commands.push([command, prompt]);
+  // Both CLIs' packages run through the registry's run, the prompt on stdin.
+  registry.cli.run = async (_spec, command, _cwd, stdin) => {
+    commands.push([command, stdin!.toString("utf8")]);
     throw new CliError("stop here");
   };
   cli.deps.which = (name) => `/usr/bin/${name}`;

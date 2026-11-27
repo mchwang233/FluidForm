@@ -1,0 +1,24 @@
+{
+  "id": "claude-code",
+  "name": "Claude Code CLI",
+  "kind": "extension",
+  "provides": [
+    "model:cli:claude"
+  ],
+  "version": "1.0.0",
+  "summary": "用你的Claude会员账户，通过 Claude Code CLI（claude）做步骤、当任务负责人、修环境。它用 Claude Code 自己的沙箱：只能写自己的工作目录；本机只连得到记下的许可证端口；联网的任务可以上外网，连不到 FluidForm 自己。停用后不再把工作交给它。",
+  "models": [
+    {
+      "id": "cli:claude",
+      "provider": "anthropic",
+      "display_name": "Claude Code CLI (membership)",
+      "context_window": 200000,
+      "input_per_million": 0,
+      "output_per_million": 0,
+      "supports_vision": true,
+      "pricing_verified": true,
+      "channel": "cli",
+      "execution_priority": 0
+    }
+  ]
+}

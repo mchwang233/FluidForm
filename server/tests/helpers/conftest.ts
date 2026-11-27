@@ -9,8 +9,16 @@ import { afterEach, beforeEach } from "node:test";
 import * as cliChannels from "../../src/cli-channels.js";
 import { loadSettings, settings } from "../../src/config.js";
 
-/** The membership CLIs (Claude Code, Codex, Gemini): never run by a test unless it says so. */
-const CLI_EXECUTABLES = new Set(Object.values(cliChannels.CLI_SPECS).map((spec) => spec.executable));
+// The membership CLIs come from model packages: loaded here, as a running FluidForm loads them.
+import "../../packages/agy/src/index.js";
+import "../../packages/claude-code/src/index.js";
+import "../../packages/codex/src/index.js";
+import "../../packages/gemini-cli/src/index.js";
+import "../../packages/qwen-code/src/index.js";
+import * as modelChannels from "../../src/model-channels.js";
+
+/** The membership CLIs (every model package's): never run by a test unless it says so. */
+const CLI_EXECUTABLES = new Set(modelChannels.executables());
 const realWhich = cliChannels.deps.which;
 /** For the one test that means to run a real CLI: the machine's own lookup again. */
 export const allowRealClis = () => {

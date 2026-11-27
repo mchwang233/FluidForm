@@ -34,7 +34,7 @@ import { performance } from "node:perf_hooks";
 import { createInterface } from "node:readline";
 import * as calls from "./calls.js";
 import { builtinModels } from "./catalog.js";
-import { CLI_SPECS, deps } from "./cli-channels.js";
+import { deps } from "./cli-channels.js";
 import { settings } from "./config.js";
 import { leadRoot } from "./folders.js";
 import { fromPythonIso, pythonIso } from "./lax.js";
@@ -137,7 +137,7 @@ function window(item: unknown): Record<string, unknown> | null {
 
 /** Codex's quota now, from its app server, in the session files' form; null if it cannot say. */
 export async function askCodex(home: string | null = null, timeout = ASK_TIMEOUT_SECONDS): Promise<Limits | null> {
-  const executable = deps.which(CLI_SPECS["cli:codex"].executable);
+  const executable = deps.which("codex");
   if (!executable) return null;
   const env = { ...process.env, ...(home ? { CODEX_HOME: home } : {}) };
   const messages = [{ jsonrpc: "2.0", id: 1, method: "initialize", params: { clientInfo: { name: "fluidform", version: "1" } } },

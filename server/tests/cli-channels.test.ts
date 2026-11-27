@@ -11,12 +11,24 @@ import { proxyListenScript, Workspace } from "../src/agent.js";
 import * as calls from "../src/calls.js";
 import { builtinModels } from "../src/catalog.js";
 import * as cli from "../src/cli-channels.js";
-import { CLI_SPECS, CliChannelRegistry, CliError, InputTooLarge, SessionLost } from "../src/cli-channels.js";
+import { CliChannelRegistry, CliError, InputTooLarge, SessionLost } from "../src/cli-channels.js";
+import * as claude from "../packages/claude-code/src/index.js";
+import * as codex from "../packages/codex/src/index.js";
+import * as modelChannels from "../src/model-channels.js";
+
+// Codex and Claude Code as their packages define them (they were cli-channels.CLI_SPECS).
+const CLI_SPECS = {
+  "cli:codex": { id: "cli:codex", executable: "codex", auth_command: codex.channel.auth_command, invoke_args: codex.INVOKE_ARGS,
+    fallback_model_id: codex.channel.fallback_model_id },
+  "cli:claude": { id: "cli:claude", executable: "claude", auth_command: claude.channel.auth_command, invoke_args: claude.INVOKE_ARGS,
+    fallback_model_id: claude.channel.fallback_model_id },
+};
 import { settings } from "../src/config.js";
 import { shlexQuote } from "../src/py.js";
 
 const saved = { ...settings };
 const savedDeps = { ...cli.deps };
+const savedCodexDeps = { ...codex.deps };
 const savedPath = process.env.PATH;
 const savedHome = process.env.CODEX_HOME;
 let folder: string;
@@ -29,6 +41,7 @@ beforeEach(() => {
 afterEach(() => {
   Object.assign(settings, saved);
   Object.assign(cli.deps, savedDeps);
+  Object.assign(codex.deps, savedCodexDeps);
   process.env.PATH = savedPath;
   if (savedHome === undefined) delete process.env.CODEX_HOME;
   else process.env.CODEX_HOME = savedHome;
@@ -96,13 +109,13 @@ test("a cancelled CLI keeps its partial trace and exit status", async () => {
 });
 
 test("CLI sandboxes open to the internet only for a task allowing it", () => {
-  const opened = cli.withNetwork("cli:claude", [...CLI_SPECS["cli:claude"].invoke_args]);
+  const opened = claude.withNetwork([...CLI_SPECS["cli:claude"].invoke_args]);
   const given = JSON.parse(opened[opened.indexOf("--settings") + 1]);
   assert.deepEqual(given.sandbox.network.allowedDomains, ["*"]);
   assert.ok(given.sandbox.network.deniedDomains.includes("127.0.0.1"));
   assert.equal(given.sandbox.allowUnsandboxedCommands, false);
-  assert.ok(cli.codexStepPermissions(process.cwd(), true).join(" ").includes("network={ enabled = true }"));
-  assert.ok(!cli.codexStepPermissions(process.cwd(), false).some((arg) => arg.endsWith("network={ enabled = true }")));
+  assert.ok(codex.codexStepPermissions(process.cwd(), true).join(" ").includes("network={ enabled = true }"));
+  assert.ok(!codex.codexStepPermissions(process.cwd(), false).some((arg) => arg.endsWith("network={ enabled = true }")));
 });
 
 test("repairs have the real /dev, so they can start a step's sandbox", () => {
@@ -135,13 +148,13 @@ test("a Codex failure reports its failed turn, not a warning on stderr", () => {
 test("Claude Code runs commands only inside its sandbox", () => {
   const args = CLI_SPECS["cli:claude"].invoke_args;
   assert.ok(!args.includes("--dangerously-skip-permissions") && !args.includes("bypassPermissions"));
-  assert.equal(args[args.indexOf("--settings") + 1], cli.CLAUDE_SANDBOX_SETTINGS);
-  assert.deepEqual(JSON.parse(cli.CLAUDE_SANDBOX_SETTINGS).sandbox, { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false });
+  assert.equal(args[args.indexOf("--settings") + 1], claude.CLAUDE_SANDBOX_SETTINGS);
+  assert.deepEqual(JSON.parse(claude.CLAUDE_SANDBOX_SETTINGS).sandbox, { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false });
 });
 
 test("CLI fallbacks name catalog models", () => {
   const ids = new Set(builtinModels().map((model) => model.id));
-  for (const item of Object.values(CLI_SPECS)) assert.ok(ids.has(item.fallback_model_id), item.fallback_model_id);
+  for (const item of modelChannels.active()) assert.ok(ids.has(item.fallback_model_id), item.fallback_model_id);
 });
 
 test("a cancelled CLI call kills the processes it spawned", async () => {
@@ -164,10 +177,10 @@ test("a Codex step may write in /tmp but not read what is already there", () => 
     writeFileSync(join(shared, name), "private");
   }
   let rules = new Map<string, string>();
-  cli.sharedTmp(join(folder, "elsewhere", "task"), rules, shared);
+  codex.sharedTmp(join(folder, "elsewhere", "task"), rules, shared);
   assert.deepEqual(Object.fromEntries(rules), { [shared]: "write", [join(shared, "keys.json")]: "deny", [join(shared, "other-session")]: "deny" });
   rules = new Map();
-  cli.sharedTmp(join(folder, "elsewhere", "task"), rules, shared, 1);
+  codex.sharedTmp(join(folder, "elsewhere", "task"), rules, shared, 1);
   assert.deepEqual(Object.fromEntries(rules), { ":slash_tmp": "deny" });
 });
 
@@ -178,15 +191,15 @@ test("a /tmp whose entries' names would not fit in one argument is denied as a w
   const long = "x".repeat(200);
   for (let i = 0; i < 400; i += 1) mkdirSync(join(shared, `${long}-${i}`));
   const rules = new Map<string, string>();
-  cli.sharedTmp(join(folder, "elsewhere", "task"), rules, shared);
+  codex.sharedTmp(join(folder, "elsewhere", "task"), rules, shared);
   assert.deepEqual(Object.fromEntries(rules), { ":slash_tmp": "deny" });
-  const options = cli.codexStepPermissions(join(folder, "task"), false);
+  const options = codex.codexStepPermissions(join(folder, "task"), false);
   assert.ok(options.every((arg) => Buffer.byteLength(arg) < 128 * 1024));
 });
 
 test("a Codex step's own temporary folder is under the hidden data folder", async () => {
   let made = "";
-  await cli.withPrivateTmp(true, async (tmp) => {
+  await codex.withPrivateTmp(true, async (tmp) => {
     made = tmp!;
     assert.ok(tmp!.startsWith(join(settings.data_dir, "tmp") + "/"));
   });
@@ -253,8 +266,9 @@ test("a growing log and the output it prints are shown to the checker", async ()
 });
 
 const codexSpec = CLI_SPECS["cli:codex"];
-const completeIn = (registry: CliChannelRegistry, prompt: string) =>
-  registry.completeIn(codexSpec, "codex", ["exec"], false, null, prompt, folder, 10, [], false, false, null, null, null);
+// Codex's input check around one run (it was the registry's completeIn; now the Codex package's runInput).
+const completeIn = async (registry: CliChannelRegistry, prompt: string) =>
+  codex.codexOutput(await codex.runInput(registry.runner(codexSpec), ["codex", "exec"], folder, prompt, 10));
 
 test("Codex's final input boundary reserves room for the envelope", async () => {
   for (const character of ["x", "界"]) {
@@ -264,8 +278,8 @@ test("Codex's final input boundary reserves room for the envelope", async () => 
       sent.push(stdin!);
       return message("ok");
     };
-    cli.deps.codexSettings = () => [];
-    const limit = cli.CODEX_INPUT_LIMIT - cli.CODEX_INPUT_RESERVE;
+    codex.deps.codexSettings = () => [];
+    const limit = codex.CODEX_INPUT_LIMIT - codex.CODEX_INPUT_RESERVE;
     const prompt = character.repeat(Math.floor(limit / Buffer.byteLength(character)));
     await completeIn(registry, prompt);
     assert.deepEqual(sent, [Buffer.from(prompt)]);
@@ -291,7 +305,7 @@ test("Codex compacts its final input and retries a rejection only once", async (
       if (reject === "always" || (reject && sent.length === 1)) throw new CliError('codex failed: {"code":"input_too_large"}');
       return message("ok");
     };
-    cli.deps.codexSettings = () => [];
+    codex.deps.codexSettings = () => [];
     const record = { warnings: [] as string[] } as any;
     await calls.current.run([null, record], async () => {
       if (reject === "always") await assert.rejects(completeIn(registry, original), InputTooLarge);
@@ -301,7 +315,7 @@ test("Codex compacts its final input and retries a rejection only once", async (
     assert.ok(sent[0].length < original.length);
     if (reject) assert.ok(sent[1].length < sent[0].length);
     for (const prompt of sent) {
-      assert.ok(Buffer.byteLength(prompt) <= cli.CODEX_INPUT_LIMIT - cli.CODEX_INPUT_RESERVE);
+      assert.ok(Buffer.byteLength(prompt) <= codex.CODEX_INPUT_LIMIT - codex.CODEX_INPUT_RESERVE);
       for (const kept of ["1,889 项候选尚未批准", "APB16、AXI16/512/1024、地址12及33–64待裁定", "用户约束：覆盖率100%", "负责人最终验收", "追加文件正文：保持接口"]) {
         assert.ok(prompt.includes(kept), kept);
       }
@@ -314,8 +328,8 @@ test("only a Codex step allowed the internet runs in a network of its own", asyn
   const registry = new CliChannelRegistry();
   const commands: string[][] = [];
   cli.deps.which = (name) => join(folder, name);
-  cli.deps.codexSettings = () => [];
-  cli.deps.codexStepPermissions = () => [];
+  codex.deps.codexSettings = () => [];
+  codex.deps.codexStepPermissions = () => [];
   cli.deps.ownNetwork = async (command) => ["own-network", ...command];
   registry.run = async (_spec, command) => {
     commands.push(command);
@@ -335,7 +349,7 @@ test("a networked check in Codex's sandbox runs in the network a step gets", asy
   const log = join(folder, "argv.log");
   fakeCli("own-network", `#!/bin/sh\necho "$@" > ${log}\necho checked\n`);
   cli.deps.which = (name) => join(folder, name);
-  cli.deps.codexStepPermissions = () => [];
+  codex.deps.codexStepPermissions = () => [];
   cli.deps.ownNetwork = async (command) => [join(folder, "bin", "own-network"), ...command];
   const [output, ok] = await new CliChannelRegistry().sandboxRun("cli:codex", "true", folder, 10, true);
   assert.ok(ok && output.includes("checked"), output);
@@ -345,11 +359,11 @@ test("a networked check in Codex's sandbox runs in the network a step gets", asy
 test("Claude Code's sandbox opens only the recorded host ports, never every local service", () => {
   const settingsOf = (args: string[]) => JSON.parse(args[args.indexOf("--settings") + 1]).sandbox;
   const base = CLI_SPECS["cli:claude"].invoke_args;
-  assert.deepEqual(cli.withHostPorts(base, []), base);
-  const offline = settingsOf(cli.withHostPorts(base, [26585, 36013]));
+  assert.deepEqual(claude.withHostPorts(base, []), base);
+  const offline = settingsOf(claude.withHostPorts(base, [26585, 36013]));
   assert.deepEqual(offline.network, { allowedDomains: ["127.0.0.1:26585", "127.0.0.1:36013"], allowLocalBinding: true });
   assert.equal(offline.allowUnsandboxedCommands, false);
-  const online = settingsOf(cli.withHostPorts(cli.withNetwork("cli:claude", base), [26585]));
+  const online = settingsOf(claude.withHostPorts(claude.withNetwork(base), [26585]));
   assert.deepEqual(online.network.allowedDomains, ["*", "127.0.0.1:26585"]);
   // 127.0.0.1 on the deny list would win over its listed port; localhost and ::1 stay closed.
   assert.deepEqual(online.network.deniedDomains, ["localhost", "::1"]);
@@ -395,8 +409,8 @@ test("a Codex lead rebuilds a rejected input without changing its conversation",
   const registry = new CliChannelRegistry();
   const sent: [string[], Buffer][] = [];
   cli.deps.which = (name) => join(folder, name);
-  cli.deps.codexSettings = () => [];
-  cli.deps.codexStepPermissions = () => [];
+  codex.deps.codexSettings = () => [];
+  codex.deps.codexStepPermissions = () => [];
   registry.run = async (_spec, command, _cwd, stdin) => {
     sent.push([command, stdin!]);
     return sent.length === 1 ? '{"type":"turn.failed","error":{"code":"input_too_large"}}' : message("ok");
@@ -415,14 +429,14 @@ test("a Codex rejection with nothing removable is not retried", async () => {
     sent.push(stdin!);
     throw new CliError("input_too_large");
   };
-  await assert.rejects(registry.runInput(codexSpec, ["codex"], folder, "必须保留：1,889 项候选尚未批准", 10), InputTooLarge);
+  await assert.rejects(codex.runInput(registry.runner(codexSpec), ["codex"], folder, "必须保留：1,889 项候选尚未批准", 10), InputTooLarge);
   assert.equal(sent.length, 1);
 });
 
 test("a resumed Codex conversation gets its options in its own scope", async () => {
   // Exec's -c flags before `resume` are not inherited by the resume parser.
   cli.deps.which = (name) => join(folder, name);
-  cli.deps.codexServers = () => ["test_mcp"];
+  codex.deps.codexServers = () => ["test_mcp"];
   Object.assign(settings, { codex_without_extras: true, codex_lead_service_tier: "fast" });
   const registry = new CliChannelRegistry();
   const commands: string[][] = [];
@@ -434,10 +448,10 @@ test("a resumed Codex conversation gets its options in its own scope", async () 
   assert.deepEqual([text.text, sid], ["ok", "saved"]);
   const resumed = commands[0].slice(commands[0].indexOf("resume") + 1);
   for (const option of ['model_reasoning_effort="high"', 'service_tier="fast"', "mcp_servers.test_mcp.enabled=false",
-    `default_permissions="${cli.CODEX_LEAD_PROFILE}"`, `permissions.${cli.CODEX_LEAD_PROFILE}.extends=":read-only"`]) {
+    `default_permissions="${codex.CODEX_LEAD_PROFILE}"`, `permissions.${codex.CODEX_LEAD_PROFILE}.extends=":read-only"`]) {
     assert.ok(resumed.includes(option), option);
   }
-  for (const feature of cli.CODEX_EXTRAS) assert.equal(resumed[resumed.indexOf(feature) - 1], "--disable");
+  for (const feature of codex.CODEX_EXTRAS) assert.equal(resumed[resumed.indexOf(feature) - 1], "--disable");
 });
 
 test("Claude Code and Codex continue their own conversations", async () => {
@@ -480,9 +494,9 @@ test("Codex runs with the platform's effort and without the user's extras", asyn
     // A -c key is split on dots with quotes taken literally: only plain names are turned off.
     assert.ok(line.includes("mcp_servers.node_repl.enabled=false") && !line.includes("my server") && !line.includes('"node_repl"'));
   }
-  assert.deepEqual(cli.codexServers(), ["node_repl", "my server"]);
+  assert.deepEqual(codex.codexServers(), ["node_repl", "my server"]);
   settings.codex_without_extras = false;
-  assert.deepEqual(cli.codexSettings("high"), ["-c", 'model_reasoning_effort="high"']);
+  assert.deepEqual(codex.codexSettings("high"), ["-c", 'model_reasoning_effort="high"']);
 });
 
 test("a conversation the CLI no longer has is reported as lost", async () => {
@@ -493,7 +507,7 @@ test("a conversation the CLI no longer has is reported as lost", async () => {
 test("Codex may delete files in its folder, and the rule is gone after", async () => {
   // A folder of the project's own stays; a repair, outside Codex's sandbox, gets none.
   const seen = join(folder, "seen.txt");
-  fakeCli("codex", `#!/bin/sh\ncat > /dev/null\ncat ${cli.CODEX_RULES} >> ${seen} 2>/dev/null || echo none >> ${seen}\necho done\n`);
+  fakeCli("codex", `#!/bin/sh\ncat > /dev/null\ncat ${codex.CODEX_RULES} >> ${seen} 2>/dev/null || echo none >> ${seen}\necho done\n`);
   const scratch = join(folder, "scratch");
   const project = join(folder, "project");
   mkdirSync(scratch);
@@ -502,9 +516,9 @@ test("Codex may delete files in its folder, and the rule is gone after", async (
   const registry = new CliChannelRegistry();
   await registry.complete("cli:codex", "做这一步", scratch);
   await registry.complete("cli:codex", "做这一步", project);
-  assert.equal(readFileSync(seen, "utf8"), cli.CODEX_ALLOW.repeat(2));
+  assert.equal(readFileSync(seen, "utf8"), codex.CODEX_ALLOW.repeat(2));
   assert.ok(!existsSync(join(scratch, ".codex")));
-  assert.ok(!existsSync(join(project, cli.CODEX_RULES)) && existsSync(join(project, ".codex", "config.toml")));
+  assert.ok(!existsSync(join(project, codex.CODEX_RULES)) && existsSync(join(project, ".codex", "config.toml")));
   cli.deps.repairCommand = (executable, args) => [executable, ...args];
   await registry.complete("cli:codex", "修环境", scratch, { repair: true });
   assert.ok(readFileSync(seen, "utf8").endsWith("none\n"));

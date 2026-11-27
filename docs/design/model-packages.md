@@ -175,6 +175,48 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
 - npm 装的 CLI 会把整个包挂进沙箱；
 - 用真 bwrap 跑一次：家目录被隐藏，脚本在沙箱里仍能加载同一个包里的其他模块。这项测试在修复前失败（找不到 `bin/` 下的链接）。
 
+## Codex 和 Claude Code（第 3 步的后一半）
+
+### 为什么
+
+它们是主力 CLI，各自有一套实测过的沙箱：Codex 的权限配置，Claude 的设置加许可证端口桥（`docs/design/cli-step-network.md`）。用户选了"原样搬进包"：行为不变，能力页上多两个开关。
+
+### 改动
+
+- **模型包的第二种形态**（`model-channels.ts`）：`ModelChannel.own`，包含 `complete`、`converse`、`sandboxRun`。
+  - 包用自己 CLI 的沙箱设置拼出命令，交给核心给的 `Runner` 去跑（`CliChannelRegistry.runner`）。
+  - `Runner` 提供 `run`（进程组、超时、进度检查、实时活动、追踪）、`which`、`hostPorts`、`ownNetwork`、`repairCommand`。
+  - 另一种形态（agy、Gemini、Qwen）仍由核心的 `withSandbox` 包起来。
+- **`server/packages/codex`**：从 `cli-channels.ts` 原样搬来。
+  - 搬来的内容：输入过长时缩减并只重试一次（`codexInput`、`runInput`）、输出解析、权限配置（`codexStepPermissions`、`denyExcept`、`sharedTmp`）、私有 TMPDIR、rm 规则（`withCodexRules`）、设置（`codexSettings`、`CODEX_EXTRAS`）、附件、负责人对话（`exec resume`）、`codex sandbox`（执行前检查用的 `sandboxRun`）。
+  - 测试会替换的 `deps`（`codexSettings`、`codexStepPermissions`、`codexServers`）也在包里。
+- **`server/packages/claude-code`**：同样原样搬来：沙箱、联网和修复三种设置，`withHostPorts`、`withClaudeBridge`、附件，负责人对话（`--session-id` / `--resume`）。
+- **核心 `cli-channels.ts`** 只剩通用部分：
+  - 报错类型、`failureDetail`、`repairCommand`、`cliUsage`、`trace`；
+  - 运行（`run`）和状态探测（`probe`），探测的是所有开着的模型包；
+  - 按通道分派（`complete`、`converse`、`sandboxRun`）。会话丢失的识别（`SESSION_MISSING`）对所有 CLI 统一处理。
+  - `CLI_SPECS`、`SESSION_ARGS`、`REPAIR_ARGS` 都已删除。
+- **种子表**：`cli:codex` 和 `cli:claude` 随包带来。核心自带的种子只剩 DeepSeek 和演示模型。
+- **测试辅助**：`tests/helpers/conftest.ts` 加载所有 CLI 包，并拦截所有通道的可执行文件。原来只拦截 Codex 和 Claude，测试里有可能真的调到本机的 agy。
+
+### 没搬的
+
+- `cli-quota.ts` 的 Codex 额度读取：从会话文件和 app server 读，按额度计价。它属于计价和额度部分，仍留在核心。
+- 核心里的 `codexHome`：额度读取和执行前检查都要用。
+- 学习包的执行前检查仍然点名用 `cli:codex` 的 `sandboxRun`。
+
+### 验证
+
+- 测试：
+  - `cli-channels.test.ts` 的 31 项、`converse`、`api-tasks`、`call-runtime`、`preflight-run` 全部通过。
+  - 改的只是导入路径，以及替换点从 `cli.deps.codexX` 换成 `codex.deps.codexX`。
+  - 原来调用注册表内部 `completeIn` / `runInput` 的 3 项，改为经 `runner()` 调包里的 `runInput`，断言不变。
+- 用真 CLI 经过包各跑了一次步骤，结果和搬之前一样：
+  - Claude（不联网）：许可证 UP，外网 000。
+  - Codex（不联网）：许可证连不上（"Operation not permitted"）。这是原来就有的：不联网的 Codex 会封掉所有网络套接字。
+  - Codex（联网）：许可证 UP，外网 200。
+
 ## 后续
 
-把 Codex 和 Claude Code 搬成包。这两个有自己验证过的沙箱（Codex 的权限配置、Claude 的设置和端口桥），还有负责人对话、修复模式和 Codex 的额度读取。怎么搬还没定，见报告里的选项。
+- Codex 不联网时连不上许可证（见上），这是原来就有的问题。要修，可以把不联网的 Codex 步骤也放进只转发许可证端口的独立网络。
+- Codex 的额度读取搬进 Codex 包。

@@ -1,5 +1,5 @@
 // Conservative seed data. Unverified prices cannot be used for real billing claims. FluidForm's own:
-// the membership CLIs, DeepSeek and the demo model; every other provider's models come with its
+// DeepSeek and the demo model; every other provider's models come with its
 // package (server/packages/<id>/capability.json, builtinModels).
 // Routing scores come only from Artificial Analysis (scoring); only the offline demo model carries
 // fixed scores.
@@ -7,10 +7,6 @@ import * as extensions from "./extensions.js";
 import { type ModelProfile, ModelProfileSchema } from "./models.js";
 
 const SEED: Record<string, unknown>[] = [
-  { id: "cli:codex", provider: "openai", display_name: "Codex CLI (membership)", context_window: 1_000_000,
-    input_per_million: 0, output_per_million: 0, supports_vision: true, pricing_verified: true, channel: "cli", execution_priority: 0 },
-  { id: "cli:claude", provider: "anthropic", display_name: "Claude Code CLI (membership)", context_window: 200_000,
-    input_per_million: 0, output_per_million: 0, supports_vision: true, pricing_verified: true, channel: "cli", execution_priority: 0 },
   { id: "deepseek:deepseek-chat", provider: "deepseek", display_name: "DeepSeek Chat", context_window: 128_000,
     input_per_million: 0.3, output_per_million: 1.2, pricing_verified: false },
   { id: "mock:local", provider: "mock", display_name: "Local Demo Model", context_window: 128_000,
@@ -19,7 +15,7 @@ const SEED: Record<string, unknown>[] = [
     scores_source: "demo", pricing_verified: true, execution_priority: 1000 },
 ];
 
-/** FluidForm's own models: the membership CLIs, DeepSeek and the demo model. */
+/** FluidForm's own models: DeepSeek and the demo model. */
 export function ownModels(): ModelProfile[] {
   return SEED.map((model) => ModelProfileSchema.parse(model));
 }

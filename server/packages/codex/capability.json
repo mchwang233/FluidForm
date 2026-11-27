@@ -1,0 +1,24 @@
+{
+  "id": "codex",
+  "name": "Codex CLI",
+  "kind": "extension",
+  "provides": [
+    "model:cli:codex"
+  ],
+  "version": "1.0.0",
+  "summary": "用你的OpenAI（ChatGPT）会员账户，通过 Codex CLI（codex）做步骤、当任务负责人、修环境。它用 Codex 自己的沙箱（FluidForm 给它定的权限配置）：只能写自己的工作目录，看不到家目录、FluidForm 的数据和别的任务；联网的任务在独立的网络里，连得到外网和本机许可证，连不到 FluidForm 自己。停用后不再把工作交给它。",
+  "models": [
+    {
+      "id": "cli:codex",
+      "provider": "openai",
+      "display_name": "Codex CLI (membership)",
+      "context_window": 1000000,
+      "input_per_million": 0,
+      "output_per_million": 0,
+      "supports_vision": true,
+      "pricing_verified": true,
+      "channel": "cli",
+      "execution_priority": 0
+    }
+  ]
+}
