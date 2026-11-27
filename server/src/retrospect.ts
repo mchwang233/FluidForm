@@ -306,6 +306,30 @@ export function topics(db: Db, minRuns = 1): Topic[] {
   return sortedBy([...groups.values()].filter((group) => group.runs.length >= minRuns), (group) => [-group.runs.length, group.topic]);
 }
 
+/** Forgets a problem everywhere it was recorded: each one named ``topic`` (topics), or with ``member``
+ *  ("kind:key", recurring) as well. It no longer counts as recurring, nor is it told to later
+ *  diagnoses as an earlier case (similar). How many were removed. A task's look back stays, its other
+ *  problems kept; recorded again (a resumed task), what comes up then is new. */
+export function forget(db: Db, { topic = null, member = null }:
+  { topic?: string | null; member?: string | null }): number {
+  if (!topic && !member) return 0;
+  let removed = 0;
+  for (const body of db.retrospectives() as Review[]) {
+    const problems = body.problems || [];
+    const kept = problems.filter((item) => !((topic && item.topic === topic) || (member && `${item.kind}:${item.key}` === member)));
+    if (kept.length === problems.length) continue;
+    removed += problems.length - kept.length;
+    db.saveRetrospective(body.run_id, { ...body, problems: kept });
+  }
+  return removed;
+}
+
+/** The looks back whose task was deleted (kept then for what they teach), by task id. */
+export function orphaned(db: Db): string[] {
+  const runs = new Set(db.listRuns().map((run) => run.id));
+  return (db.retrospectives() as Review[]).map((body) => body.run_id).filter((id) => !runs.has(id));
+}
+
 // Tasks a problem must have come up in before a retrospective asks the platform engineer to change it
 //: a one-off seldom merits a change, and most were turned down.
 export const PLATFORM_MIN_RUNS = 2;

@@ -582,13 +582,13 @@ function App() {
     setDeleteError("");setDeleteTarget(run);
   }
   function closeDeleteDialog(){if(!deletingRunId){setDeleteTarget(null);setDeleteError("")}}
-  async function deleteRun(run:Run){
+  async function deleteRun(run:Run,options?:{withRetrospective:boolean}){
     if(deletingRunId||!canDeleteMission(run.status,run.kind))return;
     setDeletingRunId(run.id);setDeleteError("");
     const controller=new AbortController();
     const timeout=window.setTimeout(()=>controller.abort(),15000);
     try{
-      const response=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}`,{method:"DELETE",signal:controller.signal});
+      const response=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}${options?.withRetrospective?"?with_retrospective=true":""}`,{method:"DELETE",signal:controller.signal});
       if(!response.ok&&response.status!==404){const body=await response.json().catch(()=>({}));throw new Error(detailText(body.detail)||`删除失败（${response.status}）`)}
       // Ignore polls started before deletion, so stale responses cannot restore the record.
       loadRevision.current++;
@@ -650,7 +650,7 @@ function App() {
       <button type="button" className="ghost" onClick={()=>{const run=runs.find(item=>item.id===toast.runId);if(run){setView("missions");setSelected(run)}setToasts(current=>current.filter(item=>item.id!==toast.id))}}>查看</button>
       <button type="button" className="modal-close" aria-label="关闭提示" onClick={()=>setToasts(current=>current.filter(item=>item.id!==toast.id))}>×</button>
     </div>)}</div>}
-    {deleteTarget&&<DeleteMissionDialog mission={deleteTarget} pending={deletingRunId===deleteTarget.id} error={deleteError} onCancel={closeDeleteDialog} onConfirm={()=>deleteRun(deleteTarget)}/>}
+    {deleteTarget&&<DeleteMissionDialog mission={deleteTarget} pending={deletingRunId===deleteTarget.id} error={deleteError} onCancel={closeDeleteDialog} onConfirm={options=>deleteRun(deleteTarget,options)}/>}
     {cancelTarget&&<CancelMissionDialog mission={cancelTarget} pending={cancellingRunId===cancelTarget.id} error={cancelError} onCancel={closeCancelDialog} onConfirm={()=>cancelRun(cancelTarget)}/>}
     {selectedProvider&&<div className="modal-backdrop" onMouseDown={()=>setSelectedProvider(null)}><section className="provider-modal" role="dialog" aria-modal="true" aria-label={`配置 ${selectedProvider.name}`} onMouseDown={e=>e.stopPropagation()}><div className="modal-title"><div><p className="eyebrow">API 连接</p><h3>配置 {selectedProvider.name}</h3></div><button className="modal-close" onClick={()=>setSelectedProvider(null)} aria-label="关闭">×</button></div><p className="modal-note">Key 只会发送到本机 API，并保存在操作系统的密钥环中。</p><ProviderCard provider={selectedProvider} onChanged={async()=>{await load();const refreshed=(await (await fetch(`${API}/api/providers`)).json()) as Provider[];setSelectedProvider(refreshed.find(p=>p.id===selectedProvider.id)||null)}}/></section></div>}
     <EngineerBubble apiBase={API} runs={runs} tick={runs.map(run=>`${run.id}:${run.updated_at??""}`).join("|")}

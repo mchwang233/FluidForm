@@ -184,6 +184,11 @@ export class Database {
     return this.json(this.one("SELECT body FROM retrospectives WHERE run_id = ?", runId));
   }
 
+  /** Removes these tasks' looks back; how many there were. */
+  deleteRetrospectives(runIds: string[]): number {
+    return this.transaction(() => runIds.reduce((count, id) => count + Number(this.run("DELETE FROM retrospectives WHERE run_id = ?", id).changes), 0));
+  }
+
   retrospectives(): Json[] {
     return this.all("SELECT body FROM retrospectives ORDER BY created_at").map((row) => this.json(row)!);
   }

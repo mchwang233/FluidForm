@@ -84,6 +84,20 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
   app.get("/api/retrospectives/topics", async (request) =>
     retrospect.topics(db, Math.max(1, queryInt(request.query as Query, "min_runs", 1))));
 
+  // Deleting what the 常见故障 page shows: a problem everywhere it was recorded (by its topic, or as
+  // "kind:key"), and the looks back of tasks that were deleted.
+  app.delete<{ Params: { topic: string } }>("/api/retrospectives/topics/:topic", async (request) => {
+    const removed = retrospect.forget(db, { topic: request.params.topic });
+    if (!removed) throw new HttpError(404, "没有这类问题");
+    return { removed };
+  });
+  app.delete<{ Params: { member: string } }>("/api/retrospectives/problems/:member", async (request) => {
+    const removed = retrospect.forget(db, { member: request.params.member });
+    if (!removed) throw new HttpError(404, "没有这类问题");
+    return { removed };
+  });
+  app.delete("/api/retrospectives/orphaned", async () => ({ deleted: db.deleteRetrospectives(retrospect.orphaned(db)) }));
+
   // A finished task's look back: each step's estimate against its cost and turns, and its problems.
   app.get<{ Params: { run_id: string } }>("/api/tasks/:run_id/retrospective", async (request) => {
     const body = db.retrospective(request.params.run_id) ?? (uses.learning() ? retrospect.record(db, request.params.run_id) : null);
@@ -153,6 +167,8 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
     }
     if (!deleted) throw new HttpError(404, "Task not found");
     rmSync(join(settings.data_dir, "traces", runId), { recursive: true, force: true });
+    // Kept unless asked: what later tasks learn from it (常见故障, recurring problems).
+    if (queryBool(request.query as Query, "with_retrospective", false)) db.deleteRetrospectives([runId]);
     current.tasks.delete(runId);
     current.learningTasks.delete(runId);
     current.locks.delete(runId);

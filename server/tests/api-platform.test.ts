@@ -294,6 +294,28 @@ test("finished platform work can be deleted: one job, a conversation, or all; wo
   for (const job of [applied, failed, rejected, other]) assert.equal(api.db.getEngineerJob(job.id), null);
 });
 
+test("the 常见故障 page's problems are deleted by topic or name; a deleted task's look back goes on request or as left over", async () => {
+  const { api, client } = taskApi(folder());
+  const problem = (topic: string, key: string) => ({ kind: "environment", key, label: key, node_id: null, repaired: false, detail: "", topic });
+  const look = (runId: string, ...problems: unknown[]) => api.db.saveRetrospective(runId, { run_id: runId, status: "succeeded", started_at: "2026-11-01T00:00:00",
+    steps: [], problems });
+  for (const id of ["a", "b"]) api.db.saveRun(ExecutionRunSchema.parse({ id, prompt: "p", status: "succeeded", budget_usd: 1, plan: { summary: "s", nodes: [] } }));
+  look("a", problem("许可证连不上", "vcs"), problem("缺 bc", "bc"));
+  look("b", problem("许可证连不上", "lmgrd"));
+  look("old", problem("缺 bc", "bc"));
+  assert.deepEqual((await client.delete(`/api/retrospectives/topics/${encodeURIComponent("许可证连不上")}`)).json(), { removed: 2 });
+  assert.equal((await client.delete(`/api/retrospectives/topics/${encodeURIComponent("许可证连不上")}`)).status_code, 404);
+  assert.deepEqual((await client.get("/api/retrospectives/topics")).json().map((group: any) => group.topic), ["缺 bc"]);
+  // "old" was a task deleted before: its look back is left over.
+  assert.deepEqual((await client.delete("/api/retrospectives/orphaned")).json(), { deleted: 1 });
+  // Deleting a task keeps its look back unless asked.
+  assert.equal((await client.delete("/api/tasks/a")).status_code, 204);
+  assert.ok(api.db.retrospective("a"));
+  assert.equal((await client.delete("/api/tasks/b", { params: { with_retrospective: "true" } })).status_code, 204);
+  assert.equal(api.db.retrospective("b"), null);
+  assert.deepEqual((await client.delete(`/api/retrospectives/problems/${encodeURIComponent("environment:bc")}`)).json(), { removed: 1 });
+});
+
 test("the user brings the engineer into a task", async () => {
   const { api, client } = taskApi(folder());
   assert.equal((await client.post("/api/tasks/nope/engineer", { json: { request: "修沙箱" } })).status_code, 404);

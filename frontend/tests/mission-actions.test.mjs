@@ -336,9 +336,17 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.attachmentDeletes.push(path.split("/")[3]);
       return new Response(null, { status: 204 });
     }
+    if (path.startsWith("/api/retrospectives/") && options.method === "DELETE") {
+      (state.retrospectiveDeletes ??= []).push(decodeURIComponent(path));
+      if (path === "/api/retrospectives/orphaned") { state.topics = []; return json({ deleted: 3 }); }
+      const topic = decodeURIComponent(path.split("/")[4]);
+      state.topics = (state.topics ?? []).filter(group => group.topic !== topic);
+      return json({ removed: 1 });
+    }
     if (options.method === "DELETE") {
       const id = decodeURIComponent(path.slice("/api/tasks/".length));
       state.deletes.push(id);
+      if (new URL(url).searchParams.get("with_retrospective")) (state.deletedWithRetrospective ??= []).push(id);
       return state.deleteResponse(id, options.signal);
     }
     if (options.method === "POST" && /\/capabilities\/\d+\/(solidify|dismiss)$/.test(path)) {
@@ -2474,6 +2482,25 @@ test("recurring problems are listed by what they are about and lead back to thei
   assert.match(page.textContent, /environment:vcs、platform:agent/);
   assert.match(page.textContent, /修复后又出现/);
   assert.equal(page.querySelector(".problem-runs button").disabled, true); // its task was deleted
+  // A kind of problem is deleted after saying what goes; the left-over looks back of deleted tasks too.
+  await click(button("删除", page.querySelector(".problem-head")));
+  assert.match(page.querySelector(".confirm-delete-note").textContent, /不再算作常见故障/);
+  await click(button("确认删除", page.querySelector(".problem-head")));
+  assert.deepEqual(state.retrospectiveDeletes, ["/api/retrospectives/topics/新思 EDA 环境未加载"]);
+  assert.match(page.textContent, /还没有已归类的问题/);
+});
+
+test("deleting a task can take its look back with it; by default it stays", async t => {
+  const { state, document, button, click } = await setup(t);
+  const dialog = () => document.querySelector('[role="alertdialog"]');
+  await click([...document.querySelectorAll(".run")].find(run => run.title === "finished-task"));
+  await click(button("删除任务记录", document.querySelector(".detail")));
+  const option = dialog().querySelector(".mission-delete-option input");
+  assert.equal(option.checked, false);
+  await click(option);
+  await click(button("确认删除", dialog()));
+  assert.deepEqual(state.deletes, ["finished-task"]);
+  assert.deepEqual(state.deletedWithRetrospective, ["finished-task"]);
 });
 
 test("the plan's open choices are picked on the page and the plan is made again with them", async t => {

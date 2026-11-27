@@ -163,7 +163,7 @@ type MissionDialogProps<T extends MissionRecord> = {
   pending: boolean;
   error: string;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (options?: { withRetrospective: boolean }) => void;
 };
 
 export function DeleteMissionDialog<T extends MissionRecord>(props: MissionDialogProps<T>) {
@@ -186,6 +186,9 @@ function MissionActionDialog<T extends MissionRecord>({ mission, pending, error,
   };
   const titleId = useId();
   const descriptionId = useId();
+  // A task's look back (常见故障) stays unless asked: later tasks learn from it.
+  const [withRetrospective, setWithRetrospective] = useState(false);
+  const isTask = action === "delete" && (mission as { kind?: string }).kind !== "chat";
   const dialogRef = useRef<HTMLElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -208,11 +211,13 @@ function MissionActionDialog<T extends MissionRecord>({ mission, pending, error,
       <div className="modal-title"><h3 id={titleId}>{copy.title}</h3></div>
       <p className="mission-delete-summary">{mission.plan.summary}</p>
       <p className="modal-note" id={descriptionId}>{copy.description}</p>
+      {isTask && <label className="mission-delete-option"><input type="checkbox" checked={withRetrospective} disabled={pending}
+        onChange={event => setWithRetrospective(event.target.checked)} />连同它的复盘一起删（常见故障里不再算它）</label>}
       {error && <p className="mission-delete-error" role="alert">{error}</p>}
       {pending && <p className="mission-delete-status" role="status">{copy.progress}</p>}
       <div className="mission-delete-actions">
         <button type="button" className="ghost" ref={cancelRef} disabled={pending} onClick={onCancel}>{copy.dismiss}</button>
-        <button type="button" className="danger" disabled={pending} onClick={onConfirm}>{pending ? copy.pending : copy.confirm}</button>
+        <button type="button" className="danger" disabled={pending} onClick={() => onConfirm(isTask ? { withRetrospective } : undefined)}>{pending ? copy.pending : copy.confirm}</button>
       </div>
     </section>
   </div>;

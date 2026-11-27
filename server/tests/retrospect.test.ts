@@ -62,6 +62,27 @@ test("a step its lead let through without passing is a problem of its own", () =
   assert.equal(found[0].label, "未通过（error），负责人放行：实质交付已完成");
 });
 
+test("a problem is forgotten everywhere it was recorded, and looks back of deleted tasks are found", () => {
+  const db = fresh();
+  const named = (runId: string, topic: string, key: string) => ({ kind: "environment", key, label: `${runId} ${key}`, node_id: "n", repaired: false, detail: "", topic });
+  db.saveRun(finished("kept", [platformStep()]));
+  db.saveRetrospective("kept", { run_id: "kept", status: "succeeded", started_at: "2026-11-01T00:00:00", steps: [],
+    problems: [named("kept", "VCS 许可证连不上", "vcs"), named("kept", "沙箱里没有 bc", "bc")] });
+  db.saveRetrospective("gone", { run_id: "gone", status: "succeeded", started_at: "2026-11-02T00:00:00", steps: [],
+    problems: [named("gone", "VCS 许可证连不上", "lmgrd")] });
+  assert.deepEqual(retrospect.topics(db).map((group) => [group.topic, group.runs.length]), [["VCS 许可证连不上", 2], ["沙箱里没有 bc", 1]]);
+  assert.equal(retrospect.forget(db, { topic: "VCS 许可证连不上" }), 2);
+  assert.deepEqual(retrospect.topics(db).map((group) => group.topic), ["沙箱里没有 bc"]);
+  // The task's look back stays, with its other problems.
+  assert.deepEqual(db.retrospective("kept")!.problems.map((item: any) => item.key), ["bc"]);
+  assert.equal(retrospect.forget(db, { member: "environment:bc" }), 1);
+  assert.equal(retrospect.recurring(db).length, 0);
+  // "gone" was deleted as a task; its look back is what is left over.
+  assert.deepEqual(retrospect.orphaned(db), ["gone"]);
+  assert.equal(db.deleteRetrospectives(retrospect.orphaned(db)), 1);
+  assert.deepEqual(retrospect.orphaned(db), []);
+});
+
 test("the program a failing command was about", () => {
   assert.equal(retrospect.program("source /eda/.edarc && which vcs && vcs -ID"), "vcs");
   assert.equal(retrospect.program("cd /work; PATH=/x:$PATH /opt/bin/iverilog -g2012 a.v"), "iverilog");
