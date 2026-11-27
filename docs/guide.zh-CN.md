@@ -272,7 +272,7 @@ API 可以驱动会修改本地文件的 CLI 代理，所以它只响应 `Host` 
 
 ```dotenv
 FLUIDFORM_CATALOG_AUTO_SYNC=true
-FLUIDFORM_CATALOG_SYNC_INTERVAL_HOURS=24
+FLUIDFORM_CATALOG_SYNC_INTERVAL_HOURS=168
 ```
 
 间隔可设为 1–720 小时。关闭自动同步后仍可手动刷新。

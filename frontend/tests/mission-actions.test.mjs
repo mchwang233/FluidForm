@@ -903,7 +903,7 @@ test("the 模型 page's sources list the providers in use, by the server's names
     configured: true, enabled: true, input_per_million: 0.15, output_per_million: 0.6, context_window: 1_048_576, routing_ready: true, benchmarks: [],
     scores: { coding: 82, planning: 70, research: 74, chinese: 88, tool_use: 79, structured_output: 75, reliability: 60 } }];
   const { state, document, click, act } = await setup(t, [], models, { openComposer: false });
-  state.catalogSync = { running: false, auto_sync: true, interval_hours: 1,
+  state.catalogSync = { running: false, auto_sync: true, interval_hours: 168,
     providers: { deepseek: { name: "DeepSeek", public_status: "ok", official_status: "ok", count: 3 }, kimi: { name: "Kimi（月之暗面）", public_status: "error", public_error: "timeout", official_status: "not_supported" } },
     benchmarks: { matched_models: 1, sources: { artificial_analysis: { name: "Artificial Analysis", status: "ok", matched_models: 1, count: 200,
       collection_method: "model_read", read_by: "deepseek:deepseek-flash", read_cost_usd: 0.0741, auto: true, every_days: 7 } } } };
@@ -914,7 +914,7 @@ test("the 模型 page's sources list the providers in use, by the server's names
   assert.deepEqual(names, ["DeepSeek", "Kimi（月之暗面）", "Artificial Analysis"], "only what the server lists, no fixed provider table");
   assert.doesNotMatch(document.querySelector(".catalog-sync").textContent, /SuperCLUE|BFCL|API_KEY|重启/);
   // The catalog's and the scores' own pace, each said.
-  assert.match(document.querySelector(".catalog-sync-heading").textContent, /模型目录和价格每 1 小时检查 · 评分每 7 天由模型读取 Artificial Analysis/);
+  assert.match(document.querySelector(".catalog-sync-heading").textContent, /模型目录和价格每 7 天检查 · 评分每 7 天由模型读取 Artificial Analysis/);
   // Who read the leaderboard, and its weekly reading, switched off and on where it is shown.
   const aaRow = [...document.querySelectorAll(".catalog-provider")].find(node => node.textContent.includes("Artificial Analysis"));
   assert.match(aaRow.textContent, /由 deepseek-flash 读取网页 · \$0\.074/);

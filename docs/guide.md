@@ -369,7 +369,7 @@ Optional `.env` settings:
 
 ```dotenv
 FLUIDFORM_CATALOG_AUTO_SYNC=true
-FLUIDFORM_CATALOG_SYNC_INTERVAL_HOURS=24
+FLUIDFORM_CATALOG_SYNC_INTERVAL_HOURS=168
 ```
 
 The interval accepts 1–720 hours. Turning off automatic sync keeps manual refresh available.

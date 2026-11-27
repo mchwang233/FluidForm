@@ -98,7 +98,7 @@ export const SettingsFields = {
   allowed_hosts: z.array(z.string()).default(() => (["127.0.0.1", "localhost", "::1"])),
   allowed_origins: z.array(z.string()).default(() => (["http://localhost:5173", "http://127.0.0.1:5173"])),
   catalog_auto_sync: lax.bool().default(() => (true)),
-  catalog_sync_interval_hours: lax.number(z.number().min(1).max(720)).default(() => (24)),
+  catalog_sync_interval_hours: lax.number(z.number().min(1).max(720)).default(() => (168)), // a week, as the leaderboard is read
   artificial_analysis_api_key: z.string().nullable().default(() => (null)),
 };
 
