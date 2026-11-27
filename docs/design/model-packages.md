@@ -251,6 +251,20 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
 
 停用期间新出的模型没有评分，不会被调度。重新打开后，等下一次同步就会补上。
 
+### 只留 Artificial Analysis
+
+用户要求不要 SuperCLUE 和 BFCL。
+
+- 删掉的代码：两者的抓取和解析（`parseSuperclue`、`parseBfcl`、`csvRows`、字段表、`superclue()`、`bfcl()`），连同只给 SuperCLUE 读表格用的 `xlsx.ts`。`html-tables.ts` 还要用的 `unescapeXml` 移进了它自己的文件。
+- `SOURCE_NAMES` 现在只有 `artificial_analysis`。数据库里缓存的两个旧榜单的成绩，`results()` 和 `status()` 都不再读取：模型页不显示，比对也不用。
+- 调度评分本来就只用 Artificial Analysis 的成绩，所以各模型的分数不变。
+- 前端：`benchmark-sources.ts` 和 `public-benchmarks.tsx` 里删掉了这两个来源。
+- 测试：`benchmarks.test.ts`
+  - 删掉了这两个榜单的解析测试。
+  - 模型比对的几项原来借用 BFCL 的数据，改为用 Artificial Analysis 的数据（`resultFor`），比对规则的断言不变。
+  - 新增两项："只查 Artificial Analysis"，以及"缓存的旧榜单成绩不显示、不参与比对"。
+  - 删掉了只给 SuperCLUE 测试用的 `tests/helpers/xlsx-writer.ts`。
+
 ## 后续
 
 - Codex 不联网时连不上许可证（见上），这是原来就有的问题。要修，可以把不联网的 Codex 步骤也放进只转发许可证端口的独立网络。

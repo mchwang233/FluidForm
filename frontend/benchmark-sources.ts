@@ -1,7 +1,5 @@
 export const BENCHMARK_SOURCES = {
   artificial_analysis: { name: "Artificial Analysis", shortName: "AA" },
-  bfcl: { name: "BFCL", shortName: "BFCL" },
-  superclue: { name: "SuperCLUE", shortName: "SuperCLUE" },
 } as const;
 
 export type BenchmarkSource = keyof typeof BENCHMARK_SOURCES;

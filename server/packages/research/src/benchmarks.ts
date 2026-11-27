@@ -8,16 +8,12 @@ import { PublicTableParser } from "./html-tables.js";
 import { pythonIso } from "../../../src/lax.js";
 import { type ModelProfile, utcnow } from "../../../src/models.js";
 import { compareKeys, pyStr, splitlines, pyQuote } from "../../../src/py.js";
-import { Workbook } from "./xlsx.js";
-import { ZipFile } from "../../../src/zip.js";
 
-export const BFCL_URL = "https://gorilla.cs.berkeley.edu/leaderboard.html";
-export const BFCL_DATA_URL = "https://gorilla.cs.berkeley.edu/data_overall.csv";
-export const SUPERCLUE_URL = "https://www.superclueai.com/";
 export const AA_URL = "https://artificialanalysis.ai/api/v2/language/models/free";
 export const AA_PUBLIC_URL = "https://artificialanalysis.ai/leaderboards/models";
 export const AA_KEY_ENV = "ARTIFICIAL_ANALYSIS_API_KEY";
-export const SOURCE_NAMES: Record<string, string> = { superclue: "SuperCLUE", bfcl: "BFCL", artificial_analysis: "Artificial Analysis" };
+// The only leaderboard looked up (SuperCLUE and BFCL were dropped, 2026-11-27): its results score the models.
+export const SOURCE_NAMES: Record<string, string> = { artificial_analysis: "Artificial Analysis" };
 export const MAX_RESPONSE_BYTES = 8_000_000;
 
 export function aaKey(): string | null {
@@ -121,10 +117,6 @@ export function resultFor(source: string, name: string, organization: string, ve
     fetched_at: utcnow(), metrics: fields.metrics, collection_method: fields.collection_method ?? "dataset" };
 }
 
-export const BFCL_FIELDS: Record<string, string> = { "Overall Acc": "工具调用综合", "Non-Live AST Acc": "单轮标准任务", "Live Acc": "单轮真实任务",
-  "Multi Turn Acc": "多轮工具调用", "Web Search Acc": "网页搜索任务", "Memory Acc": "记忆任务" };
-export const SUPERCLUE_FIELDS: Record<string, string> = Object.fromEntries(["总分", "数学推理", "幻觉控制", "科学推理", "精确指令遵循", "智能体编程", "智能体任务规划"]
-  .map((key) => [key, key]));
 export const AA_FIELDS: Record<string, string> = { artificial_analysis_intelligence_index: "综合智能指数", artificial_analysis_coding_index: "编程指数",
   artificial_analysis_agentic_index: "智能体指数" };
 export const AA_DETAIL_FIELDS: Record<string, [string, string, string]> = {
@@ -132,111 +124,6 @@ export const AA_DETAIL_FIELDS: Record<string, [string, string, string]> = {
   critpt: ["aa_critpt", "物理推理", "CritPt"], lcr: ["aa_lcr", "长文本推理", "AA-LCR"], omniscienceAccuracy: ["aa_knowledge_accuracy", "知识准确率", "AA-Omniscience Accuracy"],
   omniscienceNonHallucination: ["aa_non_hallucination", "非幻觉率", "AA-Omniscience Non-Hallucination"],
 };
-
-/** csv.reader: rows of fields, quoted fields and newlines in them kept. */
-export function csvRows(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let quoted = false;
-  let started = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    if (quoted) {
-      if (char === '"' && text[index + 1] === '"') {
-        field += '"';
-        index += 1;
-      } else if (char === '"') quoted = false;
-      else field += char;
-      continue;
-    }
-    if (char === '"' && field === "") {
-      quoted = true;
-      started = true;
-    } else if (char === ",") {
-      row.push(field);
-      field = "";
-      started = true;
-    } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && text[index + 1] === "\n") index += 1;
-      if (started || field) row.push(field);
-      if (row.length) rows.push(row);
-      row = [];
-      field = "";
-      started = false;
-    } else {
-      field += char;
-      started = true;
-    }
-  }
-  if (started || field) row.push(field);
-  if (row.length) rows.push(row);
-  return rows;
-}
-
-/** csv.DictReader: the header row's names, and each row as a record (missing fields absent). */
-function csvRecords(text: string): [string[], Record<string, string>[]] {
-  const [headers = [], ...rows] = csvRows(text);
-  return [headers, rows.map((values) => Object.fromEntries(headers.map((name, index) => [name, values[index]]).filter(([, value]) => value !== undefined)))];
-}
-
-const isoDate = (year: number, month: number, day: number): string => {
-  const when = new Date(Date.UTC(year, month - 1, day));
-  if (when.getUTCFullYear() !== year || when.getUTCMonth() !== month - 1 || when.getUTCDate() !== day || year < 1) throw new Error("Invalid evaluation date");
-  return when.toISOString().slice(0, 10);
-};
-
-export function parseBfcl(text: string, page: string): BenchmarkResult[] {
-  const [headers, rows] = csvRecords(text.replace(/^﻿+/, ""));
-  if (!["Model", "Organization", ...Object.keys(BFCL_FIELDS)].every((name) => headers.includes(name))) throw new Error("BFCL schema changed");
-  const version = /BFCL\)?\s*(V\d+)/.exec(page);
-  const stamp = /Last Updated:\s*(\d{4}-\d{2}-\d{2})/.exec(page);
-  if (!version || !stamp) throw new Error("Missing BFCL version/date");
-  const [year, month, day] = stamp[1].split("-").map(Number);
-  const published = isoDate(year, month, day);
-  const result: BenchmarkResult[] = [];
-  for (const row of rows) {
-    const name = (row.Model ?? "").trim();
-    if (!name) continue;
-    const scores = metrics(row, BFCL_FIELDS);
-    if (scores.length) result.push(resultFor("bfcl", name, row.Organization ?? "", `BFCL ${version[1]}`, { source_url: BFCL_URL, data_url: BFCL_DATA_URL, published_at: published, metrics: scores }));
-  }
-  if (!result.length) throw new Error("Empty BFCL results");
-  return result;
-}
-
-export function parseSuperclue(content: Buffer, edition: string, dataUrl: string): BenchmarkResult[] {
-  // Bound workbook expansion; read cached values without executing formulas or external links.
-  const archive = new ZipFile(content);
-  if (archive.infolist().reduce((sum, item) => sum + item.file_size, 0) > 32_000_000) throw new Error("Workbook exceeds size limit");
-  const workbook = new Workbook(archive);
-  if (!workbook.sheetnames.includes("总排行榜")) throw new Error("SuperCLUE schema changed");
-  const [first = [], ...rows] = workbook.rows("总排行榜");
-  const headers = first.map((cell) => (cell === null || cell === "" || cell === 0 || cell === false ? "" : cell instanceof Date ? cell.toISOString() : pyStr(cell)).trim());
-  if (!["模型名称", "机构", ...Object.keys(SUPERCLUE_FIELDS)].every((name) => headers.includes(name))) throw new Error("SuperCLUE columns changed");
-  const result: BenchmarkResult[] = [];
-  rows.forEach((values, index) => {
-    if (index > 10000) throw new Error("Too many benchmark rows");
-    const row: Record<string, unknown> = {};
-    headers.forEach((name, column) => (row[name] = values[column] ?? null));
-    if (!row["模型名称"]) return;
-    const scores = metrics(row, SUPERCLUE_FIELDS);
-    const stamp = row["发布日期"] || row["测评发布日期"];
-    let published: string | null = null;
-    if (stamp instanceof Date) published = stamp.toISOString().slice(0, 10);
-    else if (stamp) {
-      const parts = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/.exec(pyStr(stamp).trim());
-      if (!parts) throw new Error("Invalid evaluation date");
-      published = isoDate(Number(parts[1]), Number(parts[2]), Number(parts[3]));
-    }
-    if (scores.length) result.push(resultFor("superclue", pyStr(row["模型名称"]), pyStr(row["机构"]), `SuperCLUE ${edition}`,
-      { source_url: SUPERCLUE_URL, data_url: dataUrl, published_at: published, metrics: scores }));
-  });
-  if (!result.length) throw new Error("Empty SuperCLUE results");
-  return result;
-}
-
-/** urllib.parse.quote: everything but letters, digits, _.-~ and ``safe`` percent-encoded. */
 
 /** Python's subscript: the key's value, or a KeyError (here an Error). */
 function need(value: unknown, key: string): any {
@@ -434,7 +321,9 @@ export class BenchmarkCatalog {
   }
 
   results(): BenchmarkResult[] {
-    return Object.values(this.cache).flatMap((entry) => ((entry.results ?? []) as Record<string, any>[]).map(validated));
+    // Only the sources still looked up: results kept from dropped ones are not shown or matched.
+    return Object.entries(this.cache).filter(([source]) => source in SOURCE_NAMES)
+      .flatMap(([, entry]) => ((entry.results ?? []) as Record<string, any>[]).map(validated));
   }
 
   matchModels(models: ModelProfile[]): Map<string, MatchedRow[]> {
@@ -455,29 +344,6 @@ export class BenchmarkCatalog {
 
   private get(fetcher: Fetcher, url: string, signal: AbortSignal, options: { headers?: Record<string, string>; params?: Record<string, string | number> } = {}) {
     return get(fetcher, url, { ...options, limit: MAX_RESPONSE_BYTES, signal });
-  }
-
-  async superclue(fetcher: Fetcher, signal: AbortSignal): Promise<BenchmarkResult[]> {
-    const page = (await this.get(fetcher, SUPERCLUE_URL, signal)).text();
-    const entry = /src="(\/assets\/index-[\w-]+\.js)"/.exec(page);
-    if (!entry) throw new Error("SuperCLUE entry script changed");
-    const entryText = (await this.get(fetcher, SUPERCLUE_URL.replace(/\/+$/, "") + entry[1], signal)).text();
-    const home = /\.\/(HomePage-[\w-]+\.js)/.exec(entryText);
-    if (!home) throw new Error("SuperCLUE home script changed");
-    const homeText = (await this.get(fetcher, SUPERCLUE_URL + "assets/" + home[1], signal)).text();
-    const chart = /\.\/(charts-main-[\w-]+\.js)/.exec(homeText);
-    if (!chart) throw new Error("SuperCLUE chart script changed");
-    const chartText = (await this.get(fetcher, SUPERCLUE_URL + "assets/" + chart[1], signal)).text();
-    const editions = [...chartText.matchAll(/loadExcelData\("(\d{4}年\d{1,2}月)"/g)].map((match) => match[1]);
-    if (new Set(editions).size !== 1) throw new Error("Ambiguous current SuperCLUE edition");
-    const edition = editions[0];
-    const url = SUPERCLUE_URL + "data/generalboard/" + pyQuote(edition) + ".xlsx";
-    return parseSuperclue((await this.get(fetcher, url, signal)).body, edition, url);
-  }
-
-  async bfcl(fetcher: Fetcher, signal: AbortSignal): Promise<BenchmarkResult[]> {
-    const [page, data] = await Promise.all([this.get(fetcher, BFCL_URL, signal), this.get(fetcher, BFCL_DATA_URL, signal)]);
-    return parseBfcl(data.text(), page.text());
   }
 
   async aa(fetcher: Fetcher, signal: AbortSignal): Promise<BenchmarkResult[]> {
@@ -526,7 +392,7 @@ export class BenchmarkCatalog {
       this.db.saveBenchmarkCache(source, entry);
       this.cache[source] = entry;
     };
-    await Promise.all([sync("superclue", this.superclue), sync("bfcl", this.bfcl), sync("artificial_analysis", this.aa)]);
+    await sync("artificial_analysis", this.aa);
   }
 }
 

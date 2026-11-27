@@ -1,6 +1,18 @@
 // Reading public HTML without running it:
 // its tables (each cell's text and links) and the text of its scripts.
-import { unescapeXml } from "./xlsx.js";
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+/** XML text with its entities and character references decoded. */
+export function unescapeXml(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
+    if (name[0] === "#") {
+      const code = name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+      return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    return ENTITIES[name] ?? whole;
+  });
+}
 
 export type HtmlCell = { text: string; links: string[] };
 

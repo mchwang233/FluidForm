@@ -26,8 +26,6 @@ const RADAR_AXES: Record<string, [string, string][]> = {
     ["aa_hle", "复杂推理"], ["aa_critpt", "物理推理"], ["aa_lcr", "长文本推理"],
     ["aa_knowledge_accuracy", "知识准确率"], ["aa_non_hallucination", "非幻觉率"],
   ],
-  bfcl: [["Non-Live AST Acc", "单轮标准任务"], ["Live Acc", "单轮真实任务"], ["Multi Turn Acc", "多轮工具调用"], ["Web Search Acc", "网页搜索任务"], ["Memory Acc", "记忆任务"]],
-  superclue: ["数学推理", "幻觉控制", "科学推理", "精确指令遵循", "智能体编程", "智能体任务规划"].map(key => [key, key]),
 };
 export const benchmarkNumber = (value: number) => value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 

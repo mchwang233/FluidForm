@@ -4,30 +4,20 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { beforeEach, test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { AA_KEY_ENV, AA_PUBLIC_URL, AA_URL, BenchmarkCatalog, BFCL_DATA_URL, BFCL_FIELDS, BFCL_URL, matchResults, parseAa, parseAaPublic, parseBfcl,
-  parseSuperclue, SUPERCLUE_FIELDS, SUPERCLUE_URL } from "../packages/research/src/benchmarks.js";
+import { AA_KEY_ENV, AA_PUBLIC_URL, AA_URL, BenchmarkCatalog, matchResults, parseAa, parseAaPublic, resultFor,
+  SOURCE_NAMES } from "../packages/research/src/benchmarks.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import { get } from "../src/fetching.js";
 import { ModelProfileSchema } from "../src/models.js";
 import { conftest } from "./helpers/conftest.js";
-import { type Value, workbookOf } from "./helpers/xlsx-writer.js";
 
 const { folder } = conftest();
 
-function bfclCsv(name = "Sample-1 (FC)", score = "72.5%"): string {
-  const fields = ["Model", "Organization", ...Object.keys(BFCL_FIELDS)];
-  const row: Record<string, string> = { Model: name, Organization: "OpenAI", "Overall Acc": score, "Live Acc": "0%" };
-  const cell = (text: string) => (/[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text);
-  return [fields.join(","), fields.map((field) => cell(row[field] ?? "")).join(",")].join("\r\n") + "\r\n";
-}
-
-const BFCL_PAGE = "<title>Berkeley Function Calling (BFCL) V4</title>Last Updated: 2026-09-15";
-
-function workbookBytes(name = "Qwen3.8-Max(max)", score = 71.48, stamp: Value = "2026.8.6"): Buffer {
-  return workbookOf("总排行榜", [["模型名称", "机构", ...Object.keys(SUPERCLUE_FIELDS), "发布日期"],
-    [name, "阿里巴巴", score, 77.19, 86.08, null, 43.81, 68.42, 90.94, stamp]]);
-}
+// A leaderboard row as model research keeps it (Artificial Analysis), for the matching rules.
+const row = (name: string, published: string | null = "2026-09-15") => resultFor("artificial_analysis", name, "OpenAI", "AA Intelligence Index v4.3",
+  { source_url: AA_PUBLIC_URL, data_url: AA_URL, published_at: published, collection_method: "public_page",
+    metrics: [{ key: "artificial_analysis_intelligence_index", label: "综合智能指数", value: 52.3, unit: "index", note: null, benchmark: null }] });
 
 const aaBody = (page = 1, more = false, version = 4.3, name = "Sample-1 (high)") => ({
   intelligence_index_version: version, pagination: { page, has_more: more, total_pages: more ? 2 : page },
@@ -56,44 +46,26 @@ function aaChartScripts(rows: unknown[]): string {
 const model = (identifier = "openai:sample-1", fields: Record<string, unknown> = {}) => ModelProfileSchema.parse({ id: identifier, provider: identifier.split(":")[0],
   display_name: identifier.split(":")[1], ...fields });
 
-test("the parsers keep original scores, dates, variants and missing values", () => {
-  const bfcl = parseBfcl(bfclCsv(), BFCL_PAGE)[0];
-  assert.ok(bfcl.model_key === "Sample-1" && bfcl.variant === "FC");
-  assert.ok(bfcl.version === "BFCL V4" && bfcl.published_at === "2026-09-15");
-  assert.deepEqual(bfcl.metrics.map((metric) => metric.value), [72.5, 0]);
-  const sc = parseSuperclue(workbookBytes(), "2026年7月", SUPERCLUE_URL)[0];
-  assert.ok(sc.variant === "max" && sc.published_at === "2026-08-06");
-  assert.equal(sc.metrics.length, 6); // Missing scientific reasoning isn't silently replaced with zero.
+test("only Artificial Analysis is looked up", () => {
+  assert.deepEqual(Object.keys(SOURCE_NAMES), ["artificial_analysis"]);
+});
+
+test("the parser keeps original scores, dates, variants and missing values", () => {
   const aa = parseAa(aaBody())[0];
   assert.equal(aa.published_at, null);
   assert.ok(aa.variant === "high" && aa.metrics[0].unit === "index");
   assert.deepEqual(aa.metrics.map((metric) => metric.value), [52.3, 0]);
 });
 
-test("a SuperCLUE date stored as a date cell reads as that day", () => {
-  const sc = parseSuperclue(workbookBytes(undefined, undefined, new Date(Date.UTC(2026, 7, 6))), "2026年7月", SUPERCLUE_URL)[0];
-  assert.equal(sc.published_at, "2026-08-06");
-});
-
-test("invalid percentages are rejected", () => {
-  for (const score of ["101%", "-1%", "nan", "inf", "not a score"]) assert.throws(() => parseBfcl(bfclCsv(undefined, score), BFCL_PAGE), score);
-});
-
-test("schema changes and empty payloads are rejected", () => {
-  assert.throws(() => parseBfcl("Model,Overall Acc\nDemo,1", BFCL_PAGE));
-  assert.throws(() => parseBfcl(bfclCsv(), "no version"));
-  assert.throws(() => parseSuperclue(workbookBytes(undefined, 101), "2026年7月", SUPERCLUE_URL));
-});
-
 test("matching keeps snapshots, the provider, the configuration and ambiguity", () => {
-  let rows = [...parseBfcl(bfclCsv("Sample-1-20260101 (FC)"), BFCL_PAGE), ...parseBfcl(bfclCsv("Sample-1-20260101 (Prompt)"), BFCL_PAGE)];
+  let rows = [row("Sample-1-20260101 (high)"), row("Sample-1-20260101 (low)")];
   const correct = model("openai:sample-1-20260101");
   const candidates = [correct, model(), model("openai:sample-1-mini"), model("google:sample-1-20260101")];
   let matched = matchResults(candidates, rows);
   assert.deepEqual([...matched.keys()], [correct.id]);
-  assert.deepEqual(new Set(matched.get(correct.id)!.map((row) => row.variant)), new Set(["FC", "Prompt"]));
+  assert.deepEqual(new Set(matched.get(correct.id)!.map((row) => row.variant)), new Set(["high", "low"]));
   assert.ok(correct.scores === null && !correct.routing_ready);
-  rows = parseBfcl(bfclCsv("Friendly Name (FC)"), BFCL_PAGE);
+  rows = [row("Friendly Name (high)")];
   candidates[0].display_name = "Friendly Name";
   candidates[1].display_name = "Friendly Name";
   assert.equal(matchResults(candidates, rows).size, 0);
@@ -103,7 +75,7 @@ test("matching keeps snapshots, the provider, the configuration and ambiguity", 
 });
 
 test("scores older than a model's release do not pass to a new snapshot", () => {
-  const rows = parseBfcl(bfclCsv(), BFCL_PAGE);
+  const rows = [row("Sample-1 (high)")];
   assert.equal(matchResults([model(undefined, { release_date: "2026-09-16" })], rows).size, 0);
   assert.ok(matchResults([model(undefined, { release_date: "2026-09-14" })], rows).has(model().id));
 });
@@ -192,13 +164,6 @@ function publicResponse(request: Request): Response {
   assert.ok(!request.headers.has("authorization") && !request.headers.has("x-api-key"));
   const url = request.url.toString();
   if (url === AA_PUBLIC_URL) return text(aaPublicHtml());
-  if (url === BFCL_URL) return text(BFCL_PAGE);
-  if (url === BFCL_DATA_URL) return text(bfclCsv());
-  if (url === SUPERCLUE_URL) return text('<script src="/assets/index-123.js"></script>');
-  if (url.endsWith("index-123.js")) return text('import("./HomePage-abc.js")');
-  if (url.endsWith("HomePage-abc.js")) return text('import"./charts-main-xyz.js"');
-  if (url.endsWith("charts-main-xyz.js")) return text('loadExcelData("2026年10月")');
-  if (decodeURIComponent(request.url.pathname).endsWith("2026年10月.xlsx")) return new Response(new Uint8Array(workbookBytes()), { status: 200 });
   throw new Error(`Unexpected public request ${url}`);
 }
 
@@ -206,12 +171,12 @@ const aaApi = (request: Request) => request.url.host === "artificialanalysis.ai"
 
 test("live sources are found, cached and matched to models", async () => {
   await catalog.refresh(fake(publicResponse));
-  const status = catalog.status([model(), model("qwen:qwen3.8-max")]) as Record<string, any>;
-  assert.equal(status.matched_models, 2);
-  for (const source of ["bfcl", "superclue", "artificial_analysis"]) assert.equal(status.sources[source].status, "ok", source);
+  const status = catalog.status([model()]) as Record<string, any>;
+  assert.equal(status.matched_models, 1);
+  assert.deepEqual(Object.keys(status.sources), ["artificial_analysis"]);
+  assert.equal(status.sources.artificial_analysis.status, "ok");
   assert.equal(status.sources.artificial_analysis.configured, false);
   assert.equal(status.sources.artificial_analysis.collection_method, "public_page");
-  assert.ok(catalog.results().some((result) => result.version === "SuperCLUE 2026年10月"));
   const restarted = new BenchmarkCatalog(catalog.db);
   assert.deepEqual(JSON.parse(JSON.stringify([...restarted.matchModels([model()])])), JSON.parse(JSON.stringify([...catalog.matchModels([model()])])));
 });
@@ -222,8 +187,7 @@ test("a source's failure keeps its previous scores without leaking the error's b
   const previousAa = catalog.cache.artificial_analysis.results;
   await catalog.refresh(fake(() => text("secret-key", 503)));
   assert.equal(JSON.stringify([...catalog.matchModels([model()])]), previous);
-  assert.equal(catalog.cache.bfcl.status, "error");
-  assert.ok(catalog.cache.bfcl.last_success_at);
+  assert.ok(catalog.cache.artificial_analysis.last_success_at);
   assert.ok(!JSON.stringify(catalog.status([model()])).includes("secret-key"));
   assert.equal(catalog.cache.artificial_analysis.status, "error");
   assert.deepEqual(catalog.cache.artificial_analysis.results, previousAa);
@@ -314,14 +278,23 @@ test("compressed replies are decoded once", async () => {
 });
 
 test("an undated alias takes the newest snapshot the catalog does not list", () => {
-  const rows = [...parseBfcl(bfclCsv("Sample-1 0601 (FC)"), BFCL_PAGE), ...parseBfcl(bfclCsv("Sample-1 0813 (FC)"), BFCL_PAGE)];
+  const rows = [row("Sample-1 0601 (high)", null), row("Sample-1 0813 (high)", null)];
   const alias = model();
   let matched = matchResults([alias], rows);
-  assert.deepEqual(matched.get(alias.id)!.map((row) => row.model_name), ["Sample-1 0813 (FC)"]);
+  assert.deepEqual(matched.get(alias.id)!.map((row) => row.model_name), ["Sample-1 0813 (high)"]);
   assert.equal(matched.get(alias.id)![0].matched_by, "latest_snapshot");
   // The newest snapshot listed in the catalog keeps its results; an older one is not the alias.
   const dated = model("openai:sample-1-0813");
   matched = matchResults([alias, dated], rows);
-  assert.deepEqual(matched.get(dated.id)!.map((row) => row.model_name), ["Sample-1 0813 (FC)"]);
+  assert.deepEqual(matched.get(dated.id)!.map((row) => row.model_name), ["Sample-1 0813 (high)"]);
   assert.ok(!matched.has(alias.id));
+});
+
+test("results kept from the dropped leaderboards are not shown or matched", () => {
+  const db = catalog.db;
+  db.saveBenchmarkCache("bfcl", { status: "ok", results: [{ ...row("Sample-1 (high)"), id: "old", source: "bfcl", source_name: "BFCL" }] });
+  const restarted = new BenchmarkCatalog(db);
+  assert.ok(restarted.results().every((result) => result.source === "artificial_analysis"));
+  assert.equal(restarted.matchModels([model()]).size, 0);
+  assert.deepEqual(Object.keys((restarted.status([model()]) as Record<string, any>).sources), ["artificial_analysis"]);
 });
