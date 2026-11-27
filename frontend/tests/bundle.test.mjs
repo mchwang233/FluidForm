@@ -30,3 +30,12 @@ test("components use no inline looks or colour literals", async () => {
     }));
   assert.deepEqual(found, []);
 });
+
+// The models page's own stylesheet takes its colours from style.css's variables too: its first look
+// (green panels, written as colour literals) stayed behind when the theme changed.
+test("the models page's stylesheet uses the theme's colours only", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(fileURLToPath(new URL("../model-profiles.css", import.meta.url)), "utf8");
+  const literals = css.split("\n").flatMap((line, index) => /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|light-dark\(/.test(line) ? [index + 1] : []);
+  assert.deepEqual(literals, []);
+});
