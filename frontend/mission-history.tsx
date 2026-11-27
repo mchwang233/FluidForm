@@ -212,7 +212,7 @@ function MissionActionDialog<T extends MissionRecord>({ mission, pending, error,
       <p className="mission-delete-summary">{mission.plan.summary}</p>
       <p className="modal-note" id={descriptionId}>{copy.description}</p>
       {isTask && <label className="mission-delete-option"><input type="checkbox" checked={withRetrospective} disabled={pending}
-        onChange={event => setWithRetrospective(event.target.checked)} />连同它的复盘一起删（常见故障里不再算它）</label>}
+        onChange={event => setWithRetrospective(event.target.checked)} />连同它的复盘和修复记录一起删（常见故障里不再算它）</label>}
       {error && <p className="mission-delete-error" role="alert">{error}</p>}
       {pending && <p className="mission-delete-status" role="status">{copy.progress}</p>}
       <div className="mission-delete-actions">

@@ -170,6 +170,11 @@ export class Database {
       repair.id, JSON.stringify(repair), repair.created_at);
   }
 
+  /** Removes these shared repair records (by the diagnosis or repair id they were kept under); how many. */
+  deleteSharedRepairs(ids: string[]): number {
+    return this.transaction(() => ids.reduce((count, id) => count + Number(this.run("DELETE FROM shared_repairs WHERE id = ?", id).changes), 0));
+  }
+
   sharedRepairs(limit = 10): Json[] {
     return this.all("SELECT body FROM shared_repairs ORDER BY created_at DESC LIMIT ?", limit).map((row) => this.json(row)!);
   }

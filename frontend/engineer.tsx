@@ -127,10 +127,13 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
   const environment = data?.environment ?? [];
   const repairRow = (item: EnvironmentRepair) => {
     const verdict = item.status === "failed" ? { label: "没查完", tone: "bad" } : REPAIR_VERDICT[item.verdict ?? ""] ?? { label: "查完了", tone: "ok" };
-    return <button type="button" key={item.id} title={item.summary} onClick={() => onOpenRun(item.run_id)}>
+    return <div className="engineer-env-row" key={item.id}><button type="button" title={item.summary} onClick={() => onOpenRun(item.run_id)}>
       <span className="engineer-list-title">{item.task}{item.step ? ` · ${item.step}` : ""}</span>
       <span className="engineer-list-meta"><span className={`dx-chip ${verdict.tone}`}>{verdict.label}</span><span>修环境 · {CALLED[item.trigger] ?? "平台工程师"} · {when(item.created_at)}</span></span>
-    </button>;
+    </button>
+      <ConfirmDelete note="删掉这条修环境记录；它对机器做过的修复不会撤销，以后的修复不会再把它当作先例。"
+        onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/engineer/environment/${encodeURIComponent(item.run_id)}/${encodeURIComponent(item.id)}`); if (!problem) { revision.current++; await load(); } return problem; }} />
+    </div>;
   };
   if (tab === "home") return <PlatformHome apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} openThread={thread} visit={visit}
     onRecords={jobId => { if (jobId) setSelectedId(jobId); pick("records"); }} onCapabilities={() => pick("capabilities")} onSkills={() => pick("skills")} />;
@@ -147,7 +150,9 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
             onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/engineer/jobs`); if (!problem) { revision.current++; await load(); } return problem; }} /></div>}
         {!!(waiting.length + active.length) && <><h4>进行中</h4>{[...waiting, ...active].map(row)}</>}
         {!!applied.length && <><h4>已生效</h4>{applied.map(row)}</>}
-        {!!environment.length && <details className="engineer-others"><summary>修环境 · {environment.length}</summary>{environment.map(repairRow)}</details>}
+        {!!environment.length && <details className="engineer-others"><summary>修环境 · {environment.length}</summary>{environment.map(repairRow)}
+          <div className="engineer-list-tools"><ConfirmDelete label="清除已结束任务的修环境记录" confirm="全部删除" note="删掉所有已结束任务的修环境记录；还在进行的任务的不动，对机器做过的修复不会撤销。"
+            onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/engineer/environment`); if (!problem) { revision.current++; await load(); } return problem; }} /></div></details>}
         {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
       {selected ? <JobDetail apiBase={apiBase} job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread}

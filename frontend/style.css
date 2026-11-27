@@ -1755,3 +1755,4 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 .skills-extra{margin-top:22px}.skills-extra ul{list-style:none;padding:0;display:flex;flex-direction:column;gap:6px}
 .skills-extra li{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.skills-extra li .confirm-delete{margin-left:auto}
 .platform-card .confirm-delete{margin-top:6px}
+.engineer-env-row{display:flex;flex-direction:column;gap:4px}.engineer-env-row>.confirm-delete{align-self:flex-end}

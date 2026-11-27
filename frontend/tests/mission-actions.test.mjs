@@ -246,6 +246,12 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.deletes = [...(state.deletes ?? []), path];
       const engineer = state.engineer ?? (state.engineer = { available: true, jobs: [] });
       const done = job => ["applied", "failed", "rejected", "cancelled"].includes(job.status);
+      if (path.startsWith("/api/engineer/environment")) {
+        const [, , , , runId, id] = path.split("/");
+        const was = (engineer.environment ?? []).length;
+        engineer.environment = runId ? engineer.environment.filter(item => !(item.run_id === runId && item.id === id)) : [];
+        return json({ deleted: was - engineer.environment.length });
+      }
       const before = engineer.jobs.length;
       if (path === "/api/engineer/jobs") engineer.jobs = engineer.jobs.filter(job => !done(job));
       else if (path.startsWith("/api/engineer/threads/")) {
@@ -2295,6 +2301,26 @@ test("finished platform work is deleted from its record, or all at once, saying 
   await click([...page.querySelectorAll(".engineer-list-tools button")].find(node => node.textContent === "全部删除"));
   assert.deepEqual(state.deletes.at(-1), "/api/engineer/jobs");
   assert.deepEqual(state.engineer.jobs.map(job => job.id), ["job3"]);
+});
+
+test("the engineer's 修环境 records are deleted one by one or all at once", async t => {
+  const { state, document, click, act } = await setup(t, [], [], { openComposer: false });
+  const look = (id, task) => ({ id, run_id: `run-${id}`, task, step: "", trigger: "lead_repair", status: "done", verdict: "fixed", summary: "装好了", created_at: "2026-11-01T00:00:00Z" });
+  state.engineer = { available: true, jobs: [], environment: [look("d1", "装 bc"), look("d2", "修许可证")] };
+  await act(async () => state.poll());
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await click([...document.querySelectorAll("button")].find(node => /全部 \d+ 条记录/.test(node.textContent)));
+  const page = document.querySelector(".engineer-page");
+  const row = task => [...page.querySelectorAll(".engineer-env-row")].find(node => node.textContent.includes(task));
+  await click([...row("装 bc").querySelectorAll("button")].find(node => node.textContent === "删除"));
+  assert.match(row("装 bc").textContent, /不会撤销/);
+  await click([...row("装 bc").querySelectorAll("button")].find(node => node.textContent === "确认删除"));
+  assert.deepEqual(state.deletes, ["/api/engineer/environment/run-d1/d1"]);
+  const tools = () => page.querySelector(".engineer-others .engineer-list-tools");
+  await click([...tools().querySelectorAll("button")].find(node => node.textContent === "清除已结束任务的修环境记录"));
+  await click([...tools().querySelectorAll("button")].find(node => node.textContent === "全部删除"));
+  assert.equal(state.deletes.at(-1), "/api/engineer/environment");
+  assert.equal(page.querySelector(".engineer-env-row"), null);
 });
 
 test("the platform engineer page opens from a task's conversation, shows finished work, and takes approvals", async t => {

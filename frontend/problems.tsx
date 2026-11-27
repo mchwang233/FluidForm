@@ -31,7 +31,7 @@ export function ProblemsPage({ apiBase, runs, onOpenRun }: { apiBase: string; ru
   return <section className="problems-page" aria-label="常见故障">
     <h2>常见故障</h2>
     <p className="muted">每个任务结束后，平台用最便宜的模型按问题的实际原因起名，并尽量沿用已有的名字；同一原因在不同记录里的问题归为一类。</p>
-    {leftOver && <div className="problems-tools"><ConfirmDelete label="清理已删除任务的复盘" confirm="清理" note="删掉任务已经删除、只剩复盘的那些记录；它们里的问题不再计入常见故障。还在的任务不受影响。"
+    {leftOver && <div className="problems-tools"><ConfirmDelete label="清理已删除任务的复盘" confirm="清理" note="删掉任务已经删除、只剩复盘的那些记录，连同它们的修复记录；它们里的问题不再计入常见故障，以后的修复也不再当作先例。还在的任务不受影响。"
       onDelete={clearLeftOver} /></div>}
     {cleared && <p className="muted" role="status">{cleared}</p>}
     {error && <p className="error" role="alert">{error}</p>}

@@ -338,6 +338,22 @@ test("the 常见故障 page's problems are deleted by topic or name; a deleted t
   assert.deepEqual((await client.delete(`/api/retrospectives/problems/${encodeURIComponent("environment:bc")}`)).json(), { removed: 1 });
 });
 
+test("the engineer's looks at finished tasks (修环境) are deleted with their shared repair; an unfinished task's are not", async () => {
+  const { api, client } = taskApi(folder());
+  const look = (id: string) => ({ id, trigger: "lead_repair", node_id: null, status: "done", verdict: "fixed", report: "装好了 bc", created_at: "2026-11-01T00:00:00Z" });
+  api.db.saveRun(ExecutionRunSchema.parse({ id: "done-run", prompt: "p", status: "succeeded", budget_usd: 1, plan: { summary: "s", nodes: [] }, diagnoses: [look("d1"), look("d2")] }));
+  api.db.saveRun(ExecutionRunSchema.parse({ id: "going", prompt: "p", status: "paused", budget_usd: 1, plan: { summary: "s", nodes: [] }, diagnoses: [look("d3")] }));
+  api.db.saveSharedRepair({ id: "d1", run_id: "done-run", files: ["bin/bc"], report: "装好了 bc", created_at: "2026-11-01T00:00:00Z" });
+  const listed = () => (api.executor.environmentRepairs() as any[]).map((item) => item.id).sort();
+  assert.deepEqual(listed(), ["d1", "d2", "d3"]);
+  assert.equal((await client.delete("/api/engineer/environment/going/d3")).status_code, 409);
+  assert.deepEqual((await client.delete("/api/engineer/environment/done-run/d1")).json(), { deleted: 1 });
+  assert.deepEqual(api.db.sharedRepairs(100), []);
+  // All of them: only the finished tasks'.
+  assert.deepEqual((await client.delete("/api/engineer/environment")).json(), { deleted: 1 });
+  assert.deepEqual(listed(), ["d3"]);
+});
+
 test("the user brings the engineer into a task", async () => {
   const { api, client } = taskApi(folder());
   assert.equal((await client.post("/api/tasks/nope/engineer", { json: { request: "修沙箱" } })).status_code, 404);

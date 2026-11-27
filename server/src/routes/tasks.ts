@@ -96,7 +96,12 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
     if (!removed) throw new HttpError(404, "没有这类问题");
     return { removed };
   });
-  app.delete("/api/retrospectives/orphaned", async () => ({ deleted: db.deleteRetrospectives(retrospect.orphaned(db)) }));
+  // With them, the shared repair records of those tasks (what earlier repairs found, told to later ones).
+  app.delete("/api/retrospectives/orphaned", async () => {
+    const runs = new Set(db.listRuns().map((run) => run.id));
+    db.deleteSharedRepairs(db.sharedRepairs(100_000).filter((item) => item.run_id && !runs.has(String(item.run_id))).map((item) => String(item.id)));
+    return { deleted: db.deleteRetrospectives(retrospect.orphaned(db)) };
+  });
 
   // A finished task's look back: each step's estimate against its cost and turns, and its problems.
   app.get<{ Params: { run_id: string } }>("/api/tasks/:run_id/retrospective", async (request) => {
@@ -168,7 +173,10 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
     if (!deleted) throw new HttpError(404, "Task not found");
     rmSync(join(settings.data_dir, "traces", runId), { recursive: true, force: true });
     // Kept unless asked: what later tasks learn from it (常见故障, recurring problems).
-    if (queryBool(request.query as Query, "with_retrospective", false)) db.deleteRetrospectives([runId]);
+    if (queryBool(request.query as Query, "with_retrospective", false)) {
+      db.deleteRetrospectives([runId]);
+      db.deleteSharedRepairs(db.sharedRepairs(100_000).filter((item) => item.run_id === runId).map((item) => String(item.id)));
+    }
     current.tasks.delete(runId);
     current.learningTasks.delete(runId);
     current.locks.delete(runId);

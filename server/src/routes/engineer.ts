@@ -27,6 +27,10 @@ export function engineerRoutes(app: FastifyInstance, { api, db, executor, unchan
     return { deleted: await engineerAction(() => executor().engineerDelete(ids)) };
   });
   app.delete("/api/engineer/jobs", async () => ({ deleted: await engineerAction(() => executor().engineerDelete(null)) }));
+  // The engineer's looks at finished tasks (修环境): one, or all of them.
+  app.delete<{ Params: { run_id: string; diagnosis_id: string } }>("/api/engineer/environment/:run_id/:diagnosis_id", async (request) =>
+    ({ deleted: await engineerAction(() => executor().environmentDelete([{ run_id: request.params.run_id, id: request.params.diagnosis_id }])) }));
+  app.delete("/api/engineer/environment", async () => ({ deleted: await engineerAction(() => executor().environmentDelete(null)) }));
 
   app.get<{ Params: { job_id: string } }>("/api/engineer/jobs/:job_id/diff", async (request) => {
     const job = db.getEngineerJob(request.params.job_id);

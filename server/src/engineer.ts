@@ -179,6 +179,34 @@ export abstract class Engineering extends SelfRepair {
     return found.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0)).slice(0, limit);
   }
 
+  /** Deletes the platform engineer's looks at finished tasks (environmentRepairs): ``items`` (task and
+   *  diagnosis ids), or every one when null, with the shared repair record each was kept as. A task not
+   *  finished is refused: its lead may still act on what was found. How many. */
+  async environmentDelete(items: { run_id: string; id: string }[] | null): Promise<number> {
+    const listed = this.environmentRepairs(100_000);
+    const chosen = items ?? listed.filter((item) => FINISHED.has(this.db.getRun(item.run_id)?.status ?? "")).map(({ run_id, id }) => ({ run_id, id }));
+    const byRun = new Map<string, Set<string>>();
+    for (const item of chosen) {
+      if (!listed.some((entry) => entry.run_id === item.run_id && entry.id === item.id)) throw new EngineerError("没有这条修环境记录。");
+      if (!FINISHED.has(this.db.getRun(item.run_id)?.status ?? "")) throw new EngineerError("这个任务还没结束，结束后才能删它的修环境记录。");
+      if (!byRun.has(item.run_id)) byRun.set(item.run_id, new Set());
+      byRun.get(item.run_id)!.add(item.id);
+    }
+    let removed = 0;
+    for (const [runId, ids] of byRun) {
+      await this.locked(runId, () => {
+        const run = this.db.getRun(runId);
+        if (!run) return;
+        const before = run.diagnoses.length;
+        run.diagnoses = run.diagnoses.filter((item) => !ids.has(item.id));
+        removed += before - run.diagnoses.length;
+        this.db.saveRun(run);
+      });
+    }
+    this.db.deleteSharedRepairs(chosen.map((item) => item.id));
+    return removed;
+  }
+
   engineerSave(job: EngineerJob): void {
     job.updated_at = nowIso();
     this.db.saveEngineerJob(job);
