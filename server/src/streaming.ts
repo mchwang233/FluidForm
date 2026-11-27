@@ -2,7 +2,7 @@
 // would have sent without streaming, so the code reading replies stays the same.
 //
 // Streaming lets a long reply be told apart from a dead one: a model that thinks for many minutes
-// keeps sending data, a provider that hangs sends nothing (providers' _post).
+// keeps sending data, a provider that hangs sends nothing (ProviderRegistry.post).
 import { ContextVar, head, isObject, pyDumps } from "./py.js";
 
 type Json = Record<string, any>;

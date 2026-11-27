@@ -1,5 +1,8 @@
-// What the Python backend gets from its language and the TS server needs to match it: context
-// variables, asyncio events, json.dumps's exact text, and string cuts that never split a character.
+// Python's behaviour where FluidForm still depends on it exactly. The backend was Python until it was
+// ported: records it saved (json.dumps's text, its rounding and float format), the regexes and shell
+// quoting it wrote, and the cases in tests/golden/ need the same results here. So these stay rather than
+// being swapped for nearer JS equivalents: context variables, json.dumps's exact text, round() (half to
+// even), str(), shlex, fnmatch, sorting by keys, and string cuts that never split a character.
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /** A contextvars.ContextVar: a value seen by the code run with it, and by what that code starts
@@ -545,7 +548,7 @@ export function pyIsoformat(text: string): string {
 
 /** repr() of a Python float: "1.0" for one, "1e-05" past the fixed range (Python writes exponents
  *  below 1e-4 and from 1e16), the shortest digits that read back the same. */
-export function pyFloatRepr(value: number): string {
+function pyFloatRepr(value: number): string {
   if (Number.isNaN(value)) return "NaN";
   if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
   if (value === 0) return Object.is(value, -0) ? "-0.0" : "0.0";
