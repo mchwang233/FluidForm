@@ -43,7 +43,7 @@ FluidForm gives it to the platform engineer for every component it plans or buil
    - a skill: a folder under `skills/` with a `SKILL.md`;
    - a web UI feature: the component in `frontend/` named in the map, styles in `style.css`;
    - scheduling, steps, checks: `executor.ts` (and the class chain before it), `review.ts`, `quality.ts`, `packages/planning/src/planner.ts`;
-   - an API route: `app.ts`, with what routes share in `api.ts`.
+   - an API route: `server/src/routes/<area>.ts` (the guard and body parsing are in `app.ts`), with what routes share in `api.ts` and `routes/common.ts`.
 3. Write the plan the user approves: 目标, 现成方案 (the official or open-source solution it uses, or
    what was looked at and why none fits), 改动 (each file), 测试, 风险. A new dependency is named
    in the plan with its source and licence; the user's approval of the plan is their agreement to it. A web UI change names the
