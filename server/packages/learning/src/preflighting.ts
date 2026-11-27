@@ -175,8 +175,13 @@ function noteFailure(name: string, tools: string[], reason: string | null): void
   }
 }
 
+/** Where the step sandbox found each tool (available), for telling a public skill about it from one
+ *  about another program of the same name (skillDiscovery.contextWords). */
+export const located = new Map<string, string>();
+
 export async function publicReference(this: Preflighting, runId: string, name: string, tools: string[]): Promise<skills.Skill | null> {
-  const cached = skills.discovered(tools);
+  const context = skillDiscovery.contextWords(tools.map((tool) => located.get(tool)).filter((path): path is string => Boolean(path)), tools);
+  const cached = skills.discovered(tools).filter((skill) => skillDiscovery.fits(`${skill.name}\n${skill.description}\n${skill.body}`, context));
   if (cached.length) {
     this.emit(runId, "run.skill_reference", { name, source_url: cached[0].source_url, revision: cached[0].source_revision, cached: true });
     return cached[0];
@@ -185,7 +190,7 @@ export async function publicReference(this: Preflighting, runId: string, name: s
   const latest = this.db.getRun(runId);
   if (!latest?.allow_network) return null;
   this.emit(runId, "run.skill_searching", { name, tools });
-  const found = await skillDiscovery.deps.discover(tools);
+  const found = await skillDiscovery.deps.discover(tools, { context });
   if (!found.skill) {
     this.emit(runId, "run.skill_search_finished", { name, found: false, reason: found.reason });
     return null;
@@ -204,11 +209,17 @@ export async function available(this: Preflighting, run: ExecutionRun, workspace
   const sandbox = new agentTools.Workspace(workspace, { network: run.allow_network });
   let output: string;
   try {
-    [output] = await sandbox.run("Bash", { command: tools.map((tool) => `command -v ${shlexQuote(tool)} >/dev/null && echo ${shlexQuote(tool)}`).join("; ") });
+    [output] = await sandbox.run("Bash", { command: tools.map((tool) => `p=$(command -v ${shlexQuote(tool)}) && printf '%s\\t%s\\n' ${shlexQuote(tool)} "$(readlink -f "$p" 2>/dev/null || echo "$p")"`).join("; ") });
   } finally {
     sandbox.close();
   }
-  const found = new Set(pySplit(output));
+  const found = new Set<string>();
+  for (const line of output.split("\n")) {
+    const [tool, path] = line.split("\t");
+    if (!tool || !tools.includes(tool.trim())) continue;
+    found.add(tool.trim());
+    if (path?.trim().startsWith("/")) located.set(tool.trim(), path.trim());
+  }
   return tools.filter((tool) => found.has(tool));
 }
 

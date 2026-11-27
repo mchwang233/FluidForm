@@ -67,6 +67,18 @@ test("discovery rejects invalid or irrelevant content", async () => {
   }
 });
 
+test("a public skill about another program of the same name is left out, by where the tool is installed", async () => {
+  const context = discovery.contextWords(["/workspace/eda/synopsys/vc_static/V-2023.12-SP1/bin/vcf"], ["vcf"]);
+  assert.deepEqual(context.sort(), ["eda", "static", "synopsys", "vc", "vc_static"].filter((word) => word.length >= 3).sort());
+  const vmware = "---\nname: vcf-compliance\ndescription: VMware Cloud Foundation compliance with vcf\n---\n# Usage\nRun `vcf check`.\n";
+  const synopsys = "---\nname: vcf\ndescription: Synopsys VC Formal\n---\n# Usage\nRun `vcf -f run.tcl`.\n";
+  assert.equal((await discovery.discover(["vcf"], { fetcher: fetcherFor(github(vmware)), context })).skill, null);
+  assert.ok((await discovery.discover(["vcf"], { fetcher: fetcherFor(github(synopsys)), context })).skill);
+  // Nothing to tell by: the name alone, as before.
+  assert.ok((await discovery.discover(["vcf"], { fetcher: fetcherFor(github(vmware)) })).skill);
+  assert.ok(discovery.fits("anything", []));
+});
+
 test("a search failure does not block and a rate limit is not retried", async () => {
   const seen: [URL, RequestInit][] = [];
   const result = await discovery.discover(["demo-tool"], { fetcher: fetcherFor(() => new Response("", { status: 429, headers: { "Retry-After": "3600" } }), seen) });

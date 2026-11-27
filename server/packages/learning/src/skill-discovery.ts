@@ -30,8 +30,34 @@ const SHA = /^[a-f0-9]{40,64}$/;
 const quote = (text: string) => encodeURIComponent(text).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 const quotePath = (text: string) => text.split("/").map(quote).join("/");
 
-/** The first structurally valid, tool-matching public skill, or an explicit reason. */
-export async function discover(tools: string[], { fetcher = fetch }: { fetcher?: Fetch } = {}): Promise<Discovery> {
+// Parts of an install path that say nothing about what a program is.
+const PLAIN_PARTS = new Set(["bin", "sbin", "usr", "local", "opt", "home", "lib", "lib64", "share", "tools", "tool", "linux", "linux64", "amd64",
+  "x86_64", "workspace", "workspaces", "apps", "app", "software", "packages", "current", "latest", "default", "release", "install", "node_modules"]);
+
+/** What a program's install paths say about it, in words a skill about it would use (".../synopsys/
+ *  vc_static/V-2023.12/bin/vcf": synopsys, vc_static, static): kept on this machine, never sent. */
+export function contextWords(paths: string[], tools: string[]): string[] {
+  const own = new Set(tools.map((tool) => tool.toLowerCase()));
+  const words = new Set<string>();
+  for (const path of paths) {
+    for (const part of path.toLowerCase().split("/")) {
+      if (!part || /\d/.test(part) || part.startsWith(".") || PLAIN_PARTS.has(part) || own.has(part)) continue;
+      for (const word of [part, ...part.split(/[_.-]+/)]) if (word.length >= 3 && !PLAIN_PARTS.has(word) && !own.has(word)) words.add(word);
+    }
+  }
+  return [...words];
+}
+
+/** Whether a skill's text is about the program on this machine: it names one of ``context`` (from its
+ *  install path), or there is nothing to tell by. 2026-11-27: "vcf" found a VMware Cloud Foundation
+ *  skill for Synopsys VC Formal. */
+export function fits(text: string, context: string[]): boolean {
+  return !context.length || context.some((word) => skills.namesTool(text, word));
+}
+
+/** The first structurally valid, tool-matching public skill, or an explicit reason. ``context`` (words
+ *  from where the tools are installed, contextWords) is checked here, never sent. */
+export async function discover(tools: string[], { fetcher = fetch, context = [] }: { fetcher?: Fetch; context?: string[] } = {}): Promise<Discovery> {
   const wanted = [...new Set(tools.filter((tool) => TOOL.test(tool)).map((tool) => tool.toLowerCase()))].slice(0, 2);
   if (!wanted.length) return { skill: null, reason: "No searchable tool name" };
   const stop = new AbortController();
@@ -43,7 +69,7 @@ export async function discover(tools: string[], { fetcher = fetch }: { fetcher?:
     }, limits.SEARCH_TIMEOUT * 1000);
   });
   try {
-    return await Promise.race([search(fetcher, wanted, stop.signal), deadline]);
+    return await Promise.race([search(fetcher, wanted, stop.signal, context), deadline]);
   } catch (error) {
     if (stop.signal.aborted) return { skill: null, reason: "Public skill search timeout" };
     // URLs contain only public tool names and repositories; no task or credential is sent.
@@ -55,7 +81,7 @@ export async function discover(tools: string[], { fetcher = fetch }: { fetcher?:
   }
 }
 
-async function search(fetcher: Fetch, tools: string[], signal: AbortSignal): Promise<Discovery> {
+async function search(fetcher: Fetch, tools: string[], signal: AbortSignal, context: string[]): Promise<Discovery> {
   let remaining = MAX_REQUESTS;
   const get = async (path: string, params: Record<string, string | number> = {}): Promise<any> => {
     if (remaining <= 0) throw new Error("skill search request limit reached");
@@ -115,7 +141,7 @@ async function search(fetcher: Fetch, tools: string[], signal: AbortSignal): Pro
         const skill = skills.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw));
         if (!skill || !skill.description || !skill.body) continue;
         const text = `${skill.name}\n${skill.description}\n${skill.body}`;
-        if (!tools.every((wanted) => skills.namesTool(text, wanted))) continue;
+        if (!tools.every((wanted) => skills.namesTool(text, wanted)) || !fits(text, context)) continue;
         skill.tools = tools;
         skill.source_url = `https://github.com/${name}/blob/${quote(branch)}/${quotePath(item.path)}`;
         skill.source_revision = item.sha;
