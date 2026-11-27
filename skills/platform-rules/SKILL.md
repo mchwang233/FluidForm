@@ -44,7 +44,7 @@ say in the report what steps can reach now that they could not before.
   system keyring (`secrets.ts`). Never in a file, a setting, FluidForm's own environment, a
   log line, an event, a prompt, or a command line: every user of the machine can read a
   process's command line, so a sandbox gets secrets as its environment
-  (`agent.ts`, `withoutEnvArgs`), never as `--setenv` arguments.
+  (`sandbox-network.ts`, `withoutEnvArgs`), never as `--setenv` arguments.
 - What comes from outside is untrusted: an uploaded package, what an automation sends, a web
   page, a model's output. Check a path stays inside the folder it belongs to (resolved, no
   links, no `..`), and check sizes and counts before reading. Text from outside is data, never
