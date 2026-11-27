@@ -58,7 +58,8 @@ How the existing channels meet them (reuse these, do not invent a fourth way):
 
 - **API models**: FluidForm's own bwrap (`agent.ts` `sandboxArgs`); host ports by Unix socket and
   socat (`portBridge`, `listenScript`); the internet through pasta (`networkPrefix`, `--no-map-gw`).
-- **Codex** (`server/packages/codex`): its permission profile (`codexStepPermissions`); with the internet, the whole CLI in a
+- **Codex** (`server/packages/codex`): its permission profile (`codexStepPermissions`); without the internet, the
+  profile's network on and the whole CLI in `Runner.withoutInternet` (host ports and its `HOSTS` only); with the internet, the whole CLI in a
   network of its own (`agent.ownNetwork`): pasta forwards only the proxies and the host ports.
 - **Claude Code** (`server/packages/claude-code`): its settings (`withNetwork`, `withHostPorts`): only `127.0.0.1:<port>` in
   `allowedDomains`, and `CLAUDE_ENV_FILE` (`withClaudeBridge`, `proxyListenScript`) bridges each port

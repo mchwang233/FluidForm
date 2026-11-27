@@ -312,3 +312,38 @@ test("a CLI installed with npm in the hidden home runs in the sandbox", realSand
   const reply = await new CliChannelRegistry().channelRun(fake, call(workspace()), false, 60);
   assert.equal(reply.text, "from its own module");
 });
+
+test("a network without the internet: the recorded host ports and the declared hosts through the proxy, nothing else", realSandbox, async () => {
+  const listening: Server[] = [];
+  const listen = () => new Promise<number>((done) => {
+    const server = createServer((socket) => socket.end("hello\n"));
+    listening.push(server);
+    server.listen(0, "127.0.0.1", () => done((server.address() as { port: number }).port));
+  });
+  const recorded = await listen();
+  const other = await listen();
+  modelChannels.deps.hostPorts = async () => [recorded];
+  const script = join(folder, "probe.py");
+  writeFileSync(script, `import socket, os, json
+def reach(port):
+    try:
+        s = socket.create_connection(("127.0.0.1", port), timeout=3); data = s.recv(16); s.close(); return data.decode().strip()
+    except OSError: return "blocked"
+def through(host):
+    s = socket.create_connection(("127.0.0.1", 8118), timeout=3)
+    s.sendall(("CONNECT %s:443 HTTP/1.1\\r\\nHost: %s:443\\r\\n\\r\\n" % (host, host)).encode())
+    answer = s.recv(64).decode().split("\\r\\n")[0]; s.close(); return answer
+print(json.dumps({"recorded": reach(${recorded}), "other": reach(${other}), "elsewhere": through("example.org")}))
+`);
+  try {
+    const found = await modelChannels.withoutInternet(["/usr/bin/python3", script], ["model.example.com"], (command, env) =>
+      new CliChannelRegistry().run({ id: "x", executable: "python3", auth_command: [], invoke_args: [], fallback_model_id: "" }, command, folder, null, 30,
+        { extraEnv: env }));
+    const result = JSON.parse(found);
+    assert.equal(result.recorded, "hello", "the license server is reached");
+    assert.equal(result.other, "blocked", "no other local service");
+    assert.match(result.elsewhere, /403/, "the proxy lets only the declared hosts through");
+  } finally {
+    for (const server of listening) server.close();
+  }
+});

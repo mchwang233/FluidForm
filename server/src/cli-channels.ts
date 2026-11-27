@@ -138,6 +138,9 @@ export const deps = {
   ownNetwork: (command: string[]) => ownNetwork(command),
   // The host ports a step's sandbox reaches (none without socat, which bridges them).
   hostPorts: () => sandboxPorts(),
+  isolates: () => modelChannels.isolates(),
+  withoutInternet: <T>(command: string[], hosts: string[], work: (command: string[], env: Record<string, string>) => Promise<T>) =>
+    modelChannels.withoutInternet(command, hosts, work),
 };
 
 class Timeout extends Error {
@@ -321,6 +324,8 @@ export class CliChannelRegistry {
       hostPorts: () => deps.hostPorts(),
       ownNetwork: (command) => deps.ownNetwork(command),
       repairCommand: (executable, args) => deps.repairCommand(executable, args),
+      isolates: () => deps.isolates(),
+      withoutInternet: (command, hosts, work) => deps.withoutInternet(command, hosts, work),
     };
   }
 

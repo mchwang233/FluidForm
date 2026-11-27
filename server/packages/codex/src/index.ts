@@ -18,6 +18,11 @@ import { compactContext } from "../../../src/team.js";
 
 export const EXECUTABLE = "codex";
 
+// What Codex calls its model at (measured through a logging proxy, 2026-11-27: chatgpt.com, and
+// ab.chatgpt.com for its feature flags; api.openai.com with an API key, auth.openai.com to refresh
+// the login). A step without the internet reaches these through FluidForm's proxy, nothing else.
+export const HOSTS = ["chatgpt.com", "ab.chatgpt.com", "api.openai.com", "auth.openai.com"];
+
 // Bound the full UTF-8 input conservatively, leaving room for CLI/protocol wrapping.
 export const CODEX_INPUT_LIMIT = 1048576;
 export const CODEX_INPUT_RESERVE = 65536;
@@ -319,13 +324,17 @@ async function complete(runner: Runner, call: OwnStep): Promise<CliText> {
   const executable = runner.which(EXECUTABLE);
   if (!executable) throw new CliError(`${EXECUTABLE} is no longer installed`);
   const step = !call.repair;
+  // A step without the internet still reaches this machine's license server: its commands may open
+  // sockets (the profile's network on), and the whole CLI runs in a network without the internet
+  // (Runner.withoutInternet). Where that cannot be set up, its profile keeps the network off, as before.
+  const isolated = step && !call.network && runner.isolates();
   return withPrivateTmp(step, async (tmp) => {
     let args = [...(call.repair ? REPAIR_ARGS : INVOKE_ARGS)];
     if (step) {
       // Codex's own sandbox with the step's permission profile instead of workspace-write.
       const at = args.indexOf("--sandbox");
       args = [...args.slice(0, at), ...args.slice(at + 2)];
-      args = [args[0], ...deps.codexStepPermissions(call.cwd, call.network, { tmpdir: tmp }), ...args.slice(1)];
+      args = [args[0], ...deps.codexStepPermissions(call.cwd, call.network || isolated, { tmpdir: tmp }), ...args.slice(1)];
     }
     args = withAttachments(args, call.attachments);
     args = [args[0], ...deps.codexSettings(call.effort), ...args.slice(1)];
@@ -335,7 +344,10 @@ async function complete(runner: Runner, call: OwnStep): Promise<CliText> {
     const command = call.repair ? runner.repairCommand(executable, args)
       : call.network ? await runner.ownNetwork([executable, ...args]) : [executable, ...args];
     const options = { watch: call.watch, extraEnv: tmp ? { TMPDIR: tmp } : null, toolTrace: call.toolTrace, signal: call.signal };
-    const run = () => runInput(runner, command, call.cwd, call.prompt, call.timeout, options);
+    const run = () => (isolated
+      ? runner.withoutInternet(command, HOSTS, (wrapped, env) => runInput(runner, wrapped, call.cwd, call.prompt, call.timeout,
+        { ...options, extraEnv: { ...(options.extraEnv ?? {}), ...env } }))
+      : runInput(runner, command, call.cwd, call.prompt, call.timeout, options));
     return codexOutput(step ? await withCodexRules(call.cwd, run) : await run());
   });
 }
@@ -393,27 +405,34 @@ function killGroup(child: ChildProcess): void {
 async function sandboxRun(runner: Runner, command: string, cwd: string, timeout: number, network: boolean): Promise<[string, boolean]> {
   const executable = runner.which(EXECUTABLE);
   if (!executable) throw new CliError("cli:codex cannot run a command in its sandbox without the model");
+  // The network a step gets: see complete.
+  const isolated = !network && runner.isolates();
   return withPrivateTmp(true, async (tmp) => {
-    let argv = [executable, "sandbox", "-P", CODEX_STEP_PROFILE, "-C", cwd, ...deps.codexStepPermissions(cwd, network, { tmpdir: tmp }),
+    let argv = [executable, "sandbox", "-P", CODEX_STEP_PROFILE, "-C", cwd, ...deps.codexStepPermissions(cwd, network || isolated, { tmpdir: tmp }),
       "--", "/bin/bash", "-c", command];
-    // The network a step gets: see complete.
     if (network) argv = await runner.ownNetwork(argv);
-    const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...environment.commandEnv({ ...process.env } as Record<string, string>), TMPDIR: tmp! },
-      stdio: ["ignore", "pipe", "pipe"], detached: true });
-    const chunks: Buffer[] = [];
-    child.stdout!.on("data", (chunk: Buffer) => chunks.push(chunk));
-    child.stderr!.on("data", (chunk: Buffer) => chunks.push(chunk));
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killGroup(child);
-    }, timeout * 1000);
-    const code = await new Promise<number | null>((done) => child.on("close", done).on("error", () => done(null)));
-    clearTimeout(timer);
-    if (timedOut) return [`Command timed out after ${formatG(timeout)}s`, false];
-    const text = Buffer.concat(chunks).toString("utf8").trim() || "(the command printed no output)";
-    return [code ? `Exit code ${code}\n${text}` : text, !code];
+    if (isolated) return runner.withoutInternet(argv, HOSTS, (wrapped, env) => spawned(wrapped, cwd, { TMPDIR: tmp!, ...env }, timeout));
+    return spawned(argv, cwd, { TMPDIR: tmp! }, timeout);
   });
+}
+
+/** Run ``argv`` to its end or ``timeout``: its output (stdout and stderr), and whether it exited 0. */
+async function spawned(argv: string[], cwd: string, extra: Record<string, string>, timeout: number): Promise<[string, boolean]> {
+  const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...environment.commandEnv({ ...process.env } as Record<string, string>), ...extra },
+    stdio: ["ignore", "pipe", "pipe"], detached: true });
+  const chunks: Buffer[] = [];
+  child.stdout!.on("data", (chunk: Buffer) => chunks.push(chunk));
+  child.stderr!.on("data", (chunk: Buffer) => chunks.push(chunk));
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    killGroup(child);
+  }, timeout * 1000);
+  const code = await new Promise<number | null>((done) => child.on("close", done).on("error", () => done(null)));
+  clearTimeout(timer);
+  if (timedOut) return [`Command timed out after ${formatG(timeout)}s`, false];
+  const text = Buffer.concat(chunks).toString("utf8").trim() || "(the command printed no output)";
+  return [code ? `Exit code ${code}\n${text}` : text, !code];
 }
 
 export const channel: ModelChannel = {

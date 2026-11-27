@@ -6,9 +6,9 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { hideHomes, listenScript, ownNetwork, SANDBOX_PORTS_DIR, sandboxAvailable, sandboxPorts, portBridge, Workspace } from "./agent.js";
-import { DomainProxy, PROXY_PORT } from "./capability-sandbox.js";
+import { bridgeScript, hideHomes, listenScript, ownNetwork, SANDBOX_PORTS_DIR, sandboxAvailable, sandboxPorts, portBridge, Workspace } from "./agent.js";
 import * as environment from "./environment.js";
+import { DomainProxy, PROXY_PORT } from "./capability-sandbox.js";
 import * as extensions from "./extensions.js";
 import { log } from "./log.js";
 import type { CliText, RunOptions } from "./cli-channels.js";
@@ -54,6 +54,12 @@ export type Runner = {
   ownNetwork(command: string[]): Promise<string[]>;
   /** ``executable`` on the host as the user, under no_new_privs, to repair the environment. */
   repairCommand(executable: string, args: string[]): string[];
+  /** Whether ``withoutInternet`` can isolate a command here (bwrap and socat). */
+  isolates(): boolean;
+  /** ``work`` with ``command`` in a network of its own without the internet: this machine's recorded
+   *  host ports (a license server) and ``hosts`` through FluidForm's proxy, nothing else (no other
+   *  local service, such as FluidForm's API). The environment to add points at the proxy. */
+  withoutInternet<T>(command: string[], hosts: string[], work: (command: string[], env: Record<string, string>) => Promise<T>): Promise<T>;
 };
 
 /** A step's call of a CLI with a sandbox of its own. */
@@ -208,3 +214,25 @@ export async function withSandbox<T>(channel: ModelChannel, argv: string[], call
 
 /** The folder of each file a call is to read. */
 export const foldersOf = (paths: string[]) => [...new Set(paths.map((path) => dirname(path)))];
+
+/** Whether withoutInternet can isolate a command here. */
+export const isolates = (): boolean => deps.sandboxAvailable() && environment.which("socat") !== null;
+
+/** Runner.withoutInternet: the whole file system as it is (the command's own sandbox decides what it
+ *  sees), a network namespace with only loopback, and in it a listener for each host port and for the
+ *  proxy, passed to Unix sockets served from this process. */
+export async function withoutInternet<T>(command: string[], hosts: string[], work: (command: string[], env: Record<string, string>) => Promise<T>): Promise<T> {
+  const ports = await deps.hostPorts();
+  const proxy = await new DomainProxy(hosts, (line) => log.info(`${command[0]}: ${line}`)).open();
+  try {
+    return await portBridge(ports, (folder) => {
+      const sockets: Record<number, string> = { [PROXY_PORT]: `${proxy.folder}/${PROXY_PORT}.sock` };
+      for (const port of ports) sockets[port] = `${folder}/${port}.sock`;
+      const wrapped = ["bwrap", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--unshare-net", "--die-with-parent", "--",
+        "/bin/bash", "-c", bridgeScript(sockets) + 'exec "$@"', "bash", ...command];
+      return work(wrapped, PROXIED_ENV);
+    });
+  } finally {
+    await proxy.close();
+  }
+}

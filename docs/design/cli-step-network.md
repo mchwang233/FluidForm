@@ -7,7 +7,7 @@
 | 谁跑步骤 | 沙箱 | 本机端口（许可证服务） | 其他本机服务（FluidForm 的 API） |
 |---|---|---|---|
 | API 模型 | FluidForm 的 bwrap（`agent.ts`） | 只放行 `host_ports` | 连不到 |
-| Codex，任务不联网 | Codex 自己的（seccomp） | 连不到：不许建 TCP socket | 连不到 |
+| Codex，任务不联网 | Codex 自己的（seccomp）；2026-11-27 起见下文"不联网的 Codex 也连得上许可证" | 原来连不到：不许建 TCP socket | 连不到 |
 | Codex，任务允许联网 | Codex 自己的，`network = { enabled = true }` | 全部能连 | **能连，`/api/tasks` 返回 200** |
 | Claude Code | Claude 自己的，只通过代理按域名放行 | 连不到 | 连不到（禁了 localhost） |
 
@@ -53,3 +53,43 @@ Claude Code 在 Linux 上给每条沙箱命令一个私有网络，直连本机�
 实测（Claude Code 2.1.332，真实 `complete("cli:claude")`）：不联网、联网两种情况都 `snpslmd: UP`，`vcs -full64` 编译返回 0、`simv` 输出正常；FluidForm 的 API 直连、走代理、写 `localhost` 都连不上，其他本机端口也连不上。
 
 测试：`tests/cli-channels.test.ts`「Claude Code's sandbox opens only the recorded host ports, never every local service」「a Claude Code step gets the bridge to the host ports while it runs」「the bridge goes out through the sandbox's proxy, with its credentials」。
+
+
+## 不联网的 Codex 也连得上许可证（2026-11-27）
+
+### 为什么
+
+不联网的 Codex 步骤用的是 Codex 自己的 seccomp：任何 TCP socket 都不许建，本机的许可证端口也一样。所以分给 Codex 又不允许联网的 VCS 步骤拿不到许可证。
+
+### 改动
+
+- 核心的 `Runner.withoutInternet`（`model-channels.ts`）：
+  - 用 bwrap 开一个新的网络命名空间（`--unshare-net`），里面只有回环；文件系统原样（`--bind / /`），因为看什么由 Codex 自己的权限配置决定。
+  - 里面为每个记下的本机端口起一个 socat 监听，经 Unix 套接字（`portBridge`）转到主机。
+  - 再起一个 `DomainProxy`，只放行 Codex 的模型域名。
+  - 环境里的代理变量指向这个代理。
+  - `agent.bridgeScript` 是 `listenScript` 的一般化：每个端口对应任意一个套接字路径。
+- `server/packages/codex`：
+  - 不联网的步骤：权限配置里打开网络（命令可以建 socket），整个 CLI 放进 `withoutInternet`。
+  - 启动前检查用的 `sandboxRun` 也一样，所以检查看到的网络和步骤一致。
+  - 缺 bwrap 或 socat（`Runner.isolates()` 为 false）时，照旧不打开网络。
+  - `HOSTS`：`chatgpt.com`、`ab.chatgpt.com`、`api.openai.com`、`auth.openai.com`。这是用会记录访问的代理实测出来的：Codex 走 `HTTPS_PROXY`，只连了 `chatgpt.com` 和 `ab.chatgpt.com`；后两个分别给 API 密钥登录和令牌刷新用。
+
+### 实测（真实 Codex）
+
+| | 许可证 | example.com | FluidForm API（直连 / 经代理） | chatgpt.com |
+|---|---|---|---|---|
+| `sandboxRun`，不联网 | UP | 000 | 000 / 000 | 200 |
+| `sandboxRun`，联网 | UP | 200 | 000 / 000 | 200 |
+| `complete`，不联网 | UP | 000 | — | — |
+
+### 测试
+
+- `tests/cli-channels.test.ts`：
+  - 「a Codex step without the internet still reaches the license server …」：不联网的步骤打开网络、经 `withoutInternet` 运行，只放行 Codex 的域名，保留自己的 TMPDIR；不能隔离时照旧不打开网络；修复不受影响。
+  - 「a check in Codex's sandbox without the internet runs in the network such a step gets」。
+- `tests/model-channels.test.ts`「a network without the internet …」（真 bwrap）：记下的端口连得上，别的本机端口连不上，代理不放行未声明的域名（403）。
+
+### 风险
+
+不联网的 Codex 步骤里，命令能经代理连到 Codex 自己的模型域名。这和 agy、Claude Code 的规则一致。

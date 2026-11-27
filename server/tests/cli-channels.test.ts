@@ -345,6 +345,52 @@ test("only a Codex step allowed the internet runs in a network of its own", asyn
   assert.notEqual(claude[0], "own-network");
 });
 
+test("a Codex step without the internet still reaches the license server: sockets on, in a network without the internet", async () => {
+  const registry = new CliChannelRegistry();
+  const commands: string[][] = [];
+  const networks: boolean[] = [];
+  const reached: string[][] = [];
+  cli.deps.which = (name) => join(folder, name);
+  codex.deps.codexSettings = () => [];
+  codex.deps.codexStepPermissions = (_cwd, network) => (networks.push(network), []);
+  cli.deps.isolates = () => true;
+  cli.deps.withoutInternet = async (command, hosts, work) => (reached.push(hosts), work(["no-internet", ...command], { HTTPS_PROXY: "http://127.0.0.1:8118" }));
+  let env: Record<string, string> | null = null;
+  registry.run = async (_spec, command, _cwd, _stdin, _timeout, options = {}) => {
+    commands.push(command);
+    env = options.extraEnv ?? null;
+    return message("ok");
+  };
+  await registry.complete("cli:codex", "不联网的一步", folder);
+  assert.deepEqual(networks, [true], "its commands may open sockets: the network around it is what limits them");
+  assert.equal(commands[0][0], "no-internet");
+  assert.deepEqual(reached, [codex.HOSTS], "only Codex's own hosts through the proxy");
+  assert.equal(env!.HTTPS_PROXY, "http://127.0.0.1:8118");
+  assert.ok(env!.TMPDIR, "its own TMPDIR is kept");
+  // Where that network cannot be set up (no bwrap or socat), its sockets stay off, as before.
+  cli.deps.isolates = () => false;
+  await registry.complete("cli:codex", "不联网的一步", folder);
+  assert.deepEqual(networks, [true, false]);
+  assert.notEqual(commands[1][0], "no-internet");
+  // A repair leaves every sandbox.
+  await registry.complete("cli:codex", "修环境", folder, { repair: true });
+  assert.equal(networks.length, 2);
+});
+
+test("a check in Codex's sandbox without the internet runs in the network such a step gets", async () => {
+  const log = join(folder, "argv.log");
+  fakeCli("no-internet", `#!/bin/sh\necho "$@" > ${log}\necho "proxy=$HTTPS_PROXY"\n`);
+  cli.deps.which = (name) => join(folder, name);
+  const networks: boolean[] = [];
+  codex.deps.codexStepPermissions = (_cwd, network) => (networks.push(network), []);
+  cli.deps.isolates = () => true;
+  cli.deps.withoutInternet = async (command, _hosts, work) => work([join(folder, "bin", "no-internet"), ...command], { HTTPS_PROXY: "http://127.0.0.1:8118" });
+  const [output, ok] = await new CliChannelRegistry().sandboxRun("cli:codex", "true", folder, 10, false);
+  assert.ok(ok && output.includes("proxy=http://127.0.0.1:8118"), output);
+  assert.deepEqual(networks, [true]);
+  assert.match(readFileSync(log, "utf8"), /sandbox -P fluidform-step/);
+});
+
 test("a networked check in Codex's sandbox runs in the network a step gets", async () => {
   const log = join(folder, "argv.log");
   fakeCli("own-network", `#!/bin/sh\necho "$@" > ${log}\necho checked\n`);

@@ -538,8 +538,14 @@ export function hideHomes(): string[] {
 
 /** Shell lines that listen on each bridged port inside the sandbox, then wait until ready. */
 export function listenScript(ports: number[]): string {
+  return bridgeScript(Object.fromEntries(ports.map((port) => [port, `${SANDBOX_PORTS_DIR}/${port}.sock`])));
+}
+
+/** Shell lines that listen on each port (on 127.0.0.1) and pass it to its Unix socket, then wait until ready. */
+export function bridgeScript(sockets: Record<number, string>): string {
+  const ports = Object.keys(sockets).map(Number);
   if (!ports.length) return "";
-  const lines = ports.map((port) => `socat TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${SANDBOX_PORTS_DIR}/${port}.sock`
+  const lines = ports.map((port) => `socat TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:${shlexQuote(sockets[port])}`
     + " </dev/null >/dev/null 2>&1 &");
   lines.push(untilListening(ports));
   return lines.join("\n") + "\n";

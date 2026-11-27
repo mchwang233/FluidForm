@@ -267,5 +267,5 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
 
 ## 后续
 
-- Codex 不联网时连不上许可证（见上），这是原来就有的问题。要修，可以把不联网的 Codex 步骤也放进只转发许可证端口的独立网络。
+- ~~Codex 不联网时连不上许可证~~：已修，见 `docs/design/cli-step-network.md` 的"不联网的 Codex 也连得上许可证"。
 - Codex 的额度读取搬进 Codex 包。
