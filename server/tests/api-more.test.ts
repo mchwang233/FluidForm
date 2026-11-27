@@ -4,6 +4,7 @@
 // test_durable.py, test_learning.py, test_recovery_regressions.py, test_retrospect.py,
 // test_activity.py, test_call_runtime.py, test_core.py, test_quota.py, test_scoring.py and
 // test_unable.py that need the API).
+import * as apiProviders from "../src/api-providers.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -479,6 +480,9 @@ test("the model list shows only models scored from AA", async () => {
   const ids = new Set(listed.map((m: any) => m.id));
   assert.ok(ids.has(scored.id) && !ids.has("mock:local"));
   assert.ok(listed.every((m: any) => m.scores_source === AA_SOURCE));
+  // Each with its provider's name from the registry, for the page.
+  const entry = listed.find((m: any) => m.id === scored.id);
+  assert.equal(entry.provider_name, apiProviders.byId(scored.provider)!.label);
 });
 
 // ---- test_unable.py ----

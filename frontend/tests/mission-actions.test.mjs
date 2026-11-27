@@ -853,8 +853,9 @@ test("the 模型 page lists models by what they are doing for you, and the chose
     model("cli:codex", { display_name: "Codex CLI (membership)", provider: "openai", channel: "cli", input_per_million: 10, usage_note: "周额度已用 10%" }),
     model("deepseek:flash", { display_name: "DeepSeek-V4.1-Flash" }),
     model("glm:glm-5.3", { display_name: "GLM-5.3", enabled: false, supports_vision: false }),
-    model("anthropic:opus", { display_name: "Claude Opus 5.5", configured: false, enabled: false }),
-    model("anthropic:haiku", { display_name: "Claude Haiku 5.5", configured: false, enabled: false }),
+    // The provider's name comes from the server (its model package), as /api/models gives it.
+    model("anthropic:opus", { display_name: "Claude Opus 5.5", provider_name: "Anthropic", configured: false, enabled: false }),
+    model("anthropic:haiku", { display_name: "Claude Haiku 5.5", provider_name: "Anthropic", configured: false, enabled: false }),
     model("old:retired", { display_name: "Retired", catalog_status: "retired" }),
   ];
   const { state, document, click, act } = await setup(t, [], models, { openComposer: false });
@@ -889,6 +890,26 @@ test("the 模型 page lists models by what they are doing for you, and the chose
   // Filtering.
   await click([...page.querySelectorAll(".models-filter button")].find(node => node.textContent === "会员 CLI"));
   assert.equal(page.querySelectorAll(".models-row").length, 1);
+});
+
+test("the 模型 page's sources list the providers in use, by the server's names, and Artificial Analysis only", async t => {
+  const models = [{ id: "deepseek:flash", display_name: "DeepSeek-V4.1-Flash", provider: "deepseek", provider_name: "DeepSeek", channel: "api",
+    configured: true, enabled: true, input_per_million: 0.15, output_per_million: 0.6, context_window: 1_048_576, routing_ready: true, benchmarks: [],
+    scores: { coding: 82, planning: 70, research: 74, chinese: 88, tool_use: 79, structured_output: 75, reliability: 60 } }];
+  const { state, document, click, act } = await setup(t, [], models, { openComposer: false });
+  state.catalogSync = { running: false, auto_sync: true, interval_hours: 1,
+    providers: { deepseek: { name: "DeepSeek", public_status: "ok", official_status: "ok", count: 3 }, kimi: { name: "Kimi（月之暗面）", public_status: "error", public_error: "timeout", official_status: "not_supported" } },
+    benchmarks: { matched_models: 1, sources: { artificial_analysis: { name: "Artificial Analysis", status: "ok", matched_models: 1, count: 200 } } } };
+  const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent.trim() === "模型"));
+  await settle();
+  const names = [...document.querySelectorAll(".catalog-provider b")].map(node => node.firstChild.textContent);
+  assert.deepEqual(names, ["DeepSeek", "Kimi（月之暗面）", "Artificial Analysis"], "only what the server lists, no fixed provider table");
+  assert.doesNotMatch(document.querySelector(".catalog-sync").textContent, /SuperCLUE|BFCL|API_KEY|重启/);
+  // A model's details: its Artificial Analysis results, not a second radar of the routing scores.
+  const detail = document.querySelector(".models-detail");
+  assert.match(detail.textContent, /Artificial Analysis 成绩/);
+  assert.equal(detail.querySelectorAll(".profile-radar").length, 0);
 });
 
 test("with model research off, the 模型 page says the catalog, prices and scores stay as they were", async t => {

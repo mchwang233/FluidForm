@@ -1,7 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { CatalogStatus, dateLabel, PROVIDER_NAMES } from "./catalog-status";
+import { CatalogStatus, dateLabel } from "./catalog-status";
 import { BenchmarkComparison, PublicBenchmarks, type BenchmarkResult } from "./public-benchmarks";
-import { DEFAULT_BENCHMARK_SOURCE } from "./benchmark-sources";
 import "./model-profiles.css";
 
 export const CAPABILITIES = [
@@ -21,6 +20,8 @@ export type Model = {
   id: string;
   display_name: string;
   provider: string;
+  /** The provider's name, from its model package. */
+  provider_name?: string | null;
   channel: string;
   auth_type?: string;
   usage_note?: string | null;
@@ -103,11 +104,12 @@ export function Radar({ model }: { model: Model }) {
 /** Calls and spend per model over the last days (GET /api/models/usage). */
 type Usage = { calls: number; cost_usd: number; run_count: number; runs: { id: string; title: string; kind: string; calls: number }[] };
 
-const MONOGRAM: Record<string, string> = { "cli:codex": "Cx", "cli:claude": "CC", "cli:gemini": "Ge" };
-function monogram(model: Model) {
-  return MONOGRAM[model.id] ?? (model.provider === "mock" ? "DM" : (PROVIDER_NAMES[model.provider] ?? model.provider).slice(0, 2));
-}
 function shortName(model: Model) { return model.display_name.replace(/\s*\(membership\)\s*$/i, ""); }
+const providerName = (model: Model) => model.provider_name ?? model.provider;
+/** Two letters for the avatar: a CLI's own name, else its provider's. */
+function monogram(model: Model) {
+  return model.provider === "mock" ? "DM" : (model.channel === "cli" ? shortName(model) : providerName(model)).slice(0, 2);
+}
 function tokens(count: number | null) {
   if (!count) return "—";
   return count >= 1_000_000 ? `${+(count / 1_000_000).toFixed(1)}M` : `${Math.round(count / 1000)}K`;
@@ -165,12 +167,12 @@ function Detail({ model, usage, onToggle, onConfigure }: { model: Model; usage?:
   return <aside className="models-detail" aria-label={`${shortName(model)} 的详情`}>
     <div className="models-detail-head">
       <span className="models-avatar big" aria-hidden="true">{monogram(model)}</span>
-      <div><h3>{shortName(model)}</h3><small>{cli ? "会员 CLI" : "API"} · {PROVIDER_NAMES[model.provider] ?? model.provider} · {state}</small></div>
+      <div><h3>{shortName(model)}</h3><small>{cli ? "会员 CLI" : "API"} · {providerName(model)} · {state}</small></div>
       <Switch model={model} onToggle={onToggle} />
     </div>
     <p className="models-detail-lead">{!model.scores ? "暂无评测成绩，暂不参与调度。" : best.length ? `调度时更常把${best.join("、")}的活交给它。` : ""}
       {cli && model.usage_note ? ` 会员用量：${model.usage_note}。` : ""}</p>
-    {!model.configured && !cli && <button type="button" className="models-pill wide" onClick={() => onConfigure(model)}>配置 {PROVIDER_NAMES[model.provider] ?? model.provider} 的密钥</button>}
+    {!model.configured && !cli && <button type="button" className="models-pill wide" onClick={() => onConfigure(model)}>配置 {providerName(model)} 的密钥</button>}
     <div className="models-stats">
       <div><span>输入</span><b>{cli ? "会员" : price(model.input_per_million)}</b><small>{cli ? "按会员额度" : "每百万 token"}</small></div>
       <div><span>输出</span><b>{cli ? "会员" : price(model.output_per_million)}</b><small>{cli ? "不另计费" : "每百万 token"}</small></div>
@@ -183,10 +185,9 @@ function Detail({ model, usage, onToggle, onConfigure }: { model: Model; usage?:
     {features.length > 0 && <div className="models-features">{features.map(([key, label]) => <span className="models-chip" key={key}>{label}</span>)}</div>}
     {!!usage?.runs.length && <><h4>最近用在</h4><ul className="models-used-in">{usage.runs.map(run => <li key={run.id}><span>{run.title}</span><small>{run.kind === "chat" ? "对话" : "任务"} · {run.calls} 次</small></li>)}
       {usage.run_count > usage.runs.length && <li className="muted">还有 {usage.run_count - usage.runs.length} 个</li>}</ul></>}
-    <details className="models-fold"><summary>评测明细与能力雷达图</summary>
-      <p className="muted">{model.scores_basis ?? "调度评分由 Artificial Analysis 成绩按排名换算。"}</p>
-      <Radar model={model} />
-      <PublicBenchmarks results={model.benchmarks ?? []} source={DEFAULT_BENCHMARK_SOURCE} /></details>
+    <details className="models-fold"><summary>Artificial Analysis 成绩</summary>
+      {model.scores_basis && <p className="muted">{model.scores_basis}</p>}
+      <PublicBenchmarks results={model.benchmarks ?? []} /></details>
     <details className="models-fold"><summary>目录来源与核对时间</summary>
       {model.description && <p className="muted">{model.description}</p>}
       <dl className="models-facts">
@@ -216,7 +217,7 @@ export function ModelProfiles({ models, selectedId, onSelect, onToggle, onConfig
   const search = query.trim().toLowerCase();
   const shown = models.filter(model => model.catalog_status !== "retired"
     && (channel === "all" || model.channel === channel)
-    && `${model.display_name} ${model.id} ${PROVIDER_NAMES[model.provider] ?? model.provider}`.toLowerCase().includes(search));
+    && `${model.display_name} ${model.id} ${providerName(model)}`.toLowerCase().includes(search));
   const busiest = (a: Model, b: Model) => (usage[b.id]?.calls ?? 0) - (usage[a.id]?.calls ?? 0) || a.display_name.localeCompare(b.display_name);
   const inUse = shown.filter(model => model.configured && model.enabled).sort(busiest);
   const ready = shown.filter(model => model.configured && !model.enabled).sort(busiest);
@@ -235,7 +236,7 @@ export function ModelProfiles({ models, selectedId, onSelect, onToggle, onConfig
     <div className="models-main">
       <div className="models-head">
         <div><h2 id="models-title">模型</h2><p>谁在帮你干活、花了多少，还能再接上谁。</p></div>
-        <details className="models-sources"><summary>目录与评分来源</summary><CatalogStatus apiBase={apiBase} benchmarkSource={DEFAULT_BENCHMARK_SOURCE} /></details>
+        <details className="models-sources"><summary>目录与评分来源</summary><CatalogStatus apiBase={apiBase} /></details>
       </div>
       <div className="models-toolbar">
         <label className="models-search"><span className="sr-only">搜索模型</span><input type="search" placeholder="搜索模型或服务商" value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -248,11 +249,11 @@ export function ModelProfiles({ models, selectedId, onSelect, onToggle, onConfig
         {ready.length > 0 && <section className="models-group" aria-label="已配好，没启用"><h3>已配好，没启用 · {ready.length}</h3>
           {ready.map(model => <Row key={model.id} model={model} usage={usage[model.id]} selected={selected?.id === model.id} onSelect={() => pick(model.id)} onToggle={onToggle} />)}</section>}
         {waiting.size > 0 && <section className="models-group" aria-label="缺密钥"><h3>缺密钥或没安装 · {missing.length} 个模型</h3>
-          {[...waiting.entries()].map(([key, group]) => <MissingRow key={key} name={group[0].channel === "cli" ? shortName(group[0]) : PROVIDER_NAMES[key] ?? key}
+          {[...waiting.entries()].map(([key, group]) => <MissingRow key={key} name={group[0].channel === "cli" ? shortName(group[0]) : providerName(group[0])}
             models={group} cli={group[0].channel === "cli"} selected={group.some(model => model.id === selected?.id)}
             onSelect={() => pick(group[0].id)} onConfigure={() => onConfigure(group[0])} />)}</section>}
         <details className="models-fold models-compare"><summary>所有模型的评测对比</summary>
-          <BenchmarkComparison models={shown} source={DEFAULT_BENCHMARK_SOURCE} onSelect={id => { onSelect(id); window.scrollTo({ top: 0 }); }} /></details>
+          <BenchmarkComparison models={shown} onSelect={id => { onSelect(id); window.scrollTo({ top: 0 }); }} /></details>
       </>}
     </div>
     {selected && <div ref={detail} className="models-detail-wrap"><Detail key={selected.id} model={selected} usage={usage[selected.id]} onToggle={onToggle} onConfigure={onConfigure} /></div>}

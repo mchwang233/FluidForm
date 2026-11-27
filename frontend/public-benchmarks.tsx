@@ -1,7 +1,6 @@
 import React, { useId, useState } from "react";
 import { dateLabel } from "./catalog-status";
 import type { Model } from "./model-profiles";
-import { BENCHMARK_SOURCES, DEFAULT_BENCHMARK_SOURCE, resultsForSource, type BenchmarkSource } from "./benchmark-sources";
 
 export type BenchmarkMetric = { key: string; label: string; value: number; unit: "percent" | "index"; note?: string | null; benchmark?: string | null };
 export type BenchmarkResult = {
@@ -19,19 +18,16 @@ export type BenchmarkResult = {
   metrics: BenchmarkMetric[];
   collection_method?: "dataset" | "api" | "public_page";
 };
-const aggregateKeys = new Set(["总分", "Overall Acc", "artificial_analysis_intelligence_index"]);
-const RADAR_AXES: Record<string, [string, string][]> = {
-  artificial_analysis: [
-    ["aa_scicode", "科学编程"], ["aa_terminalbench_4", "终端智能体"],
-    ["aa_hle", "复杂推理"], ["aa_critpt", "物理推理"], ["aa_lcr", "长文本推理"],
-    ["aa_knowledge_accuracy", "知识准确率"], ["aa_non_hallucination", "非幻觉率"],
-  ],
-};
+// Model research looks up one leaderboard: Artificial Analysis. Its subscores are the radar's axes.
+const RADAR_AXES: [string, string][] = [
+  ["aa_scicode", "科学编程"], ["aa_terminalbench_4", "终端智能体"],
+  ["aa_hle", "复杂推理"], ["aa_critpt", "物理推理"], ["aa_lcr", "长文本推理"],
+  ["aa_knowledge_accuracy", "知识准确率"], ["aa_non_hallucination", "非幻觉率"],
+];
 export const benchmarkNumber = (value: number) => value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 
 function radarAxes(result: BenchmarkResult) {
-  const axes = RADAR_AXES[result.source] ?? result.metrics.filter(metric => metric.unit === "percent" && !aggregateKeys.has(metric.key)).map(metric => [metric.key, metric.label]);
-  return axes.map(([key, label]) => ({ key, label, metric: result.metrics.find(metric => metric.key === key && metric.unit === "percent") }));
+  return RADAR_AXES.map(([key, label]) => ({ key, label, metric: result.metrics.find(metric => metric.key === key && metric.unit === "percent") }));
 }
 
 function PublicRadar({ result }: { result: BenchmarkResult }) {
@@ -70,14 +66,13 @@ function PublicRadar({ result }: { result: BenchmarkResult }) {
   </svg><figcaption>{complete ? "公开分项 · 0–100 刻度" : available ? "空缺维度标为“暂无”，不连线、不补零" : "目前只有综合指数，分项获取后显示轮廓"}</figcaption></figure>;
 }
 
-export function PublicBenchmarks({ results, source = DEFAULT_BENCHMARK_SOURCE }: { results: BenchmarkResult[]; source?: BenchmarkSource }) {
+export function PublicBenchmarks({ results }: { results: BenchmarkResult[] }) {
   const [selectedId, setSelectedId] = useState("");
-  const sourceResults = resultsForSource(results, source);
-  const selected = sourceResults.find(row => row.id === selectedId) ?? sourceResults[0];
-  if (!selected) return <div className="profile-pending-note">暂无 {BENCHMARK_SOURCES[source].name} 成绩。当前同步数据未匹配到此型号和版本，评分保持空缺。可查看上方来源的同步状态与数据日期。</div>;
+  const selected = results.find(row => row.id === selectedId) ?? results[0];
+  if (!selected) return <div className="profile-pending-note">Artificial Analysis 上还没有这个型号的成绩，所以它暂不参与调度。</div>;
   const hasRadar = radarAxes(selected).length >= 3;
   return <section className="public-benchmarks" aria-label="公开评测成绩">
-    <div className="public-benchmark-heading"><div><span className="profile-preset-label">公开评测</span><h4>{selected.source_name}</h4></div><label><span>榜单与测试配置</span><select value={selected.id} onChange={event => setSelectedId(event.target.value)}>{sourceResults.map(result => <option key={result.id} value={result.id}>{result.version} · {result.variant}</option>)}</select></label></div>
+    <div className="public-benchmark-heading"><div><span className="profile-preset-label">公开评测</span><h4>{selected.source_name}</h4></div><label><span>测试配置</span><select value={selected.id} onChange={event => setSelectedId(event.target.value)}>{results.map(result => <option key={result.id} value={result.id}>{result.version} · {result.variant}</option>)}</select></label></div>
     <p className="public-benchmark-model">榜单模型：<strong>{selected.model_name}</strong></p>
     <div className={`public-benchmark-visuals ${hasRadar ? "has-radar" : ""}`}>
       <PublicRadar result={selected} />
@@ -88,17 +83,15 @@ export function PublicBenchmarks({ results, source = DEFAULT_BENCHMARK_SOURCE }:
       </div>)}</div>
     </div>
     <div className="public-benchmark-meta"><span>榜单版本：{selected.version}</span><span>发布 / 更新日期：{selected.published_at ?? "来源未提供"}</span><span>同步时间：{dateLabel(selected.fetched_at)}</span><span>匹配依据：{selected.matched_by === "model_id" ? "型号标识" : "同服务商唯一名称"}</span></div>
-    {selected.source === "artificial_analysis" && <p className="profile-footnote">能力图使用 AA 公开页面中的同型号、同档位分项：通过率 / 正确率由 0–1 换算为 0–100；综合智能指数独立展示。非幻觉率采用 AA-Omniscience 的定义。缺失项保持空白。<a href="https://artificialanalysis.ai/methodology/intelligence-benchmarking" target="_blank" rel="noreferrer">查看评测方法 ↗</a></p>}
-    {selected.collection_method === "public_page" && <p className="profile-footnote">综合指数沿用公开榜单的显示精度，分项取自页面图表数据。榜单未注明的版本和评测日期不以同步时间代替。</p>}
-    <p className="profile-footnote">成绩对应上述测试配置。滚动模型别名可能随服务商更新而变化；各榜单量表独立展示，调度评分由 Artificial Analysis 成绩换算，其余榜单仅供参考。</p>
+    <p className="profile-footnote">分项按 0–100 显示，缺的项留空；调度评分由这些成绩换算。<a href="https://artificialanalysis.ai/methodology/intelligence-benchmarking" target="_blank" rel="noreferrer">评测方法 ↗</a></p>
     <div className="public-source-links"><a href={selected.source_url} target="_blank" rel="noreferrer">来源：{selected.source_name} ↗</a><a href={selected.data_url} target="_blank" rel="noreferrer">查看原始数据 ↗</a></div>
   </section>;
 }
 
-export function BenchmarkComparison({ models, onSelect, source = DEFAULT_BENCHMARK_SOURCE }: { models: Model[]; onSelect: (id: string) => void; source?: BenchmarkSource }) {
+export function BenchmarkComparison({ models, onSelect }: { models: Model[]; onSelect: (id: string) => void }) {
   const [version, setVersion] = useState("");
   const [variant, setVariant] = useState("all");
-  const rows = models.flatMap(model => resultsForSource(model.benchmarks, source).map(result => ({ model, result })));
+  const rows = models.flatMap(model => (model.benchmarks ?? []).map(result => ({ model, result })));
   const versions = [...new Set(rows.map(row => row.result.version))].sort().reverse();
   const activeVersion = versions.includes(version) ? version : versions[0];
   const inVersion = rows.filter(row => row.result.version === activeVersion);
@@ -108,8 +101,8 @@ export function BenchmarkComparison({ models, onSelect, source = DEFAULT_BENCHMA
   const columns = new Map<string, BenchmarkMetric>();
   inVersion.forEach(row => row.result.metrics.forEach(metric => columns.set(metric.key, metric)));
   return <section className="profile-comparison public-comparison" aria-label="公开评测对比">
-    <div className="profile-comparison-heading"><div><h3>{BENCHMARK_SOURCES[source].name} 评测对比</h3><p>同一来源、同一版本内比较；不同测试配置单独列出。缺失项显示 —。</p></div><span>{shown.length} 组成绩</span></div>
+    <div className="profile-comparison-heading"><div><h3>Artificial Analysis 评测对比</h3><p>同一版本内比较，不同测试配置分行列出。</p></div><span>{shown.length} 组成绩</span></div>
     <div className="public-comparison-filters"><label>榜单版本<select value={activeVersion ?? ""} onChange={event => setVersion(event.target.value)}>{versions.length ? versions.map(value => <option key={value}>{value}</option>) : <option value="">暂无成绩</option>}</select></label><label>测试配置<select value={activeVariant} onChange={event => setVariant(event.target.value)}><option value="all">全部配置（逐行标注）</option>{variants.map(value => <option key={value}>{value}</option>)}</select></label></div>
-    {shown.length ? <div className="profile-table-scroll"><table><caption className="profile-sr-only">{BENCHMARK_SOURCES[source].name} 原始评测分数；星号为来源附注，可在模型画像中查看。</caption><thead><tr><th>模型 / 配置</th>{[...columns.values()].map(metric => <th key={metric.key}>{metric.label}{metric.unit === "index" ? "（指数）" : " / 100"}</th>)}</tr></thead><tbody>{shown.map(({ model, result }) => <tr key={`${model.id}:${result.id}`}><th><button onClick={() => onSelect(model.id)}>{model.display_name}<span>{result.variant} · {result.published_at ?? "日期未提供"}</span></button></th>{[...columns.keys()].map(key => { const metric = result.metrics.find(item => item.key === key); return <td key={key} title={metric?.note ?? undefined}>{metric ? benchmarkNumber(metric.value) : "—"}{metric?.note && <sup>*</sup>}</td>; })}</tr>)}</tbody></table></div> : <p className="public-no-results">当前筛选范围暂无 {BENCHMARK_SOURCES[source].name} 成绩。可查看上方同步状态。</p>}
+    {shown.length ? <div className="profile-table-scroll"><table><caption className="profile-sr-only">Artificial Analysis 原始评测分数；星号为来源附注。</caption><thead><tr><th>模型 / 配置</th>{[...columns.values()].map(metric => <th key={metric.key}>{metric.label}{metric.unit === "index" ? "（指数）" : " / 100"}</th>)}</tr></thead><tbody>{shown.map(({ model, result }) => <tr key={`${model.id}:${result.id}`}><th><button onClick={() => onSelect(model.id)}>{model.display_name}<span>{result.variant} · {result.published_at ?? "日期未提供"}</span></button></th>{[...columns.keys()].map(key => { const metric = result.metrics.find(item => item.key === key); return <td key={key} title={metric?.note ?? undefined}>{metric ? benchmarkNumber(metric.value) : "—"}{metric?.note && <sup>*</sup>}</td>; })}</tr>)}</tbody></table></div> : <p className="public-no-results">暂无成绩。</p>}
   </section>;
 }

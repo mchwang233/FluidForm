@@ -1,12 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { BENCHMARK_SOURCES, DEFAULT_BENCHMARK_SOURCE, type BenchmarkSource } from "./benchmark-sources";
-
-export const PROVIDER_NAMES: Record<string, string> = {
-  openai: "OpenAI", anthropic: "Anthropic", google: "Google Gemini", deepseek: "DeepSeek",
-  qwen: "通义千问", doubao: "豆包", glm: "智谱 GLM", minimax: "MiniMax", kimi: "Kimi",
-};
-
 type ProviderStatus = {
+  /** What the page calls it (its model package's name). */
+  name?: string;
   public_status: string;
   public_error?: string | null;
   last_success_at?: string;
@@ -38,7 +33,7 @@ export function dateLabel(value?: string | null): string {
   return Number.isNaN(date.getTime()) ? "尚无记录" : date.toLocaleString("zh-CN", { hour12: false });
 }
 
-export function CatalogStatus({ apiBase, benchmarkSource = DEFAULT_BENCHMARK_SOURCE }: { apiBase: string; benchmarkSource?: BenchmarkSource }) {
+export function CatalogStatus({ apiBase }: { apiBase: string }) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -71,6 +66,7 @@ export function CatalogStatus({ apiBase, benchmarkSource = DEFAULT_BENCHMARK_SOU
     <div className="catalog-sync-heading"><div><h3>模型目录自动更新</h3><p>模型调研已停用</p></div></div>
     <p className="catalog-sync-summary" role="status">目录、价格和评分保持上次的结果；在能力里打开模型调研后恢复更新。</p>
   </section>;
+  const aa = status?.benchmarks?.sources.artificial_analysis;
   const failed = Object.values(status?.providers ?? {}).some(item => item.public_status === "error")
     || Object.values(status?.benchmarks?.sources ?? {}).some(item => item.status === "error");
   return <section className="catalog-sync" aria-label="模型目录自动更新">
@@ -79,20 +75,20 @@ export function CatalogStatus({ apiBase, benchmarkSource = DEFAULT_BENCHMARK_SOU
     {error && <p className="catalog-sync-error" role="alert">{error}</p>}
     {/* The details matter only when something failed; then they open by themselves. */}
     <details className="catalog-sync-details" open={failed || undefined}>
-    <summary>各服务商目录与评分同步情况{failed ? " · 有更新失败" : ""}</summary>
-    <div className="catalog-providers">{Object.entries(PROVIDER_NAMES).map(([id, name]) => {
-      const state = status?.providers?.[id];
-      const official = state?.official_status;
-      return <div className={`catalog-provider ${state?.public_status === "error" ? "has-error" : ""}`} key={id}>
-        <b>{name}<span>{state?.count === undefined ? "—" : `${state.count} 个`}</span></b>
-        <small>{state?.public_status === "ok" ? "公开目录已更新" : state?.public_status === "error" ? "更新失败 · 已保留缓存" : "等待同步"}</small>
-        <small>{official === "ok" ? "官方接口已核对" : official === "no_key" ? "官方接口：未配置密钥" : official === "error" ? "官方接口：核对失败" : official === "not_supported" ? "来源：公开目录" : "来源待检查"}</small>
-        {state?.public_error && <p>{state.public_error}</p>}{state?.official_error && <p>{state.official_error}</p>}
-        {state?.last_success_at && <time dateTime={state.last_success_at}>目录成功时间 {dateLabel(state.last_success_at)}</time>}
+    <summary>各家目录与评分{failed ? " · 有更新失败" : ""}</summary>
+    <div className="catalog-providers">{Object.entries(status?.providers ?? {}).map(([id, state]) => {
+      const official = state.official_status;
+      return <div className={`catalog-provider ${state.public_status === "error" ? "has-error" : ""}`} key={id}>
+        <b>{state.name ?? id}<span>{state.count === undefined ? "—" : `${state.count} 个`}</span></b>
+        <small>{state.public_status === "ok" ? "目录已更新" : state.public_status === "error" ? "更新失败，沿用上次" : "等待同步"}{official === "ok" ? " · 官方列表已核对" : official === "error" ? " · 官方列表核对失败" : ""}</small>
+        {state.public_error && <p>{state.public_error}</p>}{state.official_error && <p>{state.official_error}</p>}
       </div>;
-    })}</div>
-    <p className="catalog-source-note">公开规格与参考价格来自 <a href="https://models.dev/" target="_blank" rel="noreferrer">Models.dev 社区目录</a>，可能滞后于厂商发布。OpenAI、Anthropic、Google、DeepSeek 配置密钥后会额外核对官方列表。目录收录不代表当前账户已获调用权限。</p>
-    <div className="benchmark-sync-status"><h4>{BENCHMARK_SOURCES[benchmarkSource].name} 评分同步<span>{status?.benchmarks?.sources[benchmarkSource]?.matched_models ?? 0} 个模型已匹配</span></h4><div className="catalog-providers benchmark-providers">{Object.entries(status?.benchmarks?.sources ?? {}).filter(([id]) => id === benchmarkSource).map(([id, state]) => <div className={`catalog-provider ${state.status === "error" ? "has-error" : ""}`} key={id}><b>{state.name}<span>{state.matched_models} 个匹配</span></b><small>{state.status === "ok" ? `已同步 ${state.count} 组成绩` : state.status === "error" ? "更新失败 · 保留上次评分" : "等待同步"}</small>{state.collection_method === "public_page" && <small>公开网页 · 无需密钥 · 综合指数与分项</small>}{state.collection_method === "api" && <small>API · 综合智能、编程、智能体指数</small>}{id === "artificial_analysis" && state.with_details !== undefined && <small>{state.with_details} 组成绩含能力分项</small>}{state.error && <p>{state.error}</p>}<small>来源最新标注日期：{state.latest_published_at ?? "未提供（不等于同步时间）"}</small>{state.last_success_at && <time>同步成功时间 {dateLabel(state.last_success_at)}</time>}{id === "artificial_analysis" && state.collection_method !== "api" && <small><a href="https://artificialanalysis.ai/leaderboards/models" target="_blank" rel="noreferrer">查看公开榜单 ↗</a><br/>可选：配置 FLUIDFORM_ARTIFICIAL_ANALYSIS_API_KEY 并重启，通过 API 补充编程、智能体指数。</small>}</div>)}</div><p className="catalog-source-note">与模型目录一起定时更新，也可点“立即更新”。目录收录时间与榜单发布成绩的时间不同；同步成功只说明读取成功。匹配要求服务商与型号一致，不跨快照日期、型号档次或评测版本填分。</p></div>
+    })}{aa && <div className={`catalog-provider ${aa.status === "error" ? "has-error" : ""}`}>
+        <b>Artificial Analysis<span>{aa.matched_models} 个模型有成绩</span></b>
+        <small>{aa.status === "ok" ? `评分已更新 · ${dateLabel(aa.last_success_at)}` : aa.status === "error" ? "更新失败，沿用上次评分" : "等待同步"}</small>
+        {aa.error && <p>{aa.error}</p>}
+      </div>}</div>
+    <p className="catalog-source-note">规格和参考价来自 <a href="https://models.dev/" target="_blank" rel="noreferrer">Models.dev</a>，评分来自 <a href="https://artificialanalysis.ai/leaderboards/models" target="_blank" rel="noreferrer">Artificial Analysis</a>。</p>
     </details>
   </section>;
 }

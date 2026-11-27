@@ -470,6 +470,7 @@ export function buildApp(api: Api): FastifyInstance {
       : apiProviders.inUse(id.split(":", 1)[0]));
     return Object.values(api.models).filter((model) => model.scores_source === AA_SOURCE && offered(model.id)).map((model) => ({
       ...model, configured: configured.has(model.id), routing_ready: routingReady(model), benchmarks: matches.get(model.id) ?? [],
+      provider_name: apiProviders.byId(model.provider)?.label ?? null,
       auth_type: model.channel === "cli" ? statuses[model.id]?.auth_type ?? null : "api_key",
     }));
   });

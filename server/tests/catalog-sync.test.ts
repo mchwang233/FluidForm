@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { beforeEach, test } from "node:test";
 import { CatalogSync, OFFICIAL_URLS, PUBLIC_CATALOG_URL, PUBLIC_PROVIDERS, publicModels } from "../packages/research/src/catalog-sync.js";
+import * as apiProviders from "../src/api-providers.js";
 import { seedCatalog } from "../src/catalog.js";
 import { Database } from "../src/db.js";
 import { pythonIso } from "../src/lax.js";
@@ -267,4 +268,20 @@ test("starting uses the saved schedule, and runs when it is due", async () => {
   assert.equal(calls.length, 1);
   assert.ok(pythonIso(new Date(Date.now() + 23 * 3_600_000)) < sync.status().next_sync_at);
   await sync.close();
+});
+
+test("the sync's status lists the providers in use, each with its package's name", async () => {
+  answer(() => json(catalog));
+  const saved = apiProviders.deps.on;
+  try {
+    await sync.refresh();
+    const named = sync.status().providers as Json;
+    assert.equal(named.kimi.name, "Kimi（月之暗面）");
+    assert.equal(named.deepseek.name, "DeepSeek");
+    apiProviders.deps.on = (extension) => extension.id !== "kimi";
+    assert.ok(!("kimi" in (sync.status().providers as Json)), "a provider switched off is not listed");
+  } finally {
+    apiProviders.deps.on = saved;
+    await sync.close();
+  }
 });

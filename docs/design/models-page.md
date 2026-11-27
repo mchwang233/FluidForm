@@ -33,3 +33,35 @@ the groups, their order and totals, the details, switching, a model without a ke
 - A deleted task's model calls are deleted with it, so they leave the totals.
 - A CLI's cost is what FluidForm records for it (a membership's estimate), so a CLI row shows
   calls only.
+
+## 清理旧界面的遗留（2026-11-27）
+
+### 为什么
+
+模型调研只剩 Artificial Analysis，而且厂商都做成了包。可模型页上还留着旧界面的东西：
+- 写死的 9 家厂商名单（`PROVIDER_NAMES`）：关掉的厂商也照样列出；
+- 多个榜单的切换框架（`benchmark-sources.ts`、`source` 参数、"其余榜单仅供参考"）；
+- 详情里有两张雷达图，其中一张调度分雷达图和上面的分数条重复；
+- 一条要求设置环境变量并重启的提示；
+- 只认识 Codex、Claude、Gemini 的头像缩写表；
+- `model-profiles.css` 里一半是旧版"模型画像卡片"的样式。
+
+### 改动
+
+- **厂商名改由服务器给**：
+  - `/api/models` 的每个模型带上 `provider_name`，取自厂商包；
+  - 模型调研的同步状态只列开着的厂商，每家带 `name`（`catalog-sync.status`）。
+- **`catalog-status.tsx`**：卡片按服务器给的厂商逐个列出，再列一行 Artificial Analysis。去掉了环境变量的提示和几段长说明，只留一句来源说明。
+- **`public-benchmarks.tsx`**：只处理 Artificial Analysis 一个来源。删除 `benchmark-sources.ts`，以及给 SuperCLUE、BFCL 留的汇总字段。说明只留一句。
+- **`model-profiles.tsx`**：
+  - 详情里的折叠区改名为"Artificial Analysis 成绩"，不再重复画调度分雷达图。`Radar` 组件保留，任务图里还在用。
+  - 头像缩写改为取 CLI 名或厂商名的前两个字。
+- **`model-profiles.css`**：删掉没有组件再用的 50 个类名、140 个选择器（192 行 → 87 行）。清理时核对过：组件还在用的类，一个都没少。
+
+### 测试
+
+- 前端 `mission-actions`："the 模型 page's sources list the providers in use, by the server's names, and Artificial Analysis only"：只列服务器给的厂商；不提 SuperCLUE、BFCL、环境变量或重启；详情里没有第二张雷达图。
+- 模型列表测试的数据补上了 `provider_name`，和服务器现在的返回一致。
+- 后端：
+  - `catalog-sync.test.ts`：同步状态带厂商名，关掉的厂商不列出；
+  - `api-more.test.ts`：`/api/models` 带 `provider_name`。

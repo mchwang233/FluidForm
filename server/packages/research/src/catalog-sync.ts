@@ -105,7 +105,10 @@ export class CatalogSync {
   }
 
   status(): Json {
-    return { ...this.state, running: this.lock.locked || Boolean(this.task && !this.task.done), auto_sync: this.autoSync, interval_hours: this.intervalHours,
+    // The providers in use now, each with the name the page shows.
+    const providers = Object.fromEntries(Object.entries((this.state.providers ?? {}) as Json).filter(([id]) => apiProviders.inUse(id))
+      .map(([id, state]) => [id, { ...state, name: apiProviders.byId(id)?.label ?? id }]));
+    return { ...this.state, providers, running: this.lock.locked || Boolean(this.task && !this.task.done), auto_sync: this.autoSync, interval_hours: this.intervalHours,
       next_sync_at: this.autoSync ? this.state.next_sync_at ?? null : null, benchmarks: this.benchmarks ? this.benchmarks.status(Object.values(this.models)) : null };
   }
 
