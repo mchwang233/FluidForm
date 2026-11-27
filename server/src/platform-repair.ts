@@ -7,7 +7,7 @@ import { SERVER } from "./paths.js";
 import { PLATFORM_SCOPE } from "./models.js";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, copyFileSync, existsSync, openSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, openSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,7 +72,12 @@ export interface PlatformRepairs {
   launch(job: RepairJob): Promise<void>;
   pending(): RepairJob | null;
   clearPending(job: RepairJob): void;
+  /** Removes the copies not in ``keep`` (and not pending or just made); their ids. */
+  sweep?(keep: Set<string>): string[];
 }
+
+/** A copy younger than this stays: it may be prepared and not yet recorded by its job. */
+export const SWEEP_MIN_AGE_SECONDS = 3600;
 
 
 /** The source checkout to repair: ``configured``, or the one this server runs from. */
@@ -277,6 +282,33 @@ export class SourceRepairs implements PlatformRepairs {
     const identifier = String(JSON.parse(readFileSync(path, "utf8")).id ?? "");
     if (!/^[0-9a-f]{32}$/.test(identifier)) throw new RepairError("平台修复记录标识无效。");
     return JSON.parse(readFileSync(join(this.directory, identifier, "job.json"), "utf8")) as RepairJob;
+  }
+
+  /** Each copy is a whole source tree (2026-11-27: 61 of them, 1.5 GB, kept after their work ended).
+   *  What a finished job shows, its diff, is in its record; the copy is only for the work itself. */
+  sweep(keep: Set<string>, now = Date.now() / 1000): string[] {
+    if (!existsSync(this.directory)) return [];
+    let pendingId: string | null = null;
+    try {
+      pendingId = this.pending()?.id ?? null;
+    } catch {
+      return []; // a pending record that cannot be read: leave everything as it is
+    }
+    const removed: string[] = [];
+    for (const name of readdirSync(this.directory)) {
+      if (!/^[0-9a-f]{32}$/.test(name) || keep.has(name) || name === pendingId) continue;
+      const folder = join(this.directory, name);
+      let made: number;
+      try {
+        made = Number(this.load(name)?.created_at) || statSync(folder).mtimeMs / 1000;
+      } catch {
+        made = statSync(folder).mtimeMs / 1000;
+      }
+      if (now - made < SWEEP_MIN_AGE_SECONDS) continue;
+      rmSync(folder, { recursive: true, force: true });
+      removed.push(name);
+    }
+    return removed;
   }
 
   clearPending(job: RepairJob): void {

@@ -288,6 +288,7 @@ export class Api {
     executor.restorePlatform();
     executor.restoreEngineer();
     executor.restoreLearning();
+    executor.sweepRepairCopies();
     for (const runId of resuming) executor.start(runId);
     // Automation packages, when switched on: tasks asked for through them hear how they ended.
     executor.endListeners.push((runId, kind) => this.automations.taskEnded(runId, kind));

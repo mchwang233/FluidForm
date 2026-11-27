@@ -55,6 +55,19 @@ test("the source copy and its checks keep data and the user's edits apart", asyn
   assert.ok(existsSync(job.activate) && readFileSync(job.activate, "utf8").includes("export async function activate"));
 });
 
+test("copies no longer in use are removed; one in use, pending or just made stays", async () => {
+  const repairs = manager();
+  const made = await Promise.all([0, 1, 2, 3].map(() => repairs.prepare("r", "d")));
+  const [used, waiting, old, fresh] = made;
+  repairs.schedule(waiting);
+  const later = Date.now() / 1000 + platform.SWEEP_MIN_AGE_SECONDS + 1;
+  // The fresh one was just made: as if made now, at sweep time.
+  repairs.save({ ...fresh, created_at: later });
+  assert.deepEqual(repairs.sweep(new Set([used.id]), later), [old.id]);
+  assert.ok(!existsSync(old.folder));
+  for (const job of [used, waiting, fresh]) assert.ok(existsSync(job.folder));
+});
+
 test("failed checks and a missing regression test cannot apply a patch", async () => {
   const repairs = manager();
   const job = await repairs.prepare("r", "d");

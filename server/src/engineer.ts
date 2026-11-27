@@ -11,8 +11,9 @@ import { BudgetExceeded, RequestBudget } from "./budget.js";
 import { settings } from "./config.js";
 import { interaction, OPTIONS_LINES, QUESTION_LINES } from "./diagnosis.js";
 import { nowIso } from "./lax.js";
-import { type Attachment, type Diagnosis, ENGINEER_DONE, ENGINEER_WAITING, type EngineerJob, EngineerJobSchema, EngineerMessageSchema, type ExecutionRun, type TaskNode, isPlatformScope } from "./models.js";
+import { type Attachment, type Diagnosis, ENGINEER_DONE, FINISHED, ENGINEER_WAITING, type EngineerJob, EngineerJobSchema, EngineerMessageSchema, type ExecutionRun, type TaskNode, isPlatformScope } from "./models.js";
 import type { Capability } from "./models.js";
+import { log } from "./log.js";
 import { RepairError, type RepairJob } from "./platform-repair.js";
 import * as worker from "./repair-worker.js";
 import { readFileSync } from "node:fs";
@@ -181,6 +182,30 @@ export abstract class Engineering extends SelfRepair {
   engineerSave(job: EngineerJob): void {
     job.updated_at = nowIso();
     this.db.saveEngineerJob(job);
+    if (ENGINEER_DONE.has(job.status) && job.repair_id) this.sweepRepairCopies();
+  }
+
+  /** The source copies still in use: a job not finished, a task not finished (its repairs and the
+   *  change it waits for), the change being applied. The rest are removed (platform-repair.sweep). */
+  repairCopiesInUse(): Set<string> {
+    const keep = new Set<string>();
+    for (const job of this.db.engineerJobs(10_000)) if (!ENGINEER_DONE.has(job.status) && job.repair_id) keep.add(job.repair_id);
+    for (const run of this.db.listRuns()) {
+      if (FINISHED.has(run.status)) continue;
+      if (run.maintenance_id) keep.add(run.maintenance_id);
+      for (const diagnosis of run.diagnoses) if (diagnosis.repair_id) keep.add(diagnosis.repair_id);
+    }
+    if (this.platformPending?.id) keep.add(this.platformPending.id);
+    return keep;
+  }
+
+  sweepRepairCopies(): string[] {
+    try {
+      return this.platform.sweep?.(this.repairCopiesInUse()) ?? [];
+    } catch (error) {
+      log.warning(`清理平台修复副本失败：${(error as Error)?.message ?? error}`);
+      return [];
+    }
   }
 
   engineerJob(jobId: string): EngineerJob {

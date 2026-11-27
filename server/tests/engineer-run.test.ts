@@ -9,7 +9,7 @@ import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
 import * as engineer from "../src/engineer.js";
 import { Executor } from "../src/executor.js";
-import { DiagnosisSchema, ExecutionRunSchema, type SupervisorSession, TaskNodeSchema } from "../src/models.js";
+import { DiagnosisSchema, EngineerJobSchema, ExecutionRunSchema, type SupervisorSession, TaskNodeSchema } from "../src/models.js";
 import * as platform from "../src/platform-repair.js";
 import { type CompleteOptions, ProviderResult } from "../src/providers.js";
 import * as worker from "../src/repair-worker.js";
@@ -541,4 +541,18 @@ test("which changes are one package's alone", () => {
   assert.equal(engineer.packageOnly(where, ["server/packages/site/site/index.html"]), null);
   assert.equal(engineer.packageOnly(where, ["docs/x.md"]), null);
   assert.equal(engineer.packageOnly(where, ["server/packages/bot/a", "server/packages/gone/b"]), null);
+});
+
+test("the source copies in use: an unfinished job's, an unfinished task's repairs; a finished job's goes", () => {
+  const db = new Database(join(folder(), "copies.db"));
+  const executor = new Executor(db, { configuredModels: (ids: Iterable<string>) => new Set(ids) } as never, MODELS);
+  const job = (id: string, status: string, repair: string) => db.saveEngineerJob(EngineerJobSchema.parse({ id, kind: "repair", title: id, request: "r", status,
+    repair_id: repair }));
+  job("working", "editing", "a".repeat(32));
+  job("done", "applied", "b".repeat(32));
+  const run = (id: string, status: string, repair: string) => db.saveRun(ExecutionRunSchema.parse({ id, prompt: "p", status, budget_usd: 1,
+    plan: { summary: "s", nodes: [] }, diagnoses: [DiagnosisSchema.parse({ id: `d-${id}`, trigger: "auto", repair_id: repair })] }));
+  run("going", "running", "c".repeat(32));
+  run("over", "succeeded", "d".repeat(32));
+  assert.deepEqual([...executor.repairCopiesInUse()].sort(), ["a".repeat(32), "c".repeat(32)]);
 });
