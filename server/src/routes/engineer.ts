@@ -17,6 +17,17 @@ export function engineerRoutes(app: FastifyInstance, { api, db, executor, unchan
     return unchangedOr(request, reply, JSON.stringify(overview));
   });
 
+  // Deleting finished work's records (engineer.engineerDelete): one job, a whole conversation, or every
+  // finished one. Work not finished is refused (409); an applied change stays in git.
+  app.delete<{ Params: { job_id: string } }>("/api/engineer/jobs/:job_id", async (request) =>
+    ({ deleted: await engineerAction(() => executor().engineerDelete([request.params.job_id])) }));
+  app.delete<{ Params: { thread_id: string } }>("/api/engineer/threads/:thread_id", async (request) => {
+    const ids = executor().engineerThread(request.params.thread_id);
+    if (!ids.length) throw new HttpError(404, "没有这段对话");
+    return { deleted: await engineerAction(() => executor().engineerDelete(ids)) };
+  });
+  app.delete("/api/engineer/jobs", async () => ({ deleted: await engineerAction(() => executor().engineerDelete(null)) }));
+
   app.get<{ Params: { job_id: string } }>("/api/engineer/jobs/:job_id/diff", async (request) => {
     const job = db.getEngineerJob(request.params.job_id);
     if (!job) throw new HttpError(404, "没有这项平台改动");

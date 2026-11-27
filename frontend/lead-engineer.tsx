@@ -55,7 +55,7 @@ export function useEngineerJobs(apiBase: string, runId: string | null, signal: s
       return failure instanceof Error ? failure.message : String(failure);
     }
   };
-  return { jobs, act, available };
+  return { jobs, act, available, reload: load };
 }
 
 /** Whether a request asks for something new (a component) rather than a fix. */

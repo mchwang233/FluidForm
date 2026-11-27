@@ -5,6 +5,7 @@ import { API_BASE, AttachmentTray, ClipButton, SentFiles, takesFiles, useAttachm
 import { when } from "./diagnosis";
 import { ENGINEER_STATUS, type EngineerJob, type EngineerMessage } from "./engineer";
 import { ENGINEER_WAITING, kindOf, useEngineerJobs } from "./lead-engineer";
+import { ConfirmDelete, deleteAt } from "./confirm-delete";
 import { has, useProvided } from "./provided";
 import type { Capability } from "./capabilities";
 
@@ -117,7 +118,7 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
   // Changes when 平台 is picked again in the sidebar: back to the page itself, out of any conversation.
   visit?: number;
 }) {
-  const { jobs, act, available } = useEngineerJobs(apiBase, null, "", true);
+  const { jobs, act, available, reload } = useEngineerJobs(apiBase, null, "", true);
   const engineerOn = has(useProvided(), "engineer");
   const [capabilities, setCapabilities] = useState<Capability[]>([]), [skills, setSkills] = useState<Skill[]>([]);
   const [running, setRunning] = useState<Record<string, AbilityRuntime>>({});
@@ -139,7 +140,7 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
     <section className="platform-main">
       {open ? <>
         <button type="button" className="platform-back" onClick={() => setOpenId(null)}>← 平台</button>
-        <ThreadView engineerOn={engineerOn} thread={open} title={threadTitle(open)} act={act} available={available} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
+        <ThreadView apiBase={apiBase} onDeleted={async () => { setOpenId(null); await reload(); }} engineerOn={engineerOn} thread={open} title={threadTitle(open)} act={act} available={available} runs={runs} onOpenRun={onOpenRun} onRecords={onRecords} />
       </> : <div className="platform-home">
         <div className="platform-greeting"><span className="platform-greeting-mark" aria-hidden="true"><Icon name="wrench" size={26} /></span>
           <h2>{engineerOn ? "要平台加什么能力、修什么问题？" : "平台"}</h2></div>
@@ -241,9 +242,9 @@ function Pending({ job, act, onRevise }: { job: EngineerJob; act: (path: string,
 
 /** One conversation: everything said in it, each piece of work followed by what came of it, and
  * the box to go on — a reply to what waits for you, or new work in this conversation. */
-function ThreadView({ engineerOn, thread, title, act, available, runs, onOpenRun, onRecords }: {
-  engineerOn: boolean; thread: Thread; title: string; act: (path: string, body?: unknown) => Promise<string | null>; available: boolean;
-  runs: RunRef[]; onOpenRun: (id: string) => void; onRecords: (jobId?: string) => void;
+function ThreadView({ apiBase, engineerOn, thread, title, act, available, runs, onOpenRun, onRecords, onDeleted }: {
+  apiBase: string; engineerOn: boolean; thread: Thread; title: string; act: (path: string, body?: unknown) => Promise<string | null>; available: boolean;
+  runs: RunRef[]; onOpenRun: (id: string) => void; onRecords: (jobId?: string) => void; onDeleted: () => Promise<void>;
 }) {
   const end = useRef<HTMLDivElement>(null);
   const said = thread.jobs.reduce((count, job) => count + (job.messages?.length ?? 0), 0);
@@ -254,6 +255,8 @@ function ThreadView({ engineerOn, thread, title, act, available, runs, onOpenRun
     <header className="platform-head">
       <h2>{title}</h2>
       <p>{thread.run ? <>来自任务 <button type="button" className="link-button" onClick={() => onOpenRun(thread.run!.id)}>「{thread.run.plan.title || thread.run.plan.summary.slice(0, 30)}」</button> · </> : `${threadSource(thread) === "你发起" ? "你发起的对话" : "来自已删除的任务"} · `}{thread.jobs.length} 项工作</p>
+      {thread.jobs.every(job => DONE.has(job.status)) && <ConfirmDelete label="删除这段对话" note="删掉这段对话里所有工作的记录和源码副本；已生效的改动留在 git 里，不会撤销。"
+        onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/engineer/threads/${encodeURIComponent(thread.id)}`); if (!problem) await onDeleted(); return problem; }} />}
     </header>
     <div className="platform-thread" aria-label="对话内容">
       {thread.jobs.map(job => <React.Fragment key={job.id}>

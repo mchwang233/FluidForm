@@ -270,6 +270,30 @@ test("the API shows a working job's activity, and nothing once it stops", async 
   assert.deepEqual((await client.get(`/api/engineer/jobs/${job.id}/activity`)).json(), { running: false, total: 0, calls: [] });
 });
 
+test("finished platform work can be deleted: one job, a conversation, or all; work not finished cannot", async () => {
+  const { api, client } = taskApi(folder());
+  const save = (fields: Record<string, unknown>) => {
+    const job = EngineerJobSchema.parse({ request: "修沙箱", ...fields });
+    api.db.saveEngineerJob(job);
+    return job;
+  };
+  const applied = save({ status: "applied", thread_id: "t1" });
+  const failed = save({ status: "failed", thread_id: "t1" });
+  const working = save({ status: "editing", thread_id: "t2" });
+  const rejected = save({ status: "rejected", thread_id: "t3" });
+  const other = save({ status: "failed", thread_id: "t4" });
+  const refused = await client.delete(`/api/engineer/jobs/${working.id}`);
+  assert.ok(refused.status_code === 409 && refused.json().detail.includes("还没结束"));
+  assert.equal((await client.delete(`/api/engineer/threads/t2`)).status_code, 409);
+  assert.deepEqual((await client.delete(`/api/engineer/jobs/${rejected.id}`)).json(), { deleted: 1 });
+  assert.deepEqual((await client.delete(`/api/engineer/threads/t1`)).json(), { deleted: 2 });
+  assert.equal((await client.delete(`/api/engineer/threads/t1`)).status_code, 404);
+  // Every finished one; the one at work stays.
+  assert.deepEqual((await client.delete("/api/engineer/jobs")).json(), { deleted: 1 });
+  assert.deepEqual(api.db.engineerJobs(100).map((job) => job.id), [working.id]);
+  for (const job of [applied, failed, rejected, other]) assert.equal(api.db.getEngineerJob(job.id), null);
+});
+
 test("the user brings the engineer into a task", async () => {
   const { api, client } = taskApi(folder());
   assert.equal((await client.post("/api/tasks/nope/engineer", { json: { request: "修沙箱" } })).status_code, 404);

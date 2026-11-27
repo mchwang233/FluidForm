@@ -185,6 +185,29 @@ export abstract class Engineering extends SelfRepair {
     if (ENGINEER_DONE.has(job.status) && job.repair_id) this.sweepRepairCopies();
   }
 
+  /** Deletes finished jobs' records (``jobIds``, or every finished one when null), with their source
+   *  copies and logs. What an applied job changed stays: its commit is in git. A job not finished is
+   *  refused, so nothing waiting on it loses it. */
+  engineerDelete(jobIds: string[] | null): number {
+    const all = this.db.engineerJobs(100_000);
+    const chosen = jobIds === null ? all.filter((job) => ENGINEER_DONE.has(job.status)) : jobIds.map((id) => {
+      const job = all.find((item) => item.id === id);
+      if (!job) throw new EngineerError("没有这项平台工作。");
+      return job;
+    });
+    const open = chosen.filter((job) => !ENGINEER_DONE.has(job.status));
+    if (open.length) throw new EngineerError(`「${open[0].title}」还没结束，结束（或放弃）以后才能删。`);
+    const removed = this.db.deleteEngineerJobs(chosen.map((job) => job.id));
+    for (const job of chosen) this.engineerLogs.delete(job.id);
+    this.sweepRepairCopies();
+    return removed;
+  }
+
+  /** The jobs of one conversation (engineer.threadOf). */
+  engineerThread(threadId: string): string[] {
+    return this.db.engineerJobs(100_000).filter((job) => threadOf(job) === threadId).map((job) => job.id);
+  }
+
   /** The source copies still in use: a job not finished, a task not finished (its repairs and the
    *  change it waits for), the change being applied. The rest are removed (platform-repair.sweep). */
   repairCopiesInUse(): Set<string> {

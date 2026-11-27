@@ -4,6 +4,7 @@ import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments, type 
 import { CapabilityShelf } from "./capabilities";
 import { PlatformHome, SkillsPage, headlineOf, threadOf } from "./platform";
 import { detailText } from "./mission-history";
+import { ConfirmDelete, deleteAt } from "./confirm-delete";
 import { MarkdownView } from "./markdown";
 import { Composer, when, type Diagnosis } from "./diagnosis";
 import { kindOf } from "./lead-engineer";
@@ -141,12 +142,16 @@ export function EngineerPage({ apiBase, runs, focusId, visit = 0, onOpenRun }: {
     {tab === "skills" ? <SkillsPage apiBase={apiBase} /> : tab === "capabilities" ? <CapabilityShelf apiBase={apiBase} runs={runs} onOpenRun={onOpenRun} /> : <div className="engineer-layout">
       <nav className="engineer-list" aria-label="平台工程师的工作">
         {!jobs.length && !environment.length && <p className="empty">还没有记录。</p>}
+        {jobs.some(job => DONE.has(job.status)) && <div className="engineer-list-tools">
+          <ConfirmDelete label="清除已结束的" confirm="全部删除" note="删掉所有已结束（已生效、失败、放弃）的工作记录和它们的源码副本；进行中的不动。已生效的改动留在 git 里，不会撤销。"
+            onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/engineer/jobs`); if (!problem) { revision.current++; await load(); } return problem; }} /></div>}
         {!!(waiting.length + active.length) && <><h4>进行中</h4>{[...waiting, ...active].map(row)}</>}
         {!!applied.length && <><h4>已生效</h4>{applied.map(row)}</>}
         {!!environment.length && <details className="engineer-others"><summary>修环境 · {environment.length}</summary>{environment.map(repairRow)}</details>}
         {!!others.length && <details className="engineer-others"><summary>未完成或放弃 · {others.length}</summary>{others.map(row)}</details>}
       </nav>
-      {selected ? <JobDetail apiBase={apiBase} job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread} />
+      {selected ? <JobDetail apiBase={apiBase} job={selected} working={data?.working_on === selected.id} runs={runs} act={act} onOpenRun={onOpenRun} onOpenThread={openThread}
+        onDeleted={async () => { revision.current++; setSelectedId(null); await load(); }} />
         : <section className="engineer-job empty big">还没有记录。</section>}
     </div>}
   </div>;
@@ -214,8 +219,9 @@ function StatusChip({ status }: { status: string }) {
   return <span className={`dx-chip ${known.tone}`}>{known.tone === "busy" && <i className="pulse" aria-hidden="true" />}{known.label}</span>;
 }
 
-function JobDetail({ apiBase, job, working, runs, act, onOpenRun, onOpenThread }: {
+function JobDetail({ apiBase, job, working, runs, act, onOpenRun, onOpenThread, onDeleted }: {
   apiBase: string; job: EngineerJob; working: boolean; runs: RunRef[]; act: Act; onOpenRun: (id: string) => void; onOpenThread?: (threadId: string) => void;
+  onDeleted?: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(""), [error, setError] = useState("");
   const run = job.run_id ? runs.find(item => item.id === job.run_id) : undefined;
@@ -255,6 +261,10 @@ function JobDetail({ apiBase, job, working, runs, act, onOpenRun, onOpenThread }
       <small className="muted">应用时会等进行中的模型调用结束，再重启服务。</small>
     </div>}
     {job.commit && <p className="engineer-checks">已提交到 git：<code>{job.commit.slice(0, 8)}</code>（没有推送）</p>}
+    {DONE.has(job.status) && <div className="engineer-actions">
+      <ConfirmDelete label="删除这条记录" note={job.status === "applied" ? "只删记录和源码副本；它做的改动已经生效、留在 git 里，不会撤销。" : "删掉这条记录和它的源码副本。"}
+        onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/engineer/jobs/${encodeURIComponent(job.id)}`); if (!problem) await onDeleted?.(); return problem; }} />
+    </div>}
     {job.error && <p className="error">{job.error}</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {!!history.length && <details className="engineer-section engineer-history-box" open={open}><summary>经过 · {history.length}</summary><ol className="engineer-history">

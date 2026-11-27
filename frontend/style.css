@@ -1741,3 +1741,8 @@ button.clip-button svg{width:17px;height:17px;flex:none}
 
 /* A step its lead let through without passing (accepted_by_lead). */
 .state.succeeded.accepted{color:var(--warn)}
+
+/* A delete that asks first (confirm-delete.tsx). */
+.confirm-delete.asking{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+.confirm-delete-note{font-size:12px;color:var(--muted);max-width:420px}
+.engineer-list-tools{display:flex;justify-content:flex-end;margin:4px 0 8px}

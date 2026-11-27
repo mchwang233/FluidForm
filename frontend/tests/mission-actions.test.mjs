@@ -225,6 +225,18 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       state.engineerActions = [...(state.engineerActions ?? []), { path, body }];
       return json({ id: "joined", run_id: path.split("/")[3], ...body }, 201);
     }
+    if (path.startsWith("/api/engineer/") && options.method === "DELETE") {
+      state.deletes = [...(state.deletes ?? []), path];
+      const engineer = state.engineer ?? (state.engineer = { available: true, jobs: [] });
+      const done = job => ["applied", "failed", "rejected", "cancelled"].includes(job.status);
+      const before = engineer.jobs.length;
+      if (path === "/api/engineer/jobs") engineer.jobs = engineer.jobs.filter(job => !done(job));
+      else if (path.startsWith("/api/engineer/threads/")) {
+        const thread = decodeURIComponent(path.split("/")[4]);
+        engineer.jobs = engineer.jobs.filter(job => (job.thread_id || (job.run_id ? `task:${job.run_id}` : job.id)) !== thread);
+      } else engineer.jobs = engineer.jobs.filter(job => job.id !== path.split("/")[4]);
+      return json({ deleted: before - engineer.jobs.length });
+    }
     if (path.startsWith("/api/engineer/") && options.method === "POST") {
       const body = JSON.parse(options.body || "{}");
       state.engineerActions = [...(state.engineerActions ?? []), { path, body }];
@@ -2233,6 +2245,31 @@ test("a working platform engineer job shows what it is doing, refreshed as it go
   state.engineer = { available: true, working_on: null, jobs: [engineerJob({ status: "ready", plan: null })] };
   await act(async () => { state.pollAll(); for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
   assert.equal(panel(), null);
+});
+
+test("finished platform work is deleted from its record, or all at once, saying what stays", async t => {
+  const { state, document, click, act } = await setup(t, [], [], { openComposer: false });
+  state.engineer = { available: true, jobs: [engineerJob({ id: "job0", title: "修复状态", status: "applied", kind: "repair", report: "改好了", commit: "abcdef1234" }),
+    engineerJob({ id: "job2", title: "加按钮", status: "failed", kind: "component" }), engineerJob({ id: "job3", title: "进行中的", status: "editing" })] };
+  await act(async () => state.poll());
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await click([...document.querySelectorAll("button")].find(node => /全部 \d+ 条记录/.test(node.textContent)));
+  const page = document.querySelector(".engineer-page");
+  await click([...page.querySelectorAll(".engineer-list button")].find(node => node.textContent.includes("修复状态")));
+  await click([...page.querySelectorAll(".engineer-job button")].find(node => node.textContent === "删除这条记录"));
+  // It says the applied change stays before anything is deleted.
+  assert.match(page.querySelector(".engineer-job .confirm-delete-note").textContent, /留在 git 里，不会撤销/);
+  assert.deepEqual(state.deletes ?? [], []);
+  await click([...page.querySelectorAll(".engineer-job button")].find(node => node.textContent === "确认删除"));
+  assert.deepEqual(state.deletes, ["/api/engineer/jobs/job0"]);
+  assert.ok(![...page.querySelectorAll(".engineer-list button")].some(node => node.textContent.includes("修复状态")));
+  // Work under way has no delete; clearing the finished ones leaves it.
+  await click([...page.querySelectorAll(".engineer-list button")].find(node => node.textContent.includes("进行中的")));
+  assert.ok(![...page.querySelectorAll(".engineer-job button")].some(node => node.textContent === "删除这条记录"));
+  await click([...page.querySelectorAll(".engineer-list-tools button")].find(node => node.textContent === "清除已结束的"));
+  await click([...page.querySelectorAll(".engineer-list-tools button")].find(node => node.textContent === "全部删除"));
+  assert.deepEqual(state.deletes.at(-1), "/api/engineer/jobs");
+  assert.deepEqual(state.engineer.jobs.map(job => job.id), ["job3"]);
 });
 
 test("the platform engineer page opens from a task's conversation, shows finished work, and takes approvals", async t => {

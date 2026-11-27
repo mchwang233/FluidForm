@@ -235,6 +235,11 @@ export class Database {
     return this.all("SELECT body FROM improvement_effects WHERE improvement_id = ?", itemId).map((row) => this.json(row)!);
   }
 
+  /** Removes these platform engineer jobs' records; how many there were. */
+  deleteEngineerJobs(jobIds: string[]): number {
+    return this.transaction(() => jobIds.reduce((count, id) => count + Number(this.run("DELETE FROM engineer_jobs WHERE id = ?", id).changes), 0));
+  }
+
   getEngineerJob(jobId: string): EngineerJob | null {
     return this.body(this.one("SELECT body FROM engineer_jobs WHERE id = ?", jobId), EngineerJobSchema);
   }
