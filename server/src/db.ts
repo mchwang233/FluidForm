@@ -232,6 +232,14 @@ export class Database {
     return rows.map((row) => this.body(row, ImprovementSchema)!);
   }
 
+  /** Removes a lesson and what was observed of it; whether there was one. */
+  deleteImprovement(itemId: string): boolean {
+    return this.transaction(() => {
+      this.run("DELETE FROM improvement_effects WHERE improvement_id = ?", itemId);
+      return Boolean(this.run("DELETE FROM improvements WHERE id = ?", itemId).changes);
+    });
+  }
+
   saveImprovementEffect(itemId: string, runId: string, body: Json): void {
     this.run("INSERT OR REPLACE INTO improvement_effects VALUES (?, ?, ?)", itemId, runId, JSON.stringify(body));
   }

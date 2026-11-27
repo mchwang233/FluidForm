@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ConfirmDelete, deleteAt } from "./confirm-delete";
+import { LessonsList } from "./retrospective";
 
 // Problems across finished tasks, grouped by what they are about (retrospect.topics): one cause
 // recorded under several names (a module, a program) is one group here.
@@ -48,5 +49,6 @@ export function ProblemsPage({ apiBase, runs, onOpenRun }: { apiBase: string; ru
       <small className="muted">记录里的归类：{group.members.join("、")} · 最近 {group.last_seen.slice(0, 10)}</small>
       <div className="problem-runs">{group.runs.map(id => <button key={id} type="button" className="link-button" onClick={() => onOpenRun(id)} disabled={!runs.some(run => run.id === id)}>{title(id)}</button>)}</div>
     </li>)}</ol>}
+    <LessonsList apiBase={apiBase} />
   </section>;
 }

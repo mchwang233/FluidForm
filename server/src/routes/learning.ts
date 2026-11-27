@@ -65,4 +65,17 @@ export function learningRoutes(app: FastifyInstance, { api, db, executor }: Rout
     return item;
   });
 
+  // Delete a lesson that is not in use: one being checked or worked on is refused, and one in use is
+  // stopped first (disable), so nothing is deleted by mistake. An applied platform change's record may
+  // go: the change itself stays in git. Tasks that used it keep the copy they were given.
+  app.delete<{ Params: { item_id: string } }>("/api/improvements/:item_id", async (request, reply) => {
+    const item = db.improvement(request.params.item_id);
+    if (!item) throw new HttpError(404, "找不到这条经验。");
+    if (["proposed", "validating", "engineering"].includes(item.status)) throw new HttpError(409, "这条经验还在检查或由平台工程师处理，结束后才能删。");
+    if (item.status === "active" && item.kind !== "platform") throw new HttpError(409, "这条经验正在生效，先停用再删。");
+    if (item.kind === "skill") skills.removeLesson(item.id);
+    db.deleteImprovement(item.id);
+    return reply.code(204).send();
+  });
+
 }

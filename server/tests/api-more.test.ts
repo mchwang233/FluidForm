@@ -281,7 +281,7 @@ function learnedFrom(db: Database): void {
   retrospect.record(db, "first");
 }
 
-test("the API can start, show and disable a lesson", async () => {
+test("the API can start, show, disable and delete a lesson", async () => {
   const { api, client } = taskApi(folder());
   learnedFrom(api.db);
   const executor = new Executor(api.db, new Models(), LEARNING_MODELS);
@@ -292,7 +292,12 @@ test("the API can start, show and disable a lesson", async () => {
   const body = (await client.get("/api/tasks/first/learning")).json();
   assert.ok(body.review.status === "done" && body.retrospective.run_id === "first");
   const [item] = body.improvements;
+  // In use, it is stopped before it can be deleted.
+  assert.equal((await client.delete(`/api/improvements/${item.id}`)).status_code, 409);
   assert.equal((await client.post(`/api/improvements/${item.id}/disable`)).json().status, "disabled");
+  assert.equal((await client.delete(`/api/improvements/${item.id}`)).status_code, 204);
+  assert.equal(api.db.improvement(item.id), null);
+  assert.equal((await client.delete(`/api/improvements/${item.id}`)).status_code, 404);
   assert.equal((await client.get("/api/tasks/missing/learning")).status_code, 404);
 });
 

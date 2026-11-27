@@ -184,6 +184,13 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
       return json(state.calls ?? { calls: [], limit: 1000, summary: { calls: 0 } });
     }
     if (path === "/api/retrospectives/topics") return json(state.topics ?? []);
+    if (path === "/api/improvements" && !options.method) return json(state.improvements ?? []);
+    if (/^\/api\/improvements\/[^/]+$/.test(path) && options.method === "DELETE") {
+      const id = path.split("/")[3];
+      (state.lessonDeletes ??= []).push(id);
+      state.improvements = state.improvements.filter(item => item.id !== id);
+      return new Response(null, { status: 204 });
+    }
     if (path === "/api/settings/profile") {
       if (options.method === "PUT") state.profile = JSON.parse(options.body).profile;
       return json({ profile: state.profile ?? "", given_alone: { careful: [] } });
@@ -217,7 +224,8 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
     if (/^\/api\/improvements\/[^/]+\/disable$/.test(path)) {
       const id = path.split("/")[3];
       state.disabledImprovements = [...(state.disabledImprovements ?? []), id];
-      state.learning.improvements = state.learning.improvements.map(item => item.id === id ? { ...item, status: "disabled" } : item);
+      if (state.learning) state.learning.improvements = state.learning.improvements.map(item => item.id === id ? { ...item, status: "disabled" } : item);
+      if (state.improvements) state.improvements = state.improvements.map(item => item.id === id ? { ...item, status: "disabled" } : item);
       return json({ status: "disabled" });
     }
     if (/^\/api\/tasks\/[^/]+\/engineer$/.test(path) && options.method === "POST") {
@@ -2488,6 +2496,24 @@ test("recurring problems are listed by what they are about and lead back to thei
   await click(button("确认删除", page.querySelector(".problem-head")));
   assert.deepEqual(state.retrospectiveDeletes, ["/api/retrospectives/topics/新思 EDA 环境未加载"]);
   assert.match(page.textContent, /还没有已归类的问题/);
+});
+
+test("lessons learned are listed with their state; one in use is stopped before it can be deleted", async t => {
+  const { state, document, button, click } = await setup(t);
+  state.improvements = [{ id: "l1", title: "VCS 先 source .edarc", kind: "skill", status: "active", tools: [], source_nodes: [], validation: {}, effects: [] },
+    { id: "l2", title: "加一个检查", kind: "platform", status: "active", tools: [], source_nodes: [], validation: {}, effects: [] }];
+  await click(button("常见故障"));
+  const list = () => document.querySelector(".lessons-list");
+  const row = (title) => [...list().querySelectorAll(".lesson-row")].find(node => node.textContent.includes(title));
+  // A skill in use has no delete; an applied platform change's record does, and says the change stays.
+  assert.equal([...row("VCS").querySelectorAll("button")].map(node => node.textContent).join(","), "停用");
+  await click(button("删除", row("加一个检查")));
+  assert.match(row("加一个检查").textContent, /留在 git 里，不会撤销/);
+  await click(button("停用", row("VCS")));
+  await click(button("删除", row("VCS")));
+  await click(button("确认删除", row("VCS")));
+  assert.deepEqual(state.lessonDeletes, ["l1"]);
+  assert.ok(!row("VCS"));
 });
 
 test("deleting a task can take its look back with it; by default it stays", async t => {

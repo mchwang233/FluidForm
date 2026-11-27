@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { API_BASE, AttachmentTray, ClipButton, takesFiles, useAttachments } from "./attachments";
 import { MarkdownView } from "./markdown";
 import { ENGINEER_STATUS, type EngineerJob } from "./engineer";
+import { ConfirmDelete, deleteAt } from "./confirm-delete";
 
 type Preferences = { enabled: boolean; budget_usd: number };
 type Metrics = { steps: number; cost_per_step: number; turns_per_step: number; failures_per_step: number; success_rate: number; problem_rate: number };
@@ -23,6 +24,43 @@ const STATUS: Record<string, string> = {
   failed: "未通过", proposed: "待验证", active: "已生效", engineering: "平台工程师处理中", deferred: "先记下", disabled: "已停用", skipped: "已跳过自动复盘",
 };
 const KIND = { skill: "Skill", rule: "执行规则", platform: "平台改进" };
+
+/** Whether a lesson may be deleted (DELETE /api/improvements/{id}): not while it is checked or worked
+ *  on, nor while in use (it is stopped first); an applied platform change's record may go. */
+export const deletableLesson = (item: { kind: string; status: string }) =>
+  !["proposed", "validating", "engineering"].includes(item.status) && (item.status !== "active" || item.kind === "platform");
+const LESSON_NOTE = (item: { kind: string }) => item.kind === "platform"
+  ? "删掉这条经验的记录和效果记录；它做过的平台改动留在 git 里，不会撤销。"
+  : "删掉这条经验和它的效果记录；以后的任务不会再用到它。用过它的任务保留当时那份。";
+
+/** Every lesson learned, whichever task it came from (that task may be deleted): its state, and
+ *  stopping or deleting it. */
+export function LessonsList({ apiBase }: { apiBase: string }) {
+  const [items, setItems] = useState<Improvement[] | null>(null), [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try { setItems(await request(`${apiBase}/api/improvements`)); setError(""); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }, [apiBase]);
+  useEffect(() => { void load(); }, [load]);
+  async function disable(id: string) {
+    try { await request(`${apiBase}/api/improvements/${id}/disable`, {}); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
+  return <section className="lessons-list" aria-label="学到的经验">
+    <h3>学到的经验</h3>
+    <p className="muted">复盘后验证通过、用于以后任务的 Skill 和执行规则，以及交给平台工程师的平台改进。正在生效的要先停用才能删。</p>
+    {error && <p className="error" role="alert">{error}</p>}
+    {items?.length === 0 && <p className="empty">还没有学到的经验。</p>}
+    {!!items?.length && <ul>{items.map(item => <li key={item.id} className="lesson-row">
+      <b>{item.title}</b><span className="muted">{KIND[item.kind]} · {STATUS[item.status] ?? item.status}</span>
+      <span className="lesson-actions">
+        {item.kind !== "platform" && item.status === "active" && <button type="button" className="ghost" onClick={() => void disable(item.id)}>停用</button>}
+        {deletableLesson(item) && <ConfirmDelete note={LESSON_NOTE(item)}
+          onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/improvements/${encodeURIComponent(item.id)}`); if (!problem) await load(); return problem; }} />}
+      </span>
+    </li>)}</ul>}
+  </section>;
+}
 const money = (n: number) => `$${n.toFixed(4)}`;
 
 async function request(url: string, body?: unknown, method = "POST") {
@@ -144,6 +182,8 @@ export function RetrospectivePanel({ apiBase, runId }: { apiBase: string; runId:
         <Effects effects={item.effects} />
         {item.kind !== "platform" && item.status === "active" && <button className="ghost" disabled={busy}
           onClick={() => act(`${apiBase}/api/improvements/${item.id}/disable`)}>后续任务停用</button>}
+        {deletableLesson(item) && <ConfirmDelete note={LESSON_NOTE(item)}
+          onDelete={async () => { const problem = await deleteAt(`${apiBase}/api/improvements/${encodeURIComponent(item.id)}`); if (!problem) await load(); return problem; }} />}
       </article>)}</div>
       {data.review?.status === "done" && !data.improvements.length && <p className="empty">本次没有证据充分、需要新增的改进项。</p>}
     </>}
