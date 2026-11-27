@@ -102,6 +102,32 @@ test("agy's quota message is a quota, and FluidForm reads it as one", async () =
   assert.equal(failureKind(error.message), "quota");
 });
 
+test("a CLI step cut off keeps the conversation it had begun, for the next attempt to go on in", async () => {
+  const fake = fakeChannel(folder, `print(json.dumps({"event": "start", "conversation_id": "c-9"}), flush=True)\nimport time\ntime.sleep(30)`);
+  noSandbox();
+  const stop = new AbortController();
+  setTimeout(() => stop.abort(), 1500);
+  const error = await new CliChannelRegistry().channelRun(fake, call(workspace()), false, 60, { signal: stop.signal }).catch((caught) => caught);
+  assert.equal(error.cli_session, "c-9");
+});
+
+test("a step goes on in its conversation, and starts afresh when the CLI no longer has it", async () => {
+  provided.deps.extensionOn = () => true;
+  noSandbox();
+  // Like agy: --conversation <id> continues one; an unknown one is an error.
+  fakeChannel(folder, `
+args = sys.argv
+given = args[args.index("--conversation") + 1] if "--conversation" in args else None
+if given == "gone":
+    sys.stderr.write("conversation gone not found\\n"); sys.exit(1)
+print(${JSON.stringify(result({}))}.replace('"done"', json.dumps("went on in " + given if given else "fresh")))`);
+  cli.deps.which = (name: string) => (name === "agy" ? join(folder, "bin", "fakecli") : null);
+  const registry = new CliChannelRegistry();
+  assert.equal((await registry.complete("cli:agy", "go on", workspace(), { session: "c-9", timeout: 30 })).text, "went on in c-9");
+  assert.equal((await registry.complete("cli:agy", "go on", workspace(), { session: "gone", timeout: 30 })).text, "fresh");
+  assert.equal((await registry.complete("cli:agy", "go on", workspace(), { timeout: 30 })).text, "fresh");
+});
+
 test("a model package's CLI that fails without an answer reports what it printed", async () => {
   const fake = fakeChannel(folder, "sys.stderr.write('login expired, run agy to sign in\\n'); sys.exit(3)");
   noSandbox();

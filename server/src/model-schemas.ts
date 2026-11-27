@@ -80,6 +80,8 @@ export const NodeAttemptFields = {
   interrupted: lax.bool().default(() => (false)),
   /** Files a cut-off attempt left changed in its folder (the next one is told, quality.attemptNotes). */
   left_files: z.array(z.string()).default(() => []),
+  /** The conversation a cut-off CLI attempt had begun, which the next attempt goes on in. */
+  cli_session: z.string().nullable().default(() => (null)),
   model_id: z.string().nullable().default(() => (null)),
   outcome: z.string(),
   reason: z.string().nullable().default(() => (null)),

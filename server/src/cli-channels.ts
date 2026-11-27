@@ -149,6 +149,8 @@ class Timeout extends Error {
 
 export type RunOptions = { watch?: progress.Watch | null; idle?: number | null; extraEnv?: Record<string, string> | null;
   toolTrace?: string | null; signal?: AbortSignal;
+  /** Given, gets what the CLI had printed when the call ends early (cancelled, timed out). */
+  partial?: { stdout: string };
   /** Given, a non-zero exit returns the output too, and this gets the exit code and stderr. */
   exit?: { code: number | null; stderr: string } };
 
@@ -304,6 +306,7 @@ export class CliChannelRegistry {
       let grace: NodeJS.Timeout | undefined;
       await Promise.race([exited.catch(() => undefined), new Promise((done) => (grace = setTimeout(done, 5000)))]);
       clearTimeout(grace);
+      if (options.partial) options.partial.stdout = Buffer.concat(out).toString("utf8");
       trace(toolTrace, "cli.interrupted", { reason: (error as Error).message || (error as Error).name });
       trace(toolTrace, "cli.exit", { exit_code: child.exitCode ?? (child.signalCode ? -9 : null) });
       if (error instanceof Timeout) throw new CliError(`${spec.executable} timed out after ${error.message}`);
@@ -364,8 +367,8 @@ export class CliChannelRegistry {
    *  ``network`` its sandbox lets commands reach the internet. With ``watch`` it is not killed at
    *  ``timeout`` but checked every progress_check_minutes, and stopped only if stuck. */
   async complete(modelId: string, prompt: string, cwd: string, { timeout = 900, attachments = [], repair = false, network = false, watch = null,
-    effort = null, toolTrace = null, signal }: { timeout?: number; attachments?: Attachment[]; repair?: boolean; network?: boolean;
-    watch?: progress.Watch | null; effort?: string | null; toolTrace?: string | null; signal?: AbortSignal } = {}): Promise<CliText> {
+    effort = null, toolTrace = null, session = null, signal }: { timeout?: number; attachments?: Attachment[]; repair?: boolean; network?: boolean;
+    watch?: progress.Watch | null; effort?: string | null; toolTrace?: string | null; session?: string | null; signal?: AbortSignal } = {}): Promise<CliText> {
     const channel = modelChannels.channelFor(modelId);
     if (!channel) throw new CliError(`${modelId} is not a CLI in use`);
     let text: CliText;
@@ -375,8 +378,19 @@ export class CliChannelRegistry {
           { prompt, cwd, timeout, attachments, repair, network, watch, effort, toolTrace, signal });
       } else {
         const readable = modelChannels.foldersOf(attachments.map((item) => attachmentPath(item)));
-        const reply = await this.channelRun(channel, { prompt, cwd, lead: false, sessionId: null, readable }, network, timeout,
+        // A step a restart cut off goes on in the conversation it had begun, when its CLI keeps them;
+        // one that is gone starts afresh (the prompt says what there is to go on with).
+        const go = (sessionId: string | null) => this.channelRun(channel, { prompt, cwd, lead: false, sessionId, readable }, network, timeout,
           { watch, toolTrace, signal }, repair);
+        const given = channel.sessions && !repair ? session : null;
+        let reply: modelChannels.ChannelReply;
+        try {
+          reply = await go(given);
+        } catch (error) {
+          if (!given || !(error instanceof CliError) || !SESSION_MISSING.test(error.message) || signal?.aborted) throw error;
+          trace(toolTrace, "cli.session_lost", { session: given, reason: error.message });
+          reply = await go(null);
+        }
         text = { text: reply.text, usage: reply.usage };
       }
     } catch (error) {
@@ -401,10 +415,21 @@ export class CliChannelRegistry {
     const input = channel.stdin!(call);
     const stdin = input === null ? null : Buffer.from(input, "utf8");
     const exit = { code: null as number | null, stderr: "" };
-    const stdout = repair
-      ? await this.run(spec, deps.repairCommand(argv[0], argv.slice(1)), call.cwd, stdin, timeout, { ...options, exit })
-      : await modelChannels.withSandbox(channel, argv, call, network, (command, env) =>
-        this.run(spec, command, call.cwd, stdin, timeout, { ...options, extraEnv: { ...(options.extraEnv ?? {}), ...env }, exit }));
+    const partial = { stdout: "" };
+    let stdout: string;
+    try {
+      stdout = repair
+        ? await this.run(spec, deps.repairCommand(argv[0], argv.slice(1)), call.cwd, stdin, timeout, { ...options, exit, partial })
+        : await modelChannels.withSandbox(channel, argv, call, network, (command, env) =>
+          this.run(spec, command, call.cwd, stdin, timeout, { ...options, extraEnv: { ...(options.extraEnv ?? {}), ...env }, exit, partial }));
+    } catch (error) {
+      // Cut off: the conversation it had begun, for the next attempt to go on in (CliSession).
+      if (channel.sessions && error && typeof error === "object" && partial.stdout) {
+        const session = channel.parse!(partial.stdout).sessionId;
+        if (session) (error as Record<string, unknown>).cli_session = session;
+      }
+      throw error;
+    }
     const reply = channel.parse!(stdout);
     if (reply.quota) throw new CliError(`${channel.executable} usage limit reached: ${reply.error}`);
     if (reply.error || exit.code) {

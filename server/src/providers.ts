@@ -201,6 +201,8 @@ export type Dialogue = { system: string; messages: { role: "user" | "assistant";
 
 export type CompleteOptions = {
   dialogue?: Dialogue | null;
+  /** A CLI step's conversation to go on in: the one a restart cut off (NodeAttempt.cli_session). */
+  cli_session?: string | null;
   workspace?: string | null; cli_timeout?: number; allow_api_fallback?: boolean; attachments?: Attachment[]; act?: boolean;
   spend_ok?: SpendOk | null; repair?: boolean; max_turns?: number | null; tool_log?: Json[] | null; network?: boolean;
   review_workspace?: string | null; review_files?: string[]; watch?: progress.Watch | null; conversation?: Conversation | null;
@@ -350,7 +352,7 @@ export class ProviderRegistry {
   async completeOnce(modelId: string, given: string, options: CompleteOptions): Promise<ProviderResult> {
     const { workspace = null, cli_timeout = 900, allow_api_fallback = true, act = false, spend_ok = null, repair = false, max_turns = null,
       tool_log = null, network = false, review_workspace = null, review_files = [], watch = null, conversation = null, effort = null,
-      overrun = null, tool_trace = null, dialogue = null, signal } = options;
+      overrun = null, tool_trace = null, dialogue = null, cli_session = null, signal } = options;
     const attachments = [...(options.attachments ?? [])];
     const provider = modelId.slice(0, modelId.indexOf(":"));
     const model = modelId.slice(modelId.indexOf(":") + 1);
@@ -363,7 +365,7 @@ export class ProviderRegistry {
       if (conversation?.handoff) prompt += conversation.handoff;
       try {
         const text = await this.cli.complete(modelId, prompt + files.describe(attachments, true), workspace || settings.workspace_root,
-          { timeout: cli_timeout, attachments, repair, network, watch, effort, toolTrace: tool_trace, signal });
+          { timeout: cli_timeout, attachments, repair, network, watch, effort, toolTrace: tool_trace, session: cli_session, signal });
         return cliResult(text, modelId);
       } catch (error) {
         // Stuck, not unavailable: the attempt fails rather than falling back to an API model.

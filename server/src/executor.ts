@@ -529,6 +529,7 @@ export class Executor extends Preflighting {
               interrupted: latest.status !== "cancelled", reason: latest.status !== "cancelled" && current.generation === generation
                 ? "服务重启或停止打断了这次尝试。" : "上游返工或任务取消，调用已停止。", cost_usd: spent,
               left_files: Array.isArray((error as Json)?.left_files) ? (error as Json).left_files.slice(0, 200) : [],
+              cli_session: typeof (error as Json)?.cli_session === "string" ? (error as Json).cli_session : null,
               ...this.takeLog(runId, nodeId, (error as Json)?.usage ?? null) }));
           }
           this.save(latest);
@@ -688,6 +689,13 @@ export class Executor extends Preflighting {
     }
   }
 
+  /** The CLI conversation ``node``'s last attempt had begun when a restart cut it off, if the same
+   *  model goes on: the next attempt continues in it. */
+  static cutOffSession(node: TaskNode, modelId: string): string | null {
+    const last = node.attempts.at(-1);
+    return last && last.outcome === "cancelled" && last.interrupted && last.model_id === modelId ? last.cli_session : null;
+  }
+
   /** Keep one provider (an API provider, or one membership CLI) from carrying all of the task's running
    *  steps, so that its outage or quota does not stop them all: past ``max_steps_per_provider`` the step
    *  goes to another provider's model when one fits (routing.spreadTo). */
@@ -796,7 +804,8 @@ export class Executor extends Preflighting {
       try {
         result = await activity.recording(entries, () => this.complete(run, node, modelId, prompt, workspace, { allow_api_fallback: fallback && !inProject,
           attachments: run.attachments, act, max_turns: turnsFor(node), tool_log: entries, tool_trace: trace, watch: headStart ? null : this.timedWatch(run, node, modelId),
-          effort: settings.reasoning_by_difficulty[node.difficulty] ?? null, ...(conversation ? { conversation } : {}), ...(overrun ? { overrun } : {}), signal }));
+          effort: settings.reasoning_by_difficulty[node.difficulty] ?? null, ...(conversation ? { conversation } : {}), ...(overrun ? { overrun } : {}),
+          cli_session: Executor.cutOffSession(node, modelId), signal }));
       } catch (error) {
         // Cut off (a restart, say): what it had written stays in the folder, and the next attempt is told
         // (2026-11-27: a CLI step reports no tool calls, so its next attempt began again from nothing).

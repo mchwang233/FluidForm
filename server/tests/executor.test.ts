@@ -106,7 +106,13 @@ test("an attempt a restart cuts off leaves its files noted for the next one", as
       mkdirSync(join(options.workspace!, "audit"), { recursive: true });
       writeFileSync(join(options.workspace!, "audit", "tools.md"), "vcs: ok\n");
       started();
-      await sleep(60, options.signal);
+      try {
+        await sleep(60, options.signal);
+      } catch (error) {
+        // As cli-channels.channelRun says which conversation the cut-off CLI had begun.
+        Object.assign(error as object, { cli_session: "c-9" });
+        throw error;
+      }
       return new ProviderResult("never", 1, 1, modelId);
     },
   };
@@ -125,6 +131,10 @@ test("an attempt a restart cuts off leaves its files noted for the next one", as
   // The next attempt is told what is there to go on with, though a CLI reports no tool calls.
   const notes = quality.attemptNotes(cut);
   assert.ok(notes.includes("cut off") && notes.includes("audit/tools.md") && notes.includes("continue from them"));
+  // And goes on in the conversation it had begun, with the same model only.
+  assert.equal(attempt.cli_session, "c-9");
+  assert.equal(Executor.cutOffSession(cut, "cli:codex"), "c-9");
+  assert.equal(Executor.cutOffSession(cut, "cli:claude"), null);
 });
 
 test("a membership CLI runs a contract step bounded by time", async () => {
