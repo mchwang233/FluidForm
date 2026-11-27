@@ -124,6 +124,26 @@ export const AA_DETAIL_FIELDS: Record<string, [string, string, string]> = {
   critpt: ["aa_critpt", "物理推理", "CritPt"], lcr: ["aa_lcr", "长文本推理", "AA-LCR"], omniscienceAccuracy: ["aa_knowledge_accuracy", "知识准确率", "AA-Omniscience Accuracy"],
   omniscienceNonHallucination: ["aa_non_hallucination", "非幻觉率", "AA-Omniscience Non-Hallucination"],
 };
+// The same measurements as the page has named them since 2026-11 (each record's ``scores``).
+export const AA_SCORE_FIELDS: Record<string, string> = { scicode: "scicode", terminalBench40: "terminalbench-4-0", hle: "humanitys-last-exam",
+  critpt: "critpt", lcr: "artificial-analysis-long-context-reasoning", omniscienceAccuracy: "omniscience-accuracy",
+  omniscienceNonHallucination: "omniscience-non-hallucination" };
+
+/** A record's page slug: its own, or (since 2026-11) its release's. */
+const slugOf = (row: Record<string, any>): unknown => row.slug ?? (row.release && typeof row.release === "object" ? row.release.slug : undefined);
+
+/** A record's subscores as metrics (ratios 0–1 shown as 0–100); a ratio outside 0–1 is an error. */
+function detailMetrics(row: Record<string, any>): BenchmarkMetric[] {
+  const found: BenchmarkMetric[] = [];
+  const scores = row.scores && typeof row.scores === "object" ? row.scores : {};
+  for (const [field, [key, label, benchmark]] of Object.entries(AA_DETAIL_FIELDS)) {
+    const value = row[field] ?? scores[AA_SCORE_FIELDS[field]];
+    if (value === null || value === undefined) continue;
+    if (!finiteNumber(value) || !(value >= 0 && value <= 1)) throw new Error("Invalid AA benchmark ratio");
+    found.push(metric({ key, label, value: value * 100, unit: "percent", benchmark }));
+  }
+  return found;
+}
 
 /** Python's subscript: the key's value, or a KeyError (here an Error). */
 function need(value: unknown, key: string): any {
@@ -174,7 +194,7 @@ export function aaPublicDetails(scripts: string[]): Record<string, any>[] {
       if (Array.isArray(value)) pending.push(...value);
       else if (value && typeof value === "object") {
         const item = value as Record<string, unknown>;
-        if (["slug", "shortName", "modelCreatorName", "intelligenceIndex"].every((key) => key in item)) rows.push(item);
+        if (["shortName", "modelCreatorName", "intelligenceIndex"].every((key) => key in item) && slugOf(item) !== undefined) rows.push(item);
         else pending.push(...Object.values(item));
       }
     }
@@ -188,8 +208,9 @@ export function addAaDetails(given: BenchmarkResult[], details: Record<string, a
   const results: BenchmarkResult[] = structuredClone(given);
   const bySlug = new Map<string, Record<string, any>[]>();
   for (const row of details) {
-    if (!["slug", "shortName", "modelCreatorName"].every((key) => typeof row[key] === "string")) continue;
-    bySlug.set(row.slug, [...(bySlug.get(row.slug) ?? []), row]);
+    const slug = slugOf(row);
+    if (typeof slug !== "string" || !["shortName", "modelCreatorName"].every((key) => typeof row[key] === "string")) continue;
+    bySlug.set(slug, [...(bySlug.get(slug) ?? []), row]);
   }
   for (const result of results) {
     const candidates = bySlug.get(result.source_url.split("/").at(-1)!) ?? [];
@@ -201,13 +222,41 @@ export function addAaDetails(given: BenchmarkResult[], details: Record<string, a
     const headline = result.metrics.find((m) => m.key === "artificial_analysis_intelligence_index")?.value ?? null;
     // Reject mismatched snapshots; the public table rounds the index.
     if (headline === null || !finiteNumber(index) || Math.abs(index - headline) > 0.500001) continue;
-    for (const [field, [key, label, benchmark]] of Object.entries(AA_DETAIL_FIELDS)) {
-      const value = row[field];
-      if (value === null || value === undefined) continue;
-      if (!finiteNumber(value) || !(value >= 0 && value <= 1)) throw new Error("Invalid AA benchmark ratio");
-      result.metrics.push(metric({ key, label, value: value * 100, unit: "percent", benchmark }));
-    }
+    result.metrics.push(...detailMetrics(row));
   }
+  return results;
+}
+
+/** The leaderboard from the page's own model records (since 2026-11 the table has no creator column):
+ *  each scored record's short name ("Claude Fable 5.2 (high)"), creator, intelligence index and
+ *  subscores, its page by its release's slug. */
+export function aaRecordResults(records: Record<string, any>[]): BenchmarkResult[] {
+  const results: BenchmarkResult[] = [];
+  const seen = new Set<string>();
+  for (const row of records) {
+    const slug = slugOf(row);
+    if (!finiteNumber(row.intelligenceIndex) || typeof row.shortName !== "string" || typeof row.modelCreatorName !== "string"
+      || typeof slug !== "string" || !/^[a-z0-9_-]+$/.test(slug)) continue;
+    // The stream repeats a record where several charts use it.
+    const id = typeof row.id === "string" ? row.id : JSON.stringify([slug, row.shortName]);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const sourceUrl = `https://artificialanalysis.ai/models/${slug}`;
+    const result = resultFor("artificial_analysis", row.shortName, row.modelCreatorName, "AA Intelligence Index（网页未标版本）", { source_url: sourceUrl,
+      data_url: AA_PUBLIC_URL, collection_method: "public_page", metrics: [metric({ key: "artificial_analysis_intelligence_index", label: "综合智能指数",
+        value: Math.round(row.intelligenceIndex * 10) / 10, unit: "index" }), ...detailMetrics(row)] });
+    result.id = sha(`${result.id}|${sourceUrl}`);
+    results.push(result);
+  }
+  return results;
+}
+
+/** Results sharing a creator and a name but from distinct model pages keep their identities apart. */
+function distinguish(results: BenchmarkResult[]): BenchmarkResult[] {
+  const identities = new Map<string, Set<string>>();
+  const identity = (result: BenchmarkResult) => JSON.stringify([result.provider, result.model_name]);
+  for (const result of results) identities.set(identity(result), (identities.get(identity(result)) ?? new Set()).add(result.source_url));
+  for (const result of results) if (identities.get(identity(result))!.size > 1) result.model_key = result.source_url.split("/").at(-1)!;
   return results;
 }
 
@@ -224,7 +273,12 @@ export function parseAaPublic(page: string): BenchmarkResult[] {
       if (required.every((name) => headers.includes(name))) candidates.push([headers, table.slice(index + 1)]);
     });
   }
-  if (candidates.length !== 1) throw new Error("AA public leaderboard columns changed");
+  if (candidates.length !== 1) {
+    // Since 2026-11 the table has no creator column: the page's own model records carry it.
+    const fromRecords = aaRecordResults(aaPublicDetails(parser.scripts));
+    if (fromRecords.length) return distinguish(fromRecords);
+    throw new Error("AA public leaderboard columns changed");
+  }
   const [headers, rows] = candidates[0];
   const results: BenchmarkResult[] = [];
   for (const cells of rows) {
@@ -246,11 +300,7 @@ export function parseAaPublic(page: string): BenchmarkResult[] {
     results.push(result);
   }
   if (!results.length) throw new Error("Empty AA public leaderboard");
-  const identities = new Map<string, Set<string>>();
-  const identity = (result: BenchmarkResult) => JSON.stringify([result.provider, result.model_name]);
-  for (const result of results) identities.set(identity(result), (identities.get(identity(result)) ?? new Set()).add(result.source_url));
-  for (const result of results) if (identities.get(identity(result))!.size > 1) result.model_key = result.source_url.split("/").at(-1)!;
-  return addAaDetails(results, aaPublicDetails(parser.scripts));
+  return addAaDetails(distinguish(results), aaPublicDetails(parser.scripts));
 }
 
 export function matchResults(models: ModelProfile[], results: BenchmarkResult[]): Map<string, MatchedRow[]> {

@@ -170,7 +170,10 @@ start() {
   if ! is_running "$API_PID_FILE"; then
     echo "[start] Starting API..."
     local -a api=("$(command -v node)" --disable-warning=ExperimentalWarning "$PROJECT_DIR/server/dist/src/main.js" --host 127.0.0.1 --port 8000)
+    # NODE_USE_ENV_PROXY: Node's fetch goes through the user's HTTPS_PROXY (and keeps NO_PROXY), as
+    # curl does; without it, a site reached only through the proxy (Artificial Analysis) is "fetch failed".
     launch_service "$API_PID_FILE" "$LOG_DIR/api.log" /usr/bin/env \
+      NODE_USE_ENV_PROXY=1 \
       FLUIDFORM_DATA_DIR="$DATA_DIR" \
       FLUIDFORM_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
       "${api[@]}"

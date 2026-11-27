@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { beforeEach, test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { AA_KEY_ENV, AA_PUBLIC_URL, AA_URL, BenchmarkCatalog, matchResults, parseAa, parseAaPublic, resultFor,
+import { AA_KEY_ENV, AA_PUBLIC_URL, AA_URL, addAaDetails, BenchmarkCatalog, matchResults, parseAa, parseAaPublic, resultFor,
   SOURCE_NAMES } from "../packages/research/src/benchmarks.js";
 import { settings } from "../src/config.js";
 import { Database } from "../src/db.js";
@@ -297,4 +297,41 @@ test("results kept from the dropped leaderboards are not shown or matched", () =
   assert.ok(restarted.results().every((result) => result.source === "artificial_analysis"));
   assert.equal(restarted.matchModels([model()]).size, 0);
   assert.deepEqual(Object.keys((restarted.status([model()]) as Record<string, any>).sources), ["artificial_analysis"]);
+});
+
+// The page as it is since 2026-11: its table has no creator column, its model records name the release.
+const newRecord = (updates: Record<string, unknown> = {}) => ({ id: "rec-high", release: { slug: "claude-fable-5-2", name: "Claude Fable 5.2" },
+  name: "Claude Fable 5.2 (High, Default Fallback)", shortName: "Claude Fable 5.2 (high)", modelCreatorName: "Anthropic", intelligenceIndex: 61.8723,
+  scores: { scicode: 0.595, "terminalbench-4-0": 0.596, "humanitys-last-exam": 0.662, critpt: 0.329, "artificial-analysis-long-context-reasoning": 0.833,
+    "omniscience-accuracy": 0.772, "omniscience-non-hallucination": 0.42, "aa-briefcase": 1623 }, ...updates });
+const newTable = '<table><thead><tr><th>Model</th><th>Artificial Analysis Intelligence Index</th><th>Context Window</th><th>Further Analysis</th></tr></thead>'
+  + '<tbody><tr><td>Claude Fable 5.2 High, Default Fallback</td><td>62</td><td>1M</td><td><a href="/models/claude-fable-5-2">Model</a></td></tr></tbody></table>';
+
+test("the page without a creator column is read from its model records", () => {
+  const rows = parseAaPublic(newTable + aaChartScripts([newRecord(), newRecord(),
+    newRecord({ id: "rec-low", shortName: "Claude Fable 5.2 (low)", name: "Claude Fable 5.2 (Low)", intelligenceIndex: 53.89, scores: {} }),
+    newRecord({ id: "unscored", shortName: "Granite 4.2 3B", modelCreatorName: "IBM", intelligenceIndex: null, release: { slug: "granite-4-2-3b" } })]))
+    .sort((a, b) => a.model_name.localeCompare(b.model_name));
+  assert.deepEqual(rows.map((row) => [row.model_name, row.provider, row.variant]), [["Claude Fable 5.2 (high)", "anthropic", "high"], ["Claude Fable 5.2 (low)", "anthropic", "low"]],
+    "each scored record once, unscored ones left out");
+  const scores = Object.fromEntries(rows[0].metrics.map((metric) => [metric.key, metric.value]));
+  assert.equal(scores.artificial_analysis_intelligence_index, 61.9);
+  assert.equal(Math.round(scores.aa_terminalbench_4 * 10) / 10, 59.6);
+  assert.equal(Math.round(scores.aa_non_hallucination), 42);
+  assert.equal(rows[0].metrics.length, 8, "the index and the seven subscores scoring uses; others left out");
+  assert.equal(rows[0].source_url, "https://artificialanalysis.ai/models/claude-fable-5-2");
+  // Matched to the catalog's model as before.
+  assert.ok(matchResults([model("anthropic:claude-fable-5-2", { display_name: "Claude Fable 5.2" })], rows).has("anthropic:claude-fable-5-2"));
+  // A ratio outside 0–1 is refused, as in the older records.
+  assert.throws(() => parseAaPublic(newTable + aaChartScripts([newRecord({ scores: { scicode: 1.5 } })])), /ratio/);
+  // Neither a creator column nor records: the page changed beyond reading.
+  assert.throws(() => parseAaPublic(newTable), /columns changed/);
+});
+
+test("the API's indices get the subscores from records that name their release", () => {
+  const [given] = parseAa({ intelligence_index_version: 4.3, pagination: { page: 1, has_more: false, total_pages: 1 },
+    data: [{ name: "Claude Fable 5.2 (high)", slug: "claude-fable-5-2", model_creator: { name: "Anthropic" },
+      evaluations: { artificial_analysis_intelligence_index: 61.9 } }] });
+  const [joined] = addAaDetails([given], [newRecord()]);
+  assert.ok(joined.metrics.some((metric) => metric.key === "aa_scicode"));
 });

@@ -265,6 +265,26 @@ agy 用 Default 模式（`agentMode: ""`）并放行 `command(*)`：不需要审
   - 新增两项："只查 Artificial Analysis"，以及"缓存的旧榜单成绩不显示、不参与比对"。
   - 删掉了只给 SuperCLUE 测试用的 `tests/helpers/xlsx-writer.ts`。
 
+### Artificial Analysis 一个月没更新（2026-11-27）
+
+**现象**：模型页上看不到 Claude Fable 5.2（11 月 9 日发布）。它其实已经在模型目录里，只是没有评分，所以没有列出来。
+
+**原因有两个，叠在一起**：
+1. **代理**：Node 自带的 `fetch` 默认不走 `HTTPS_PROXY`。这台机器访问 artificialanalysis.ai 必须经过代理，models.dev 则能直连。所以从 10 月 29 日起，Artificial Analysis 每次都报"网络连接失败"，评分一直停在那天。
+2. **页面改版**：Artificial Analysis 的排行榜表格去掉了"Creator"这一列，模型名改成 `Claude Fable 5.2 Max, Default Fallback` 这样的写法。内嵌数据里，记录不再有顶层 `slug`（换成了 `release.slug`），分项成绩挪进了 `scores`，键名也换了（`terminalbench-4-0`、`humanitys-last-exam` 等）。所以就算网络是通的，解析也会报"榜单列变了"。
+
+**改动**：
+- `scripts/service.sh`：启动 API 时加上 `NODE_USE_ENV_PROXY=1`。这是 Node 22.21 起的官方开关，打开后 `fetch` 按 `HTTPS_PROXY` / `NO_PROXY` 走代理，和 curl 一致。
+- `benchmarks.ts`：
+  - 表格里有厂商列，照旧按表格解析；没有厂商列，就从页面内嵌的模型记录生成成绩（`aaRecordResults`）。记录带短名（如 `Claude Fable 5.2 (high)`）、厂商、综合指数和分项。
+  - 重复的记录只算一次，没有综合指数的跳过。
+  - 记录的标识认 `slug` 或 `release.slug`；分项先读旧字段，没有再读 `scores` 里的新键名（`AA_SCORE_FIELDS`）。
+  - 比例超出 0–1 照样拒收。
+  - 配了 API 密钥时，补分项（`addAaDetails`）也能读新格式。
+- 用真实页面实测：读出 126 组成绩，每组都有分项。Claude Fable 5.2 (high) 的综合指数是 61.9。
+
+**测试**：`benchmarks.test.ts` 新增「the page without a creator column is read from its model records」和「the API's indices get the subscores from records that name their release」；旧版页面的测试全部保留，全部通过。
+
 ## 后续
 
 - ~~Codex 不联网时连不上许可证~~：已修，见 `docs/design/cli-step-network.md` 的"不联网的 Codex 也连得上许可证"。
