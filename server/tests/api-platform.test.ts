@@ -12,6 +12,7 @@ import { settings } from "../src/config.js";
 import { EngineerJobSchema, type ExecutionRun, ExecutionRunSchema, folderId, TaskPlanSchema } from "../src/models.js";
 import { ProviderResult } from "../src/providers.js";
 import * as quality from "../src/quality.js";
+import * as skills from "../src/skills.js";
 import { type Api, chatting } from "./helpers/chatting.js";
 import { conftest } from "./helpers/conftest.js";
 import { taskApi } from "./helpers/task-api.js";
@@ -96,6 +97,27 @@ test("the platform page lists what the steps know how to use, with each skill's 
   assert.ok(listed.some((item: any) => item.name === "synopsys-vcs" && item.tools.includes("vcs") && item.machine === false));
   const vcs = listed.find((item: any) => item.name === "synopsys-vcs");
   assert.ok("summary" in vcs && vcs.summary.startsWith("用 Synopsys VCS"));
+});
+
+test("this machine's skills, kept public references and the note of skills not written can be deleted; the platform's own cannot", async () => {
+  const { client } = taskApi(folder());
+  skills.saveMachine("fakesim", "---\nname: fakesim\ndescription: here\ntools: [fakesim]\n---\n# Here\n");
+  const reference = skills.parse("---\nname: vcf\ndescription: VC Formal\ntools: [vcf]\n---\n# Use\nRun vcf.\n")!;
+  Object.assign(reference, { tools: ["vcf"], source_url: "https://github.com/example/skills/blob/main/SKILL.md", source_revision: "c".repeat(40) });
+  skills.saveDiscovered(reference);
+  skills.noteFailure("dc_shell", ["dc_shell"], "120s");
+  const mine = (await client.get("/api/skills")).json().find((item: any) => item.machine);
+  assert.equal(mine.id, "fakesim");
+  assert.equal((await client.delete("/api/skills/synopsys-vcs")).status_code, 404); // the platform's own
+  assert.equal((await client.delete("/api/skills/fakesim")).status_code, 204);
+  assert.ok(!(await client.get("/api/skills")).json().some((item: any) => item.machine));
+  const [kept] = (await client.get("/api/skills/discovered")).json();
+  assert.ok(kept.name === "vcf" && kept.source_url.includes("example/skills"));
+  assert.equal((await client.delete(`/api/skills/discovered/${kept.key}`)).status_code, 204);
+  assert.deepEqual((await client.get("/api/skills/discovered")).json(), []);
+  assert.deepEqual((await client.get("/api/skills/failed")).json().map((item: any) => [item.name, item.reason]), [["dc_shell", "120s"]]);
+  assert.deepEqual((await client.delete("/api/skills/failed")).json(), { cleared: 1 });
+  assert.deepEqual((await client.get("/api/skills/failed")).json(), []);
 });
 
 // ---- test_quick.py ----

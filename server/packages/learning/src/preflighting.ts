@@ -89,7 +89,7 @@ export async function prepareSkills(this: Preflighting, runId: string, workspace
   const ready: string[] = [];
   const prepared: string[] = [];
   const failed: string[] = [];
-  const tried = failedBefore();
+  const tried = skills.failedSkills();
   // Each skill on its own, all at once: one that takes long holds up only itself, not the others after it.
   await Promise.all(toolGroups(wanted, library).map(async ([name, tools, given]) => {
     let general = given;
@@ -108,7 +108,7 @@ export async function prepareSkills(this: Preflighting, runId: string, workspace
     }
     // Written and failed lately: not tried again for every task (2026-11-27, three skills timing out in
     // each of a task's two preflights, 12 minutes before its first step).
-    const earlier = tried[failureKey(name, tools)];
+    const earlier = tried[skills.failureKey(name, tools)];
     if (earlier && Date.now() - Date.parse(earlier.at) < SKILL_RETRY_HOURS * 3600_000) {
       this.emit(runId, "run.skill_skipped", { name, failed_at: earlier.at, reason: earlier.reason });
       failed.push(`${name}: ${SKILL_RETRY_HOURS} 小时内写过没成（${earlier.reason}），这次不再写`);
@@ -125,12 +125,12 @@ export async function prepareSkills(this: Preflighting, runId: string, workspace
       if (!skill || !skill.body) throw new Error("the reply was not a SKILL.md");
       skills.saveMachine(name, withTools(text, tools));
       prepared.push(name);
-      noteFailure(name, tools, null);
+      skills.noteFailure(name, tools, null);
     } catch (error) {
       if (isCancelled(error)) throw error;
       const reason = head(String((error as Error)?.message ?? ""), 200) || (error as Error)?.name || "Error";
       failed.push(`${name}: ${reason}`);
-      noteFailure(name, tools, reason);
+      skills.noteFailure(name, tools, reason);
     }
   }));
   this.emit(runId, "run.skills_prepared", { prepared, reused: ready, failed });
@@ -139,35 +139,6 @@ export async function prepareSkills(this: Preflighting, runId: string, workspace
 
 /** Hours a skill that could not be written is left alone before a task tries again. */
 export const SKILL_RETRY_HOURS = 24;
-type Failures = Record<string, { at: string; reason: string }>;
-const failuresFile = () => join(settings.data_dir, "skills-failed.json");
-const failureKey = (name: string, tools: string[]) => `${name}|${[...tools].sort().join(",")}`;
-
-/** The skills that could not be written, by name and tools, with when and why. */
-export function failedBefore(): Failures {
-  try {
-    const data = JSON.parse(readFileSync(failuresFile(), "utf8"));
-    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Notes that ``name`` could not be written (``reason``), or, with null, that it was. */
-function noteFailure(name: string, tools: string[], reason: string | null): void {
-  const data = failedBefore();
-  const key = failureKey(name, tools);
-  if (reason === null && !(key in data)) return;
-  if (reason === null) delete data[key];
-  else data[key] = { at: new Date().toISOString(), reason };
-  try {
-    mkdirSync(settings.data_dir, { recursive: true });
-    writeFileSync(failuresFile(), JSON.stringify(data, null, 1));
-  } catch {
-    // only a note: the next task tries again
-  }
-}
-
 /** Where the step sandbox found each tool (available), for telling a public skill about it from one
  *  about another program of the same name (skillDiscovery.contextWords). */
 export const located = new Map<string, string>();

@@ -13,7 +13,7 @@ import { SERVER } from "./paths.js";
 import { uses } from "./features.js";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { settings } from "./config.js";
 import { head, pyRegex, reEscape, splitlines } from "./py.js";
@@ -164,6 +164,67 @@ export function saveDiscovered(skill: Skill): string {
   writeFileSync(join(folder, "source.json"), JSON.stringify({ source_url: skill.source_url, source_revision: skill.source_revision,
     sha256: sha256(text), tools: skill.tools }, null, 2));
   return path;
+}
+
+// Skills a preflight could not write (the learning package's prepareSkills), by name and tools, with
+// when and why: the package leaves them alone for a while; the 技能 page can clear the note.
+type Failures = Record<string, { at: string; reason: string }>;
+const failuresFile = () => join(settings.data_dir, "skills-failed.json");
+export const failureKey = (name: string, tools: string[]) => `${name}|${[...tools].sort().join(",")}`;
+
+/** The skills that could not be written, by failureKey, with when and why. */
+export function failedSkills(): Failures {
+  try {
+    const data = JSON.parse(readFileSync(failuresFile(), "utf8"));
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Notes that ``name`` could not be written (``reason``), or, with null, that it was. */
+export function noteFailure(name: string, tools: string[], reason: string | null): void {
+  const data = failedSkills();
+  const key = failureKey(name, tools);
+  if (reason === null && !(key in data)) return;
+  if (reason === null) delete data[key];
+  else data[key] = { at: new Date().toISOString(), reason };
+  try {
+    mkdirSync(settings.data_dir, { recursive: true });
+    writeFileSync(failuresFile(), JSON.stringify(data, null, 1));
+  } catch {
+    // only a note: the next task tries again
+  }
+}
+
+/** Forgets every skill that could not be written: the next task tries each again. How many. */
+export function clearFailures(): number {
+  const count = Object.keys(failedSkills()).length;
+  rmSync(failuresFile(), { force: true });
+  return count;
+}
+
+/** This machine's skill in ``folder`` (its id on the 技能 page) is deleted; whether it was there. */
+export function removeMachine(folder: string): boolean {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(folder)) return false;
+  const path = join(machineDir(), folder);
+  if (!existsSync(join(path, "SKILL.md"))) return false;
+  rmSync(path, { recursive: true, force: true });
+  return true;
+}
+
+/** The public references kept from searches, each with its key (the folder it is in). */
+export function discoveredList(): (Skill & { key: string })[] {
+  return discovered().map((skill) => ({ ...skill, key: basename(dirname(skill.path ?? "")) }));
+}
+
+/** A kept public reference is deleted; whether it was there. */
+export function removeDiscovered(key: string): boolean {
+  if (!/^[0-9a-f]{20}$/.test(key)) return false;
+  const path = join(settings.data_dir, "skills-discovered", key);
+  if (!existsSync(path)) return false;
+  rmSync(path, { recursive: true, force: true });
+  return true;
 }
 
 // Lessons from earlier tasks (learning), written into this machine's skill for their tools,

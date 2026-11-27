@@ -1,6 +1,7 @@
 // The API's capabilities routes (app.ts builds the app and adds them).
 import * as extensions from "../extensions.js";
 import { uses } from "../features.js";
+import { basename, dirname } from "node:path";
 import { HttpError, log, parse } from "../api.js";
 import * as capabilities from "../capabilities.js";
 import * as chat from "../chat.js";
@@ -20,7 +21,24 @@ import type { RouteContext } from "./context.js";
 export function capabilitiesRoutes(app: FastifyInstance, { api, db, executor, runner }: RouteContext): void {
   // What the steps know how to use (skills.ts): this machine's skills, then the platform's.
   app.get("/api/skills", async () => skills.library().map((item) => ({ name: item.name, description: item.description, summary: item.summary,
-    tools: item.tools, machine: item.machine })));
+    tools: item.tools, machine: item.machine, ...(item.machine && item.path ? { id: basename(dirname(item.path)) } : {}) })));
+  // Deleting what the 技能 page shows: this machine's skills (the platform's own are its source), the
+  // public references kept from searches, and the note of skills a preflight could not write.
+  app.delete<{ Params: { id: string } }>("/api/skills/:id", async (request, reply) => {
+    if (!skills.removeMachine(request.params.id)) throw new HttpError(404, "没有这份本机技能（平台自带的技能不能在这里删）。");
+    return reply.code(204).send();
+  });
+  app.get("/api/skills/discovered", async () => skills.discoveredList().map((item) => ({ key: item.key, name: item.name, description: item.description,
+    tools: item.tools, source_url: item.source_url })));
+  app.delete<{ Params: { key: string } }>("/api/skills/discovered/:key", async (request, reply) => {
+    if (!skills.removeDiscovered(request.params.key)) throw new HttpError(404, "没有这份公开参考。");
+    return reply.code(204).send();
+  });
+  app.get("/api/skills/failed", async () => Object.entries(skills.failedSkills()).map(([key, item]) => {
+    const [name, tools] = key.split("|");
+    return { name, tools: tools ? tools.split(",") : [], at: item.at, reason: item.reason };
+  }));
+  app.delete("/api/skills/failed", async () => ({ cleared: skills.clearFailures() }));
 
   // ---- Capabilities: what finished tasks left the platform able to do (capabilities.ts) ----
 

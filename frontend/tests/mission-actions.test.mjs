@@ -145,6 +145,15 @@ async function setup(t, records = [mission("finished-task", "succeeded"), missio
   window.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
     if (path === "/api/skills") return json(state.skills ?? []);
+    if (path === "/api/skills/discovered" && !options.method) return json(state.references ?? []);
+    if (path === "/api/skills/failed" && !options.method) return json(state.notWritten ?? []);
+    if (path.startsWith("/api/skills/") && options.method === "DELETE") {
+      (state.skillDeletes ??= []).push(path);
+      if (path === "/api/skills/failed") { const cleared = (state.notWritten ?? []).length; state.notWritten = []; return json({ cleared }); }
+      if (path.startsWith("/api/skills/discovered/")) state.references = state.references.filter(item => item.key !== path.split("/")[4]);
+      else state.skills = state.skills.filter(item => item.id !== path.split("/")[3]);
+      return new Response(null, { status: 204 });
+    }
     if (path.startsWith("/api/capabilities")) {
       const items = state.capabilities ??= [];
       const [, , , raw, sub] = path.split("/");
@@ -3093,6 +3102,31 @@ test("the 平台 page's 技能 更多 shows every skill with its whole descripti
   assert.match(cards, /用 CMake 构建和测试/);
   assert.doesNotMatch(cards, /Building with CMake/);
   assert.ok(button("← 平台"));
+});
+
+test("this machine's skills, kept references and the skills not written are deleted on the 技能 page; the platform's own are not", async t => {
+  const { state, document, button, click, act } = await setup(t, [], [], { openComposer: false });
+  state.skills = [{ name: "synopsys-vcs", description: "VCS.", tools: ["vcs"], machine: false },
+    { name: "cmake", id: "cmake", description: "CMake.", tools: ["cmake"], machine: true }];
+  state.references = [{ key: "a".repeat(20), name: "vcf", description: "x", tools: ["vcf"], source_url: "https://github.com/example/skills/blob/main/SKILL.md" }];
+  state.notWritten = [{ name: "dc_shell", tools: ["dc_shell"], at: "2026-11-27T06:35:19Z", reason: "120s" }];
+  await click([...document.querySelectorAll(".app-nav button")].find(node => node.textContent === "平台"));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  await click(button("更多 ›", [...document.querySelectorAll(".platform-side .platform-side-head")][1]));
+  await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  const card = name => [...document.querySelectorAll('[aria-label="技能"] .platform-card')].find(node => node.textContent.includes(name));
+  assert.ok(!card("synopsys-vcs").querySelector(".confirm-delete"));
+  await click(button("删除", card("cmake")));
+  await click(button("确认删除", card("cmake")));
+  const references = document.querySelector('[aria-label="公开参考"]');
+  await click(button("删除", references));
+  await click(button("确认删除", references));
+  const notWritten = document.querySelector('[aria-label="没写成的技能"]');
+  assert.match(notWritten.textContent, /dc_shell.*120s/);
+  await click(button("清空这份记录", notWritten));
+  await click(button("清空", notWritten));
+  assert.deepEqual(state.skillDeletes, ["/api/skills/cmake", `/api/skills/discovered/${"a".repeat(20)}`, "/api/skills/failed"]);
+  assert.equal(document.querySelector('[aria-label="没写成的技能"]'), null);
 });
 
 test("in 全部记录 the engineer's repairs of this machine are listed too, and open their task", async t => {

@@ -13,7 +13,9 @@ import type { Capability } from "./capabilities";
  * pinned above it, and beside it what the platform can do now and what changed lately. */
 
 type RunRef = { id: string; plan: { summary: string; title?: string } };
-type Skill = { name: string; description: string; summary?: string; tools: string[]; machine: boolean };
+type Skill = { name: string; description: string; summary?: string; tools: string[]; machine: boolean; id?: string };
+type Reference = { key: string; name: string; description: string; tools: string[]; source_url: string };
+type NotWritten = { name: string; tools: string[]; at: string; reason: string };
 /** A skill as the user reads it: its one line in their language, or the models' description. */
 const skillLine = (item: Skill) => item.summary || item.description;
 
@@ -199,16 +201,36 @@ export function PlatformHome({ apiBase, runs, onOpenRun, onRecords, onCapabiliti
 /** 技能: every skill the steps know, as cards (平台 → 技能 → 更多). */
 export function SkillsPage({ apiBase }: { apiBase: string }) {
   const [skills, setSkills] = useState<Skill[] | null>(null);
-  useEffect(() => { fetch(`${apiBase}/api/skills`).then(r => r.ok ? r.json() : []).then(list => setSkills(Array.isArray(list) ? list : [])).catch(() => setSkills([])); }, [apiBase]);
-  return <div className="platform-cards" aria-label="技能">
-    {(skills ?? []).map(item => <div key={item.name} className="platform-card">
-      <span className="platform-card-head"><span className="platform-ability-icon"><Icon name="file" size={15} /></span>
-        <b>{item.name}</b><span className="platform-ability-status muted">{item.machine ? "本机" : "平台自带"}</span></span>
-      <span className="platform-card-text full" title={item.summary ? item.description : undefined}>{skillLine(item)}</span>
-      {!!item.tools.length && <small>涉及：{item.tools.join("、")}</small>}
-    </div>)}
-    {skills && !skills.length && <div className="platform-card empty"><span className="platform-card-text">还没有技能。</span></div>}
-  </div>;
+  const [references, setReferences] = useState<Reference[]>([]), [notWritten, setNotWritten] = useState<NotWritten[]>([]);
+  const list = <T,>(path: string, set: (items: T[]) => void) => fetch(`${apiBase}${path}`).then(r => r.ok ? r.json() : []).then(items => set(Array.isArray(items) ? items : [])).catch(() => set([]));
+  const load = () => Promise.all([list<Skill>("/api/skills", setSkills), list<Reference>("/api/skills/discovered", setReferences), list<NotWritten>("/api/skills/failed", setNotWritten)]);
+  useEffect(() => { void load(); }, [apiBase]);
+  const removing = (path: string) => async () => { const problem = await deleteAt(`${apiBase}${path}`); if (!problem) await load(); return problem; };
+  return <>
+    <div className="platform-cards" aria-label="技能">
+      {(skills ?? []).map(item => <div key={item.id ?? item.name} className="platform-card">
+        <span className="platform-card-head"><span className="platform-ability-icon"><Icon name="file" size={15} /></span>
+          <b>{item.name}</b><span className="platform-ability-status muted">{item.machine ? "本机" : "平台自带"}</span></span>
+        <span className="platform-card-text full" title={item.summary ? item.description : undefined}>{skillLine(item)}</span>
+        {!!item.tools.length && <small>涉及：{item.tools.join("、")}</small>}
+        {item.machine && item.id && <ConfirmDelete note="删掉这份本机技能；以后的任务用到这些工具时会重新准备一份。"
+          onDelete={removing(`/api/skills/${encodeURIComponent(item.id)}`)} />}
+      </div>)}
+      {skills && !skills.length && <div className="platform-card empty"><span className="platform-card-text">还没有技能。</span></div>}
+    </div>
+    {!!references.length && <section className="skills-extra" aria-label="公开参考">
+      <h3>公开参考 · {references.length}</h3>
+      <p className="muted">从 GitHub 找来、写本机技能时参考的公开技能；没在本机验证过，不会直接给步骤用。</p>
+      <ul>{references.map(item => <li key={item.key}><b>{item.name}</b> <a href={item.source_url} target="_blank" rel="noreferrer" className="muted">{item.source_url.replace("https://github.com/", "")}</a>
+        <ConfirmDelete note="删掉这份参考；下次需要时会重新搜。" onDelete={removing(`/api/skills/discovered/${encodeURIComponent(item.key)}`)} /></li>)}</ul>
+    </section>}
+    {!!notWritten.length && <section className="skills-extra" aria-label="没写成的技能">
+      <h3>没写成的技能 · {notWritten.length}</h3>
+      <p className="muted">执行前检查没能写成的技能，一天内的任务不再重写。</p>
+      <ul>{notWritten.map(item => <li key={`${item.name}|${item.tools.join(",")}`}><b>{item.name}</b> <span className="muted">{item.at.slice(0, 16).replace("T", " ")} · {item.reason}</span></li>)}</ul>
+      <ConfirmDelete label="清空这份记录" confirm="清空" note="下一个任务会重新尝试写这些技能。" onDelete={removing("/api/skills/failed")} />
+    </section>}
+  </>;
 }
 
 /** What waits for the user's nod, pinned above the conversation, in plain words with its buttons. */
