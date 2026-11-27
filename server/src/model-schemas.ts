@@ -78,6 +78,8 @@ export const NodeAttemptFields = {
   result: z.string().nullable().default(() => (null)),
   result_source: z.string().nullable().default(() => (null)),
   interrupted: lax.bool().default(() => (false)),
+  /** Files a cut-off attempt left changed in its folder (the next one is told, quality.attemptNotes). */
+  left_files: z.array(z.string()).default(() => []),
   model_id: z.string().nullable().default(() => (null)),
   outcome: z.string(),
   reason: z.string().nullable().default(() => (null)),

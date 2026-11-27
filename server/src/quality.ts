@@ -259,8 +259,20 @@ export const MAX_NOTED_COMMANDS = 12;
 /** What the step's last attempt did, from its tool calls, so a new attempt that cannot continue
  *  its conversation (another model, say) starts from there instead of from nothing. */
 export function attemptNotes(node: TaskNode): string {
-  if (!node.attempts.length || !node.attempts[node.attempts.length - 1].tool_calls.length) return "";
-  const attempt = node.attempts[node.attempts.length - 1];
+  const attempt = node.attempts.at(-1);
+  if (!attempt) return "";
+  if (!attempt.tool_calls.length) {
+    // Cut off with no tool log (a CLI's): what it left in the folder is what there is to go on.
+    if (!attempt.interrupted || attempt.outcome !== "cancelled") return "";
+    const minutes = attempt.duration_seconds ? ` after ${Math.round(attempt.duration_seconds / 60)} minutes` : "";
+    const lines = [`The previous attempt (${attempt.model_id ?? "None"}) was cut off${minutes}, by a restart of the service, before it finished.`];
+    if (attempt.left_files.length) {
+      lines.push("Files it wrote or changed (still in the working directory): " + attempt.left_files.slice(0, MAX_NOTED_FILES).join(", ")
+        + (attempt.left_files.length > MAX_NOTED_FILES ? ` (and ${attempt.left_files.length - MAX_NOTED_FILES} more)` : ""));
+      lines.push("Check what they hold and continue from them rather than starting over; redo only what is missing or wrong.");
+    } else lines.push("It left no changed files in the working directory.");
+    return lines.join("\n");
+  }
   const files = (...tools: string[]) => [...new Set(attempt.tool_calls.filter((call) => tools.includes(call.tool) && call.ok)
     .map((call) => call.detail.split(" (")[0]))];
   // Attempts recorded before the tools followed Claude Code's used the older names.

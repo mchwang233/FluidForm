@@ -526,7 +526,9 @@ export class Executor extends Preflighting {
           const current = latest.plan.nodes.find((n) => n.id === nodeId)!;
           if (current.attempts.length === node.attempts.length) {
             current.attempts.push(NodeAttemptSchema.parse({ model_id: node.model_id, outcome: current.generation !== generation ? "superseded" : "cancelled",
-              interrupted: latest.status !== "cancelled", reason: "上游返工或任务取消，调用已停止。", cost_usd: spent,
+              interrupted: latest.status !== "cancelled", reason: latest.status !== "cancelled" && current.generation === generation
+                ? "服务重启或停止打断了这次尝试。" : "上游返工或任务取消，调用已停止。", cost_usd: spent,
+              left_files: Array.isArray((error as Json)?.left_files) ? (error as Json).left_files.slice(0, 200) : [],
               ...this.takeLog(runId, nodeId, (error as Json)?.usage ?? null) }));
           }
           this.save(latest);
@@ -790,9 +792,23 @@ export class Executor extends Preflighting {
         });
       }
       const overrun = headStart ? null : this.overrunCheck(run, node, modelId);
-      const result = await activity.recording(entries, () => this.complete(run, node, modelId, prompt, workspace, { allow_api_fallback: fallback && !inProject,
-        attachments: run.attachments, act, max_turns: turnsFor(node), tool_log: entries, tool_trace: trace, watch: headStart ? null : this.timedWatch(run, node, modelId),
-        effort: settings.reasoning_by_difficulty[node.difficulty] ?? null, ...(conversation ? { conversation } : {}), ...(overrun ? { overrun } : {}), signal }));
+      let result: ProviderResult;
+      try {
+        result = await activity.recording(entries, () => this.complete(run, node, modelId, prompt, workspace, { allow_api_fallback: fallback && !inProject,
+          attachments: run.attachments, act, max_turns: turnsFor(node), tool_log: entries, tool_trace: trace, watch: headStart ? null : this.timedWatch(run, node, modelId),
+          effort: settings.reasoning_by_difficulty[node.difficulty] ?? null, ...(conversation ? { conversation } : {}), ...(overrun ? { overrun } : {}), signal }));
+      } catch (error) {
+        // Cut off (a restart, say): what it had written stays in the folder, and the next attempt is told
+        // (2026-11-27: a CLI step reports no tool calls, so its next attempt began again from nothing).
+        if (usesFiles && isCancelled(error) && error && typeof error === "object") {
+          try {
+            (error as Json).left_files = scope.mine(quality.changedFiles(before, quality.files.state(workspace)));
+          } catch {
+            // only a note
+          }
+        }
+        throw error;
+      }
       this.workResults.set(key, result);
       let after: Map<string, string>;
       try {

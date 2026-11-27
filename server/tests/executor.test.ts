@@ -14,6 +14,7 @@ import * as pricing from "../src/pricing.js";
 import { withoutChat } from "./helpers/chat.js";
 import { withoutPricing } from "./helpers/pricing.js";
 import { routeNode } from "../src/routing.js";
+import * as quality from "../src/quality.js";
 import { sleep } from "../src/tasks.js";
 import { contractNode, coverageNodes, mockAcceptance, restoreAcceptance, setupExecutor } from "./helpers/artifacts.js";
 import { conftest } from "./helpers/conftest.js";
@@ -91,6 +92,39 @@ test("a missing external input blocks without model calls or the downstream audi
   assert.equal(run.plan.nodes[0].attempts[0].outcome, "blocked");
   assert.ok(run.diagnoses[0].report!.includes("coverage.vdb"));
   assert.equal(run.actual_cost_usd, 0);
+});
+
+test("an attempt a restart cuts off leaves its files noted for the next one", async () => {
+  const db = newDb();
+  const node = TaskNodeSchema.parse({ id: "audit", title: "盘点", instructions: "写盘点报告", capability: "coding", model_id: "cli:codex", needs_workspace: true });
+  db.saveRun(ExecutionRunSchema.parse({ id: "cut", prompt: "盘点", status: "queued", budget_usd: 1, use_cli: true, plan: { summary: "s", nodes: [node] } }));
+  let started!: () => void;
+  const running = new Promise<void>((done) => (started = done));
+  const provider = {
+    configuredModels: (ids: Iterable<string>) => new Set(ids),
+    async complete(modelId: string, _prompt: string, options: CompleteOptions = {}): Promise<ProviderResult> {
+      mkdirSync(join(options.workspace!, "audit"), { recursive: true });
+      writeFileSync(join(options.workspace!, "audit", "tools.md"), "vcs: ok\n");
+      started();
+      await sleep(60, options.signal);
+      return new ProviderResult("never", 1, 1, modelId);
+    },
+  };
+  const models = catalog();
+  models["cli:codex"] = ModelProfileSchema.parse({ ...models["mock:local"], id: "cli:codex", provider: "cli", channel: "cli", execution_priority: 0 });
+  const executor = new Executor(db, provider as never, models);
+  executor.preflight = async () => true;
+  executor.start("cut");
+  await running;
+  await executor.shutdown();
+  const cut = db.getRun("cut")!.plan.nodes[0];
+  const attempt = cut.attempts.at(-1)!;
+  assert.ok(attempt.outcome === "cancelled" && attempt.interrupted);
+  assert.equal(attempt.reason, "服务重启或停止打断了这次尝试。");
+  assert.deepEqual(attempt.left_files, ["audit/tools.md"]);
+  // The next attempt is told what is there to go on with, though a CLI reports no tool calls.
+  const notes = quality.attemptNotes(cut);
+  assert.ok(notes.includes("cut off") && notes.includes("audit/tools.md") && notes.includes("continue from them"));
 });
 
 test("a membership CLI runs a contract step bounded by time", async () => {
