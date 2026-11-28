@@ -26,7 +26,6 @@ export { plainLines, readReply } from "./engineer.js";
 export type { Engineering } from "./engineer.js";
 export type { EngineerPackage } from "./engineering.js";
 export * as environment from "./environment.js";
-export type { LearningPackage } from "./experience.js";
 export type { Implements } from "./extensions.js";
 export { uses } from "./features.js";
 export { HttpStatusError, RequestTimeout, TransportError, get, within } from "./fetching.js";
@@ -42,8 +41,8 @@ export { ArtifactWaiverSchema, CapabilityScoreSchema, DIFFICULTY_THRESHOLDS, Dec
 export type { ArtifactEvidence, ArtifactWaiver, Attachment, CapabilityScore, Diagnosis, Employee, EngineerJob, ExecutionRun, Improvement, LearningReview, ModelProfile, NodeAttempt, PlanChoice, PreflightCheck, SupervisorSession, TaskNode, TaskPlan } from "./models.js";
 export { COMPONENT_GUIDES, REPAIR_GUIDES, RepairError, failureOutput, repairGuide } from "./platform-repair.js";
 export type { LeadPort, ReviewPort } from "./ports/lead.js";
+export type { LearningPort, SkillHost } from "./ports/learning.js";
 export type { PlanningPort } from "./ports/planning.js";
-export { Preflighting } from "./preflighting.js";
 export * as pricing from "./pricing.js";
 export * as progress from "./progress.js";
 export type { ProviderResult } from "./providers.js";

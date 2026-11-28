@@ -28,7 +28,7 @@ import * as quality from "./quality.js";
 import { type ModelUnavailable, failureKind, type QuotaTracker } from "./quota.js";
 import { retryModel } from "./recovery.js";
 import * as retrospect from "./retrospect.js";
-import * as experience from "./experience.js";
+import { learning } from "./ports/learning.js";
 import { NoEligibleModelError, eligibleForNode, nodeCost, routeNode } from "./routing.js";
 import { stepKey } from "./review.js";
 import type * as scopes from "./scopes.js";
@@ -185,7 +185,7 @@ export abstract class ExecutorBase {
     const current = this.namingTasks.get(runId);
     if (!run || (current && !current.done)) return;
     const complete = async (modelId: string, prompt: string) => this.providers.complete(modelId, prompt, { allow_api_fallback: false, effort: "low" });
-    this.namingTasks.set(runId, new Task(() => experience.nameProblems(this.db, complete, Object.values(this.modelLookup), this.configured(run), runId)));
+    this.namingTasks.set(runId, new Task(async () => (await learning()).nameProblems(this.db, complete, Object.values(this.modelLookup), this.configured(run), runId)));
   }
 
   // --- models, budget and model calls -------------------------------------------------------------

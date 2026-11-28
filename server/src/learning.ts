@@ -19,7 +19,7 @@ import * as quality from "./quality.js";
 import * as retrospect from "./retrospect.js";
 import * as skills from "./skills.js";
 import { currentTask, Task } from "./tasks.js";
-import * as experience from "./experience.js";
+import { learning } from "./ports/learning.js";
 
 export const MAX_ITEMS = 3;
 export const MAX_APPLIED = 5;
@@ -240,7 +240,7 @@ export function startLearning(host: LearningHost, runId: string, { manual = fals
   review.error = null;
   host.db.saveLearningReview(review);
   // Python starts the review only inside a running event loop; ``start`` false is a caller without one.
-  if (start) host.learningTasks.set(runId, new Task((signal) => experience.learn(host, runId, signal)));
+  if (start) host.learningTasks.set(runId, new Task(async (signal) => (await learning()).learn(host, runId, signal)));
   return review;
 }
 

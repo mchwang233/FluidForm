@@ -76,6 +76,15 @@
   - 读回复用开始问时取到的端口：负责人在回答时被停用，它已做的决定照样执行（`switching.test.ts`）。
   - 以执行器为 `this` 的包函数 21 → 14，`.call(this)` 转发 43 → 29，按名字问能力 43 → 36；`extension-api`
     不再交出 `Leading`。
+- 第 3 步已完成（2026-11-28）：经验的端口是 `server/src/ports/learning.ts`（代替原来的 `experience.ts`）：
+  - `LearningPort` 有复盘（`learn`）、给问题起名（`nameProblems`，库的类型从 `any` 改为 `Db`），以及开工前检查要知道的：
+    检查什么（`environmentChecks`、`modelChecks`）、通过的检查记多久（`cacheKey`、`passedBefore`、`remember`）、
+    结果怎么读和怎么说（`failures`、`describe`）、修环境和写技能的提示词、哪些工具在、每个工具用哪个技能（`prepareSkills`）。
+  - 检查流程（检查、修一次、再检查、准备技能、把结果写进任务、没通过就暂停）、修环境（开诊断、写诊断记录）、
+    让模型写技能，都回到核心的 `preflighting.ts`；包里不再有以执行器为 `this` 的函数。
+  - 准备技能经 `SkillHost`（记进度、读任务现在是否允许联网、查工具、写技能）：查工具和写技能仍是执行器上的方法，
+    测试照旧替换它们。检查已开始后用 `begun()` 取包的代码：中途停用，这次检查照常做完。
+  - 以执行器为 `this` 的包函数 14 → 6，`.call(this)` 转发 29 → 13；`extension-api` 不再交出 `Preflighting`。
 
 ## 风险
 

@@ -10,9 +10,9 @@ import { SERVER } from "../src/paths.js";
 
 const EXPECTED = {
   // Package functions that run as the executor (``this: Leading``, …) and so can reach all of it.
-  executorBound: 14,
+  executorBound: 6,
   // Core methods that hand the executor to a package (``.call(this, …)``).
-  bridges: 29,
+  bridges: 13,
   // Places in the core that ask for a capability by name (``uses.lead()``, ``available("lead")``),
   // besides features.ts and provided.ts, which answer them, and the ports (src/ports), which turn
   // the answer into the capability's code or FluidForm's own.
