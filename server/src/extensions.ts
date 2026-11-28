@@ -75,3 +75,8 @@ export async function load<T>(id: string): Promise<T> {
 export async function preload(library: Capability[]): Promise<void> {
   for (const item of shipped) if (on(item, library)) await load(item.id);
 }
+
+/** What a package's code must offer: ``load<Port>`` takes it on trust, so each package's entry states
+ *  ``export type Contract = Implements<Port, typeof import("./index.js")>`` and stops compiling when
+ *  its exports and the port the core calls it through part (docs/design/capability-ports.md). */
+export type Implements<Port, Code extends Port> = Code;

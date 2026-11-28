@@ -23,3 +23,7 @@ export function start(db: Database, models: Record<string, ModelProfile>, reader
     matchModels: (given) => benchmarks.matchModels(given),
   };
 }
+
+// What FluidForm calls this package through (server/src/research.ts): compiling fails when the two part.
+import type { Implements, ResearchPackage } from "../../../src/extension-api.js";
+export type Contract = Implements<ResearchPackage, typeof import("./index.js")>;

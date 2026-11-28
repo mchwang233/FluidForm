@@ -14,3 +14,7 @@ export { planningBrief } from "./brief.js";
 export { quick } from "./quick.js";
 export { changePlan } from "./replan.js";
 export { delegate } from "./team-planning.js";
+
+// What FluidForm calls this package through (server/src/planning.ts): compiling fails when the two part.
+import type { Implements, PlanningPackage } from "../../../src/extension-api.js";
+export type Contract = Implements<PlanningPackage, typeof import("./index.js")>;

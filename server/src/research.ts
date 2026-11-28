@@ -24,7 +24,8 @@ export type Research = {
 /** One call of a model for the research (reading the leaderboard's page): its answer, its cost, the model. */
 export type Reader = (prompt: string, signal: AbortSignal) => Promise<{ text: string; cost_usd: number; model_id: string }>;
 
-type Code = { start(db: Database, models: Record<string, ModelProfile>, reader: Reader | null): Research };
+/** What FluidForm asks of the research package's code. */
+export type ResearchPackage = { start(db: Database, models: Record<string, ModelProfile>, reader: Reader | null): Research };
 
 let running: Research | null = null;
 let runningFor: Database | null = null;
@@ -39,7 +40,7 @@ export async function begin(db: Database, models: Record<string, ModelProfile>, 
   // Another FluidForm in this process (a test's) had it: that one's research stops first.
   if (running && runningFor !== db) await end();
   if (!id || running) return starting ?? undefined;
-  starting = extensions.load<Code>(id).then((code) => {
+  starting = extensions.load<ResearchPackage>(id).then((code) => {
     running = code.start(db, models, reader);
     runningFor = db;
   }).catch((error) => {
