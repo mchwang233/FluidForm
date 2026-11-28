@@ -67,6 +67,15 @@
     改计划和委派照旧拒绝。`planning()` 给出包的代码或 `base`；`Api.makePlan` 不再按名字分支（按名字问能力 47 → 43）。
   - 包的 `port.ts` 把端口接到原来的函数上；排计划的入口从 `autonomousPlan(prompt, …)` 改为 `plan(input, host)`，
     测试改替换 `api.deps.plan`。快速、单人判断的结果仍由核心变成一步的计划（包返回判断，核心写计划）。
+- 第 2 步已完成（2026-11-28）：负责人的端口是 `server/src/ports/lead.ts`（代替原来的 `lead.ts`）：
+  - `LeadPort` 只有负责人的措辞和理解：失败、修完、你回答之后、全部做完时它被告知什么（`failureMessage` 等），
+    怎么从回复里读出决定（`readDecision`）、怎么再提醒格式（`decisionFormat`），以及超时检查；`ReviewPort` 是验收。
+    都不碰任务。`base` 没有负责人（`leads: false`），`noReview` 没有验收。
+  - 问负责人（同一个对话里最多再问一次、改计划先在副本上试）、次数上限和暂停、预算用完时暂停、没有决定时的
+    固定规则、执行决定（`applyDecision`）、提议能力，都回到核心的 `leading.ts`；包里的 `leading.ts` 删掉。
+  - 读回复用开始问时取到的端口：负责人在回答时被停用，它已做的决定照样执行（`switching.test.ts`）。
+  - 以执行器为 `this` 的包函数 21 → 14，`.call(this)` 转发 43 → 29，按名字问能力 43 → 36；`extension-api`
+    不再交出 `Leading`。
 
 ## 风险
 

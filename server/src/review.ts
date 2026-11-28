@@ -16,7 +16,7 @@ import { trace, type ProviderResult } from "./providers.js";
 import { pyRound } from "./py.js";
 import * as quality from "./quality.js";
 import { pickReviewer } from "./routing.js";
-import * as lead from "./lead.js";
+import { lead, review } from "./ports/lead.js";
 import { isCancelled } from "./tasks.js";
 
 // Reasoning effort for the check on a long attempt (a short yes or no).
@@ -92,7 +92,7 @@ export async function check(host: ReviewHost, run: ExecutionRun, node: TaskNode,
     const claim = quality.unableClaim(given);
     result = claim ? quality.verdict({ passed: false, reason: `无法完成：${claim}`, fix: claim, unable: claim })
       : quality.verdict({ passed: true, reason: "步骤自带的检查通过。" });
-  } else result = await lead.reviewResult(host, run, node, text, changed, workspace, evidence);
+  } else result = await (await review()).reviewResult(host, run, node, text, changed, workspace, evidence);
   if (evidence) {
     evidence.accepted = result.passed;
     result.artifact_evidence = evidence;
@@ -164,7 +164,7 @@ export function progressWatch(host: ReviewHost, run: ExecutionRun, node: TaskNod
     // producing evidence only because no peer model is available.
     host.emit(run.id, "node.progress_check", { node_id: node.id, model_id: modelId, checker_model_id: checker ? checker.id : null,
       minutes: pyRound(minutes), checked, stop: Boolean(reason), reason });
-    return reason || (host.canLead() ? lead.criticalCheck(host, run.id, node, modelId, minutes, evidence, asked) : null);
+    return reason || (host.canLead() ? (await lead()).criticalCheck(host, run.id, node, modelId, minutes, evidence, asked) : null);
   };
 }
 
@@ -175,7 +175,7 @@ export function overrunCheck(host: ReviewHost, run: ExecutionRun, node: TaskNode
   if (!expected || !run.supervisor?.model_id || !host.canLead()) return null;
   const watch: progress.Watch = async (evidence) => {
     const turns = /^\d/.test(evidence) ? Number.parseInt(evidence.split(" ", 1)[0], 10) : 0;
-    return lead.overrun(host, run, node, modelId, expected, evidence, turns);
+    return (await lead()).overrun(host, run, node, modelId, expected, evidence, turns);
   };
   return [expected, watch];
 }

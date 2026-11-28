@@ -70,7 +70,7 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 （`contracts.ts`，执行和验收都用）。
 
 第 3 步已完成（2026-11-22）：验收、超时时问负责人、负责人的决定（失败后、收尾、你回答之后、提议能力）、
-它的提示词和读决定的代码都在 `server/packages/lead/src`，本体通过 `lead.ts` 动态加载。留在本体的是和聊天
+它的提示词和读决定的代码都在 `server/packages/lead/src`，本体通过 `lead.ts`（2026-11-28 起是端口 `ports/lead.ts`，执行决定回到本体的 `leading.ts`，见 capability-ports.md）动态加载。留在本体的是和聊天
 共用的会话和对话管道（`supervisor.ts`、`leading.ts`）、改任务的动作（`leading.ts`），以及不需要负责人的检查
 （步骤自带的检查命令、卡住检查，`review.ts`）。
 
@@ -89,7 +89,7 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 - 产物约定（`contracts.ts`）、员工和委派的记录（`team.ts`）：执行时要用。
 - 会话和对话的管道（`supervisor.ts`、`leading.ts`）：和聊天共用。
 
-随附扩展用得到本体的模块（同一个进程、同一份实例）；反过来本体只经过 `ports/planning.ts`、`lead.ts`、
+随附扩展用得到本体的模块（同一个进程、同一份实例）；反过来本体只经过 `ports/planning.ts`、`ports/lead.ts`、
 `engineering.ts`、`experience.ts` 动态加载它们，`server/tests/extension-boundary.test.ts` 保证没有直接引用。
 开关和运行中的服务（`server/tests/switching.test.ts`）：
 

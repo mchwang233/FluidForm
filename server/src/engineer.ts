@@ -24,7 +24,7 @@ import * as quality from "./quality.js";
 import { engineers } from "./routing.js";
 import { SelfRepair } from "./self-repair.js";
 import { ENGINEER_CALLERS } from "./supervisor.js";
-import { engineerMessage } from "./lead.js";
+import { lead } from "./ports/lead.js";
 import { currentTask, isCancelled, Task } from "./tasks.js";
 import * as engineering from "./engineering.js";
 
@@ -628,7 +628,7 @@ export abstract class Engineering extends SelfRepair {
     const left = SelfRepair.decisionsLeft(run, node);
     if (this.canLead() && Math.min(...left) > 0) {
       const choices = this.choices(run, node);
-      decision = await this.askForDecision(run.id, node.id, await engineerMessage(run, node, job, choices, left), new Set(choices.map((item) => item.id)), null, false, "engineer_done");
+      decision = await this.askForDecision(run.id, node.id, await (await lead()).engineerMessage(run, node, job, choices, left), new Set(choices.map((item) => item.id)), null, false, "engineer_done");
     }
     if (decision === "budget") return;
     if (decision === null) {
