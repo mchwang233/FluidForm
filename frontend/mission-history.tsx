@@ -122,7 +122,8 @@ const FINISHED = new Set(["succeeded", "failed", "cancelled", "incomplete"]);
 
 /** The estimate card's note: past the end, how far the real cost overran; before it, what past
  * tasks suggest (the backend's calibrated estimate) when that is well above the plan's own. */
-export function estimateNote(status: string, actual: number, estimate: { high_usd: number; calibrated_usd?: number | null }): string | null {
+export function estimateNote(status: string, actual: number, estimate?: { high_usd: number; calibrated_usd?: number | null } | null): string | null {
+  if (!estimate) return null;
   const over = overEstimate(actual, estimate.high_usd);
   if (over || FINISHED.has(status)) return over;
   const calibrated = estimate.calibrated_usd;

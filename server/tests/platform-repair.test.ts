@@ -464,3 +464,58 @@ test("a failed check says which test failed, however much ran after it", () => {
   const said = platform.failureOutput(output);
   assert.ok(said.length <= 8000 && said.includes("the one that failed") && said.endsWith("# fail 1\n"));
 });
+
+test("fixPlatform enables acting tools on API models, blocks script edits, and rolls back file-folder swaps", async () => {
+  // 1. Automatic task repairs get act=true on API models (edit=true forwarded through diagnoseWith).
+  Object.assign(settings, { platform_root: checkout, platform_self_repair: true, platform_repair_attempts: 1 });
+  const db = new Database(join(folder(), "act-check.db"));
+  try {
+    oneNodeRun(db);
+    const run = db.getRun("r")!;
+    run.use_cli = false;
+    const diagnosis = DiagnosisSchema.parse({ id: "d", trigger: "auto", node_id: "n", model_id: "x:api" });
+    run.diagnoses.push(diagnosis);
+    db.saveRun(run);
+    let seenAct: boolean | undefined;
+    const apiOnly = {
+      configuredModels: () => new Set(["x:api"]),
+      async complete(modelId: string, _prompt: string, options: CompleteOptions = {}) {
+        seenAct = options.act;
+        editCandidate({ folder: dirname(options.workspace!) });
+        return new ProviderResult("已修复。\nSTATUS: FIXED", 0, 0, modelId);
+      },
+    };
+    const executor = new Executor(db, apiOnly, MODELS);
+    prepareWithoutService(executor.platform as platform.SourceRepairs);
+    (executor.platform as platform.SourceRepairs).checkCommand = passing;
+    executor.activatePlatform = async () => undefined;
+    await executor.fixPlatform(run, diagnosis, run.plan.nodes[0], "API 修复工具传递");
+    assert.equal(seenAct, true);
+    await executor.maintenanceTask!.settled();
+  } finally {
+    db.close();
+  }
+
+  // 2. Automatic task repairs cannot alter package.json scripts executed on the host.
+  const repairs = manager();
+  repairs.checkCommand = passing;
+  const tampered = await repairs.prepare("r", "d");
+  editCandidate(tampered);
+  writeFileSync(join(tampered.folder, "source", "server/package.json"), JSON.stringify({ scripts: { build: "evil" } }));
+  await assert.rejects(repairs.check(tampered), /构建脚本/);
+
+  // 3. Replacing a file with a directory (and rolling it back) succeeds without EISDIR.
+  writeFileSync(join(checkout, "server/src/mod.ts"), "export const x = 1;\n");
+  const swapRepairs = manager();
+  swapRepairs.checkCommand = passing;
+  const swapJob = await swapRepairs.prepare(null, null);
+  rmSync(join(swapJob.folder, "source", "server/src/mod.ts"));
+  mkdirSync(join(swapJob.folder, "source", "server/src/mod.ts"));
+  writeFileSync(join(swapJob.folder, "source", "server/src/mod.ts/index.ts"), "export const x = 2;\n");
+  writeFileSync(join(swapJob.folder, "source", "server/tests/swap.test.ts"), "// swap regression\n");
+  await swapRepairs.check(swapJob);
+  worker.installFiles(swapJob as worker.Job);
+  assert.equal(readFileSync(join(checkout, "server/src/mod.ts/index.ts"), "utf8"), "export const x = 2;\n");
+  worker.installFiles(swapJob as worker.Job, true);
+  assert.equal(readFileSync(join(checkout, "server/src/mod.ts"), "utf8"), "export const x = 1;\n");
+});

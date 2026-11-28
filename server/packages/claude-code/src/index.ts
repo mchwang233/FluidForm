@@ -82,8 +82,15 @@ export function answer(stdout: string): CliText {
   const text = stdout.trim();
   try {
     const payload = JSON.parse(text);
-    if (isObject(payload)) return { text: pyStr(payload.result || payload.response || payload.text || text), usage: cliUsage(payload) };
-  } catch {
+    if (isObject(payload)) {
+      if (payload.is_error === true) throw new CliError(pyStr(payload.result || payload.error || text));
+      const picked = payload.result !== undefined && payload.result !== null ? payload.result
+        : payload.response !== undefined && payload.response !== null ? payload.response
+        : payload.text !== undefined && payload.text !== null ? payload.text : text;
+      return { text: pyStr(picked), usage: cliUsage(payload) };
+    }
+  } catch (error) {
+    if (error instanceof CliError) throw error;
     // not JSON: the text as it is
   }
   return { text, usage: {} };
@@ -121,8 +128,15 @@ async function converse(runner: Runner, call: OwnConversation): Promise<[CliText
   calls.save();
   const output = await runner.run([executable, ...args], call.cwd, Buffer.from(call.prompt, "utf8"), call.timeout ?? settings.lead_call_max_minutes * 60,
     { signal: call.signal });
-  const payload = JSON.parse(output);
-  return [{ text: pyStr(payload.result || ""), usage: cliUsage(payload) }, pyStr(payload.session_id || sid)];
+  let payload: unknown;
+  try {
+    payload = JSON.parse(output);
+  } catch {
+    throw new CliError(`claude returned invalid JSON: ${output.trim().slice(0, 200) || "no output"}`);
+  }
+  if (!isObject(payload)) throw new CliError("claude returned invalid JSON payload");
+  if (payload.is_error === true) throw new CliError(pyStr(payload.result || payload.error || "claude error"));
+  return [{ text: pyStr(payload.result ?? ""), usage: cliUsage(payload) }, pyStr(payload.session_id || sid)];
 }
 
 export const channel: ModelChannel = {

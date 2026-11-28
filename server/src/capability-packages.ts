@@ -129,7 +129,9 @@ function manifest(raw: Buffer, files: string[]): Capability {
   const bad = secrets.filter((item) => !VARIABLE.test(item) || RESERVED.has(item) || item.startsWith("SP_") || item.startsWith("LD_") || item.toUpperCase().includes("PROXY"));
   if (bad.length) throw new PackageError(`这些密钥名不能用：${bad.join("、")}`);
   const domains = list(given.domains).map((item) => item.toLowerCase()).filter(Boolean);
-  if (domains.some((item) => !/^(\*\.)?[a-z0-9.-]+$/.test(item))) throw new PackageError("domains 只能写主机名，或 *.example.com。");
+  if (domains.some((item) => !sandbox.isExternalDomain(item))) {
+    throw new PackageError("domains 只能写公网域名或 *.example.com（不能写 IP、localhost 或本地域名）。");
+  }
   return CapabilitySchema.parse({
     id, name: head(text(given.name) || id, 60), kind, summary: head(text(given.summary), 500), usage: head(text(given.usage), 2000),
     guide: head(text(given.guide), capabilities.MAX_GUIDE), check: head(text(given.check), 500), secrets: secrets.slice(0, 20),

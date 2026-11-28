@@ -6,10 +6,12 @@
 //   on a Unix socket, which lets a connection through only to a host the capability declared;
 // - it gets only its own secrets, as environment variables.
 import { type ChildProcess, spawn } from "node:child_process";
+import { lookup as dnsLookup } from "node:dns/promises";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
-import { connect, createServer, type Server, type Socket } from "node:net";
-import { tmpdir } from "node:os";
+import { connect, createServer, isIP, type Server, type Socket } from "node:net";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
+import { pipeline } from "node:stream";
 import { hideHomes, listenScript, SANDBOX_PORTS_DIR, withoutEnvArgs, Workspace } from "./agent.js";
 import { settings } from "./config.js";
 import * as environment from "./environment.js";
@@ -25,15 +27,54 @@ export const UPSTREAM_TIMEOUT = 20;
 
 type Log = (line: string) => void;
 
-/** Why capabilities' commands cannot run on this machine, or "" when they can. */
-export function missing(): string {
-  const lacking = ["bwrap", "socat"].filter((name) => !environment.which(name));
+/** Why capabilities' commands cannot run on this machine, or "" when they can. ``needsProxy`` may be
+ *  false for local-only commands/services with no declared ``domains``. */
+export function missing(needsProxy = true): string {
+  const needed = needsProxy ? ["bwrap", "socat"] : ["bwrap"];
+  const lacking = needed.filter((name) => !environment.which(name));
   return lacking.length ? `这台机器缺少 ${lacking.join("、")}，能力的环境和自动化运行不了。` : "";
+}
+
+/** Whether ``ip`` is a loopback, link-local/metadata, private, or non-unicast address that an external
+ *  domain must never resolve to (DNS rebinding / SSRF protection). */
+export function isPrivateOrReservedIp(ip: string): boolean {
+  const clean = ip.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (clean.startsWith("::ffff:")) {
+    const tail = clean.slice(7);
+    if (isIP(tail) === 4) return isPrivateOrReservedIp(tail);
+    const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail);
+    if (hex) {
+      const hi = parseInt(hex[1], 16);
+      const lo = parseInt(hex[2], 16);
+      return isPrivateOrReservedIp(`${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`);
+    }
+  }
+  const version = isIP(clean);
+  if (version === 4) {
+    const [a, b] = clean.split(".").map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127)
+      || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
+  }
+  if (version === 6) {
+    return clean === "::" || clean === "::1" || clean.startsWith("fc") || clean.startsWith("fd")
+      || /^fe[89ab]/.test(clean) || clean.startsWith("ff") || clean.startsWith("100::") || clean.startsWith("2001:db8:");
+  }
+  return true;
+}
+
+/** Whether ``host`` is a valid external domain name (not an IP literal, localhost, or local suffix). */
+export function isExternalDomain(given: string): boolean {
+  const raw = given.toLowerCase().trim().replace(/\.+$/, "");
+  const host = raw.startsWith("*.") ? raw.slice(2) : raw;
+  if (!host || !host.includes(".") || isIP(host) !== 0) return false;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host);
 }
 
 /** Whether ``host`` is one of ``domains`` (``*.example.com`` also covers its subdomains). */
 export function allowed(given: string, domains: string[]): boolean {
-  const host = given.toLowerCase().trim().replace(/\.+$/, "");
+  const host = given.toLowerCase().trim().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  if (isIP(host) !== 0) return false;
   for (const raw of domains) {
     const item = raw.toLowerCase().trim().replace(/\.+$/, "");
     const base = item.startsWith("*.") ? item.slice(2) : item;
@@ -63,24 +104,25 @@ export function indexHosts(): string[] {
 }
 
 /** The user's own HTTPS proxy, which connections go through when this machine has one. */
-export function userProxy(host: string): [string, number] | null {
+export function userProxy(host: string): [string, number, string | null] | null {
   const bypass = (process.env.NO_PROXY || process.env.no_proxy || "").split(",").map((item) => item.trim()).filter(Boolean);
-  if (bypass.some((item) => allowed(host, [item, "*." + item.replace(/^\.+/, "")]))) return null;
+  if (bypass.some((item) => item === "*" || allowed(host, [item, "*." + item.replace(/^\.+/, "")]))) return null;
   const value = process.env.HTTPS_PROXY || process.env.https_proxy || "";
   if (!value) return null;
   try {
     const url = new URL(value.includes("://") ? value : `http://${value}`);
-    return url.hostname && url.protocol === "http:" ? [url.hostname.replace(/^\[|\]$/g, ""), Number(url.port) || 80] : null;
+    const auth = url.username ? Buffer.from(`${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`).toString("base64") : null;
+    return url.hostname && url.protocol === "http:" ? [url.hostname.replace(/^\[|\]$/g, ""), Number(url.port) || 80, auth] : null;
   } catch {
     return null;
   }
 }
 
 function pipe(from: Socket, to: Socket): void {
-  from.on("data", (data) => to.write(data));
-  from.on("end", () => to.end());
-  from.on("error", () => to.destroy());
-  to.on("error", () => from.destroy());
+  pipeline(from, to, () => {
+    from.destroy();
+    to.destroy();
+  });
 }
 
 /** Reads until the end of the request head; null when the client went away or took too long. */
@@ -166,23 +208,44 @@ export class DomainProxy {
       return;
     }
     let upstream: Socket;
+    let early: Buffer = Buffer.alloc(0);
     try {
-      upstream = this.track(await DomainProxy.open(host, port));
+      [upstream, early] = await DomainProxy.openWithExtra(host, port);
+      this.track(upstream);
     } catch (error) {
       this.log(`连不上 ${host}:${port}：${(error as Error).message}`);
       answer("502 Bad Gateway");
       return;
     }
+    if (client.destroyed) {
+      upstream.destroy();
+      return;
+    }
     client.write("HTTP/1.1 200 Connection established\r\n\r\n");
+    if (early.length) client.write(early);
     if (rest.length) upstream.write(rest);
     pipe(client, upstream);
     pipe(upstream, client);
   }
 
-  static open(host: string, port: number): Promise<Socket> {
+  static async open(host: string, port: number): Promise<Socket> {
+    return (await DomainProxy.openWithExtra(host, port))[0];
+  }
+
+  private static async openWithExtra(host: string, port: number): Promise<[Socket, Buffer]> {
     const through = userProxy(host);
-    return new Promise<Socket>((done, fail) => {
-      const socket = connect(through ? { host: through[0], port: through[1] } : { host, port });
+    let targetHost = host;
+    let targetFamily: 4 | 6 | undefined;
+    if (!through && host.toLowerCase() !== "localhost") {
+      const addresses = await dnsLookup(host, { all: true, verbatim: true });
+      if (!addresses.length || addresses.some((entry) => isPrivateOrReservedIp(entry.address))) {
+        throw new Error(`refused private or reserved address for ${host}`);
+      }
+      targetHost = addresses[0].address;
+      targetFamily = addresses[0].family === 6 ? 6 : 4;
+    }
+    return new Promise<[Socket, Buffer]>((done, fail) => {
+      const socket = connect(through ? { host: through[0], port: through[1] } : { host: targetHost, port, ...(targetFamily ? { family: targetFamily } : {}) });
       const timer = setTimeout(() => {
         socket.destroy();
         fail(new Error("timed out"));
@@ -195,10 +258,11 @@ export class DomainProxy {
         if (!through) {
           clearTimeout(timer);
           socket.removeAllListeners("error");
-          done(socket);
+          done([socket, Buffer.alloc(0)]);
           return;
         }
-        socket.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n\r\n`);
+        const authHeader = through[2] ? `Proxy-Authorization: Basic ${through[2]}\r\n` : "";
+        socket.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n${authHeader}\r\n`);
         const read = await readHead(socket, UPSTREAM_TIMEOUT);
         clearTimeout(timer);
         const first = read ? read[0].toString("latin1").split("\r\n", 1)[0] : "no reply";
@@ -208,7 +272,7 @@ export class DomainProxy {
           return;
         }
         socket.removeAllListeners("error");
-        done(socket);
+        done([socket, read[1]]);
       });
     });
   }
@@ -238,20 +302,37 @@ export function python(): string | null {
   }
 }
 
+/** Read-only runtime directories under ``prefix`` safe to expose after ``hideHomes()``: never ``$HOME``
+ *  itself or ``~/.local`` wholesale (which holds ``~/.local/share/keyrings`` and user data). */
+export function safeRuntimeBinds(prefix: string): string[] {
+  if (!prefix || prefix === "/" || prefix === "/usr") return [];
+  const homes = new Set([homedir(), userInfo().homedir].filter(Boolean).map((p) => {
+    try { return realpathSync(p); } catch { return p; }
+  }));
+  for (const home of homes) {
+    if (prefix === home || prefix === join(home, ".local")) {
+      return ["bin", "lib", "lib64", "include"].map((sub) => join(prefix, sub))
+        .filter((dir) => existsSync(dir) && statSync(dir).isDirectory())
+        .flatMap((dir) => ["--ro-bind", dir, dir]);
+    }
+  }
+  return existsSync(prefix) && statSync(prefix).isDirectory() ? ["--ro-bind", prefix, prefix] : [];
+}
+
 /** The bwrap command running ``command`` in ``folder`` (writable only while it is installed). */
 export function wrap(folder: string, data: string, command: string, env: Record<string, string>, proxyDir: string | null, writable = false): string[] {
   const [outer, inner, masked] = new Workspace(folder).platformData();
   // The interpreter its environment was built from, even when it lives in the hidden home.
   const interpreter = python();
   const prefix = interpreter ? dirname(dirname(interpreter)) : "/";
-  const keepPython = prefix !== "/" ? ["--ro-bind", prefix, prefix] : [];
+  const keepPython = safeRuntimeBinds(prefix);
   // And FluidForm's own Node, even when it lives in the hidden home (nvm, say).
   const node = dirname(dirname(realpathSync(process.execPath)));
-  const keepNode = node !== "/" && node !== "/usr" && node !== prefix ? ["--ro-bind", node, node] : [];
+  const keepNode = node !== prefix ? safeRuntimeBinds(node) : [];
   const bridge = proxyDir ? ["--bind", proxyDir, SANDBOX_PORTS_DIR] : [];
   return [
     "bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", ...bridge,
-    ...hideHomes(), ...outer, ...keepPython, ...keepNode,
+    ...hideHomes(), ...keepPython, ...keepNode, ...outer,
     writable ? "--bind" : "--ro-bind", folder, folder, ...inner, ...masked,
     "--bind", data, data,
     "--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session",
@@ -302,6 +383,7 @@ export async function launched<T>(folder: string, data: string, command: string,
     const [args, given] = withoutEnvArgs(deps.wrap(folder, data, command, env, proxy ? proxy.folder : null, writable));
     const child = spawn(args[0], args.slice(1), { env: given, stdio, detached: true });
     child.on("error", () => undefined);
+    child.stdin?.on("error", () => undefined);
     try {
       return await work(child);
     } finally {

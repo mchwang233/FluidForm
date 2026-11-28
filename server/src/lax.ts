@@ -28,6 +28,16 @@ function toNumber(value: unknown): unknown {
 
 const TIME = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:[.,](\d+))?(Z|z|[+-]\d{2}(?::?\d{2})?)?$/;
 
+function validCalendar(day: string, hours = "00", minutes = "00", seconds = "00"): boolean {
+  const [y, m, d] = day.split("-").map(Number);
+  const hh = Number(hours);
+  const mm = Number(minutes);
+  const ss = Number(seconds);
+  if (m < 1 || m > 12 || d < 1 || d > 31 || hh > 23 || mm > 59 || ss > 59) return false;
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  return probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d;
+}
+
 /** An ISO date and time as Pydantic writes it back: seconds always, microseconds only when not
  *  zero (six digits), "Z" for UTC, an offset as ±HH:MM, none when the time had none. */
 export function normalizeDatetime(value: unknown): unknown {
@@ -36,16 +46,20 @@ export function normalizeDatetime(value: unknown): unknown {
     const ms = Math.abs(value) > 2e10 ? value : value * 1000;
     return isoFromMs(ms);
   }
-  if (value instanceof Date) return isoFromMs(value.getTime());
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? value : isoFromMs(value.getTime());
   if (typeof value !== "string") return value;
   const found = TIME.exec(value.trim());
   if (!found) return value;
   const [, day, hours, minutes, seconds = "00", fraction = "", zone = ""] = found;
+  if (!validCalendar(day, hours, minutes, seconds)) return value;
   const micro = fraction.slice(0, 6).padEnd(6, "0");
   let offset = "";
   if (zone === "Z" || zone === "z") offset = "Z";
   else if (zone) {
     const digits = zone.replace(":", "");
+    const zh = Number(digits.slice(1, 3));
+    const zm = Number(digits.slice(3, 5) || "00");
+    if (zh > 23 || zm > 59) return value;
     const normal = `${digits.slice(0, 3)}:${digits.slice(3, 5) || "00"}`;
     offset = normal === "+00:00" || normal === "-00:00" ? "Z" : normal;
   }
@@ -63,9 +77,10 @@ export const lax = {
   bool: () => z.preprocess(toBool, z.boolean()),
   int: (inner = z.number().int()) => z.preprocess(toNumber, inner),
   number: (inner = z.number()) => z.preprocess(toNumber, inner),
-  datetime: () => z.preprocess(normalizeDatetime, z.string().regex(DATETIME_TEXT, "not a date and time")),
+  datetime: () => z.preprocess(normalizeDatetime, z.string().regex(DATETIME_TEXT, "not a date and time")
+    .refine((text) => validCalendar(text.slice(0, 10), text.slice(11, 13), text.slice(14, 16), text.slice(17, 19)), "not a valid calendar date")),
   date: () => z.preprocess((value) => (typeof value === "string" ? value.trim().slice(0, 10) : value),
-    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "not a date")),
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "not a date").refine((day) => validCalendar(day), "not a valid calendar date")),
 };
 
 /** The current time as Pydantic writes datetime.now(timezone.utc). */
@@ -96,7 +111,9 @@ export function timeKey(iso: string): string {
   const [, base, fraction = "", zone = ""] = found;
   const micro = fraction.padEnd(6, "0");
   if (!zone || zone === "Z") return `${base}.${micro}`;
-  const shifted = new Date(Date.parse(`${base}${zone}`)).toISOString().slice(0, 19);
+  const parsed = Date.parse(`${base}${zone}`);
+  if (Number.isNaN(parsed)) return iso;
+  const shifted = new Date(parsed).toISOString().slice(0, 19);
   return `${shifted}.${micro}`;
 }
 

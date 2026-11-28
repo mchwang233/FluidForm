@@ -9,7 +9,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   type Attachment, calls, CliError, type CliText, cliUsage, codexHome, compactContext, environment, formatG, InputTooLarge, inputTooLarge,
   isObject, type ModelChannel, type OwnConversation, type OwnStep, path as attachmentPath, pyDumps, pyRegex, pyStr, register, type Runner,
-  settings, splitlines
+  sanitizedCliEnv, settings, splitlines
 } from "../../../src/extension-api.js";
 
 export const EXECUTABLE = "codex";
@@ -242,16 +242,28 @@ const ruleUsers = new Map<string, number>();
 /** ``work`` with the allow rule in ``cwd`` while Codex works there, then gone again (with any folder
  *  it made), so neither a task's results nor a project keep it. Steps at once in one folder share it. */
 export async function withCodexRules<T>(cwd: string, work: () => Promise<T>): Promise<T> {
+  const root = real(cwd);
+  const dotCodex = join(cwd, ".codex");
   const rule = join(cwd, CODEX_RULES);
-  let made = [dirname(dirname(rule)), dirname(rule)].filter((folder) => !existsSync(folder));
+  if (isLink(dotCodex) || isLink(dirname(rule)) || isLink(rule)) return work();
+  let made = [dotCodex, dirname(rule)].filter((folder) => !existsSync(folder));
+  let wrote = false;
   if (!ruleUsers.get(rule)) {
     try {
       mkdirSync(dirname(rule), { recursive: true });
-      writeFileSync(rule, CODEX_ALLOW);
+      if (under(real(dirname(rule)), root) && !isLink(rule)) {
+        writeFileSync(rule, CODEX_ALLOW);
+        wrote = true;
+      } else {
+        made = [];
+      }
     } catch {
       made = [];
     }
+  } else {
+    wrote = true;
   }
+  if (!wrote) return work();
   ruleUsers.set(rule, (ruleUsers.get(rule) ?? 0) + 1);
   try {
     return await work();
@@ -260,7 +272,7 @@ export async function withCodexRules<T>(cwd: string, work: () => Promise<T>): Pr
     if (!ruleUsers.get(rule)) {
       ruleUsers.delete(rule);
       try {
-        unlinkSync(rule);
+        if (under(real(dirname(rule)), root) && !isLink(rule)) unlinkSync(rule);
         for (const folder of [...made].reverse()) rmdirSync(folder);
       } catch {
         // already gone, or not empty
@@ -414,7 +426,7 @@ async function sandboxRun(runner: Runner, command: string, cwd: string, timeout:
 
 /** Run ``argv`` to its end or ``timeout``: its output (stdout and stderr), and whether it exited 0. */
 async function spawned(argv: string[], cwd: string, extra: Record<string, string>, timeout: number): Promise<[string, boolean]> {
-  const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...environment.commandEnv({ ...process.env } as Record<string, string>), ...extra },
+  const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...environment.commandEnv(sanitizedCliEnv()), ...extra },
     stdio: ["ignore", "pipe", "pipe"], detached: true });
   const chunks: Buffer[] = [];
   child.stdout!.on("data", (chunk: Buffer) => chunks.push(chunk));

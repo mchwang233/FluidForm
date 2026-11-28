@@ -192,6 +192,86 @@ export function calibratedCost({ steps, base_usd }, cal) {
   return pyRound(scaled * cal.overhead, 6);
 }
 
+/** Calibrate ``runs`` against ``reviews`` in O(|reviews| + |runs|) instead of O(|reviews| * |runs|),
+ *  excluding each run's own review(s) when present. */
+export function calibratedEach(reviews, runs) {
+  if (!runs.length) return [];
+  const totalEst = new Map();
+  const totalSpent = new Map();
+  const totalCount = new Map();
+  const byRun = new Map();
+  let allCount = 0;
+  let allEst = 0;
+  let allSpent = 0;
+  let allInSteps = 0;
+  let allInTotal = 0;
+  for (const item of reviews) {
+    const steps = item.steps || [];
+    let entry = item.run_id != null ? byRun.get(item.run_id) : undefined;
+    if (item.run_id != null && !entry) {
+      entry = { models: new Map(), count: 0, est: 0, spent: 0, inSteps: 0, inTotal: 0 };
+      byRun.set(item.run_id, entry);
+    }
+    for (const step of steps) {
+      if (!step.estimated_usd || !step.actual_usd) continue;
+      const model = step.model_id;
+      totalEst.set(model, (totalEst.get(model) ?? 0) + step.estimated_usd);
+      totalSpent.set(model, (totalSpent.get(model) ?? 0) + step.actual_usd);
+      totalCount.set(model, (totalCount.get(model) ?? 0) + 1);
+      allCount += 1;
+      allEst += step.estimated_usd;
+      allSpent += step.actual_usd;
+      if (entry) {
+        const prev = entry.models.get(model) ?? { est: 0, spent: 0, count: 0 };
+        prev.est += step.estimated_usd;
+        prev.spent += step.actual_usd;
+        prev.count += 1;
+        entry.models.set(model, prev);
+        entry.count += 1;
+        entry.est += step.estimated_usd;
+        entry.spent += step.actual_usd;
+      }
+    }
+    const stepsCost = steps.reduce((sum, step) => sum + (step.actual_usd || 0), 0);
+    if (stepsCost > 0) {
+      const runTotal = Math.max(item.actual_usd || 0, stepsCost);
+      allInSteps += stepsCost;
+      allInTotal += runTotal;
+      if (entry) {
+        entry.inSteps += stepsCost;
+        entry.inTotal += runTotal;
+      }
+    }
+  }
+  const baseModels = Object.fromEntries([...totalCount].filter(([, count]) => count >= CALIBRATION_STEPS)
+    .map(([model]) => [model, totalSpent.get(model) / totalEst.get(model)]));
+  const baseCal = {
+    models: baseModels,
+    overall: allCount >= CALIBRATION_STEPS ? allSpent / allEst : null,
+    overhead: allInSteps > 0 ? allInTotal / allInSteps : 1.0,
+  };
+  return runs.map((run) => {
+    const own = run.id != null ? byRun.get(run.id) : undefined;
+    if (!own) return calibratedCost(run, baseCal);
+    const remCount = allCount - own.count;
+    const remEst = allEst - own.est;
+    const remSpent = allSpent - own.spent;
+    const remInSteps = allInSteps - own.inSteps;
+    const remInTotal = allInTotal - own.inTotal;
+    const models = { ...baseModels };
+    for (const [model, delta] of own.models) {
+      const c = (totalCount.get(model) ?? 0) - delta.count;
+      if (c >= CALIBRATION_STEPS) models[model] = ((totalSpent.get(model) ?? 0) - delta.spent) / ((totalEst.get(model) ?? 0) - delta.est);
+      else delete models[model];
+    }
+    return calibratedCost(run, {
+      models,
+      overall: remCount >= CALIBRATION_STEPS ? remSpent / remEst : null,
+      overhead: remInSteps > 0 ? remInTotal / remInSteps : 1.0,
+    });
+  });
+}
+
 /** FluidForm's requests, by method: what service.mjs answers. */
 export const METHODS = {
   "pricing.charge": ({ model, input_tokens = 0, output_tokens = 0, cached_tokens = 0 }) =>
@@ -203,6 +283,5 @@ export const METHODS = {
   "pricing.fits": (params) => ({ ok: fits(params) }),
   "pricing.allows": (params) => allows(params),
   "pricing.cli_price": (params) => cliPrice(params),
-  "pricing.calibrated_each": ({ reviews, runs }) =>
-    ({ calibrated: runs.map((run) => calibratedCost(run, calibration(reviews, run.id))) }),
+  "pricing.calibrated_each": ({ reviews, runs }) => ({ calibrated: calibratedEach(reviews, runs) }),
 };

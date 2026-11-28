@@ -98,7 +98,12 @@ export function readReply(given: string | null | undefined): [string, string | n
 /** Commit just ``files`` on the checkout's current branch, leaving anything else the user has staged
  *  alone; the new commit's id. */
 export function commit(root: string, files: string[], text: string): string {
-  const git = (...args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8", timeout: 120_000 });
+  const get = (key: string) => (spawnSync("git", ["-C", root, "config", key], { encoding: "utf8" }).stdout ?? "").trim();
+  const name = get("user.name") || "FluidForm";
+  const email = get("user.email") || "fluidform@localhost";
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email,
+    GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email };
+  const git = (...args: string[]) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8", env, timeout: 120_000 });
   if (git("rev-parse", "--is-inside-work-tree").status) throw new RepairError("源码目录不是 git 仓库。");
   for (const step of [["add", "-A", "--", ...files], ["commit", "-m", text, "--", ...files]]) {
     const result = git(...step);
@@ -372,7 +377,7 @@ export abstract class Engineering extends SelfRepair {
   /** Start the next queued job if the engineer is free and no change is waiting to apply. */
   engineerKick(): void {
     // Switched off, its work waits.
-    if (!uses.engineer()) return;
+    if (this.closing || !uses.engineer()) return;
     if ((this.engineerTask && !this.engineerTask.done) || this.platformPending || this.packageApplying) return;
     const queued = this.db.engineerJobs(200).filter((job) => job.status === "queued").sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
     if (!queued.length) return;

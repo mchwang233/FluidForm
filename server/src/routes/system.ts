@@ -27,10 +27,18 @@ export function systemRoutes(app: FastifyInstance, { api, db, executor, provider
     return reply.redirect(`/${request.params.capability_id}/`);
   });
   app.get<{ Params: { capability_id: string; "*": string } }>("/:capability_id/*", async (request, reply) => {
-    const found = interfaces.file(request.params.capability_id, request.params["*"]);
+    const id = request.params.capability_id;
+    const found = interfaces.file(id, request.params["*"]);
     if (!found) return reply.code(404).send({ detail: "Not Found" });
-    return reply.headers({ "content-type": found.type, "x-content-type-options": "nosniff", "cache-control": found.index ? "no-cache" : "max-age=3600" })
-      .send(createReadStream(found.path));
+    const headers: Record<string, string> = {
+      "content-type": found.type,
+      "x-content-type-options": "nosniff",
+      "cache-control": found.index ? "no-cache" : "max-age=3600",
+    };
+    if (id !== "web") {
+      headers["content-security-policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; form-action 'none'; frame-ancestors 'none'";
+    }
+    return reply.headers(headers).send(createReadStream(found.path));
   });
 
   app.get("/health", async () => ({

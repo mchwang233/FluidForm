@@ -3272,3 +3272,14 @@ test("the platform's side list says an automation that runs is running, not wait
   assert.deepEqual(said.slice(0, 3), ["已连接", "待配置", "已停用"]);
   assert.ok(!said.includes("待开启"));
 });
+
+test("a task planned while pricing is disabled (estimate is null) renders without crashing", async t => {
+  const run = mission("unpriced-task", "awaiting_confirmation");
+  run.plan.estimate = null;
+  run.plan.nodes = [{ id: "a", title: "实现", dependencies: [], model_id: "cli:codex", status: "pending", estimated_cost_usd: 0, attempts: [] }];
+  const { document, click } = await setup(t, [run], [], { openComposer: false });
+  assert.match(document.querySelector(".task-page h3").textContent, /unpriced-task/);
+  await click([...document.querySelectorAll(".task-tabs button")].find(node => node.textContent.startsWith("详情")));
+  assert.ok(document.querySelector(".task-details"));
+  assert.ok(!document.querySelector(".task-details").textContent.includes("预计花费"));
+});

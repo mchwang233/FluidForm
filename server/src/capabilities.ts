@@ -4,6 +4,7 @@
 // in a step's sandbox. Active tools are told to every later step and planner (section); tools_dir
 // is readable from the steps' sandbox.
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { settings } from "./config.js";
 import { toolsDir } from "./environment.js";
@@ -78,7 +79,8 @@ export function readCards(given: string | null | undefined): CapabilityProposal[
       summary: head(text(item.summary), 500), usage: head(text(item.usage), 2000), guide: head(text(item.guide), MAX_GUIDE),
       files: files.slice(0, 50), check: head(text(item.check), 500),
       secrets: list(item.secrets).map((name) => head(pyStr(name).trim(), 80)).filter(Boolean).slice(0, 10),
-      domains: list(item.domains).map((host) => head(pyStr(host).trim(), 200)).filter(Boolean).slice(0, 10),
+      domains: list(item.domains).map((host) => head(pyStr(host).trim().toLowerCase(), 200))
+        .filter((host) => Boolean(host) && isIP(host.replace(/^\*\./, "")) === 0 && host !== "localhost" && !host.endsWith(".localhost") && !host.endsWith(".local")).slice(0, 10),
     }));
   }
   return cards.slice(0, MAX_PROPOSALS);
@@ -102,12 +104,17 @@ function realResolve(path: string): string {
 
 const inside = (path: string, base: string) => path === base || path.startsWith(base.endsWith(sep) ? base : base + sep);
 
-function filesUnder(folder: string): string[] {
+function filesUnder(folder: string, base: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(folder, { withFileTypes: true })) {
     const path = join(folder, entry.name);
-    if (entry.isDirectory()) found.push(...filesUnder(path));
-    else if (entry.isFile() || (entry.isSymbolicLink() && existsSync(path) && statSync(path).isFile())) found.push(path);
+    if (entry.isSymbolicLink()) {
+      const target = realResolve(path);
+      if (!inside(target, base) || target === base) throw new SourceError(`不能包含指向任务目录外的符号链接：${entry.name}`);
+      if (existsSync(target) && statSync(target).isFile()) found.push(target);
+      else if (existsSync(target) && statSync(target).isDirectory()) found.push(...filesUnder(target, base));
+    } else if (entry.isDirectory()) found.push(...filesUnder(path, base));
+    else if (entry.isFile()) found.push(path);
   }
   return found;
 }
@@ -123,7 +130,7 @@ export function sources(folder: string, files: string[]): [string, string][] {
   for (const name of files) {
     const source = realResolve(join(base, name));
     if (!inside(source, base) || source === base || !existsSync(source)) throw new SourceError(`不在任务目录里或不存在：${name}`);
-    for (const item of statSync(source).isFile() ? [source] : filesUnder(source)) {
+    for (const item of statSync(source).isFile() ? [source] : filesUnder(source, base)) {
       size += statSync(item).size;
       if (size > MAX_CAPABILITY_BYTES) throw new SourceError(`文件太大：超过 ${Math.floor(MAX_CAPABILITY_BYTES / 1024 / 1024)} MB`);
     }
@@ -208,8 +215,8 @@ export async function solidify(run: ExecutionRun, card: CapabilityCard): Promise
   for (const [source, path] of found) {
     const target = join(folder, path);
     mkdirSync(dirname(target), { recursive: true });
-    if (lstatSync(source).isDirectory()) cpSync(source, target, { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
-    else cpSync(source, target, { preserveTimestamps: true });
+    if (lstatSync(source).isDirectory()) cpSync(source, target, { recursive: true, dereference: true, preserveTimestamps: true });
+    else cpSync(source, target, { dereference: true, preserveTimestamps: true });
   }
   writeFileSync(join(folder, MANUAL), manual(capability));
   capability = await check(capability);

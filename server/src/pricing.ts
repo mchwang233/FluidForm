@@ -106,16 +106,19 @@ export type Admission = { output: number; reserve: number } | { wait: true } | {
 /** Whether a call of ``model`` sending ``inputBytes`` fits what is left (see packages/pricing). */
 export async function admit(model: Terms | null | undefined, params: { input_bytes: number; maximum: number; remaining: number; others: number;
   step_remaining: number | null; step_held: number; wait_for_step: boolean }): Promise<Admission> {
+  if (!enabled()) return { output: params.maximum, reserve: 0 };
   return (await ask("pricing.admit", { model: model ? terms(model) : null, ...params })) as Admission;
 }
 
 /** Whether ``cost`` more fits what is left besides what others hold. */
 export async function fits(params: { cost: number; remaining: number; others: number; step_remaining: number | null }): Promise<boolean> {
+  if (!enabled()) return true;
   return Boolean((await ask("pricing.fits", params)).ok);
 }
 
 /** Whether the task may go on: ``{ok}``, or ``{stop: "step", message}`` past a step's declared limit. */
 export async function allows(params: { remaining: number; step_remaining: number | null }): Promise<{ ok?: boolean; stop?: string; message?: string }> {
+  if (!enabled()) return { ok: true };
   return ask("pricing.allows", params);
 }
 

@@ -3,7 +3,7 @@
 // long: a locked desktop keyring can wait forever for an unlock prompt. Secrets travel in pipes,
 // never on a command line, in a log line or on disk.
 import { spawn } from "node:child_process";
-import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { extname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -141,13 +141,28 @@ export async function getSecret(name: string): Promise<string | null> {
 /** Let processes of this user read the keyring one after another: several at once make a
  *  desktop keyring slow enough to time out. After ``wait`` seconds a process goes ahead anyway. */
 export async function oneAtATime<T>(wait: number, work: () => Promise<T>): Promise<T> {
-  const path = join(tmpdir(), `fluidform-keyring-${userInfo().uid}.ts.lock`);
+  const uid = userInfo().uid;
+  const runtimeDir = process.env.XDG_RUNTIME_DIR;
+  let lockDir = tmpdir();
+  if (runtimeDir) {
+    try {
+      const info = statSync(runtimeDir);
+      if (info.isDirectory() && info.uid === uid) lockDir = runtimeDir;
+    } catch {
+      // fall back to tmpdir
+    }
+  }
+  const path = join(lockDir, `fluidform-keyring-${uid}.ts.lock`);
   const deadline = Date.now() + wait * 1000;
   let locked = false;
   while (!locked && Date.now() < deadline) {
     try {
-      closeSync(openSync(path, "wx"));
-      writeFileSync(path, String(process.pid));
+      const fd = openSync(path, "wx", 0o600);
+      try {
+        writeFileSync(fd, String(process.pid));
+      } finally {
+        closeSync(fd);
+      }
       locked = true;
     } catch {
       // Held by a process that is gone: take it over.

@@ -27,6 +27,7 @@ export class ContextVar<T> {
 export class AsyncEvent {
   private flag = false;
   private waiters: (() => void)[] = [];
+  version = 0;
 
   isSet(): boolean {
     return this.flag;
@@ -34,6 +35,7 @@ export class AsyncEvent {
 
   set(): void {
     this.flag = true;
+    this.version += 1;
     const waiting = this.waiters;
     this.waiters = [];
     for (const wake of waiting) wake();
@@ -45,6 +47,24 @@ export class AsyncEvent {
 
   wait(): Promise<void> {
     return this.flag ? Promise.resolve() : new Promise((resolve) => this.waiters.push(resolve));
+  }
+
+  /** Wait until ``set()`` has been called since ``seenVersion`` (race-free against concurrent clear/set). */
+  waitSince(seenVersion: number, signal?: AbortSignal): Promise<void> {
+    if (this.version !== seenVersion) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const wake = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      const onAbort = () => {
+        this.waiters = this.waiters.filter((item) => item !== wake);
+        reject(signal!.reason ?? Object.assign(new Error("aborted"), { name: "AbortError" }));
+      };
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.waiters.push(wake);
+    });
   }
 }
 

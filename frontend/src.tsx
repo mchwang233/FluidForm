@@ -23,7 +23,7 @@ import { CapabilityProposals, type CapabilityProposal } from "./capabilities";
 import "./style.css";
 
 const API = API_BASE;
-type Run = {id:string;status:string;kind?:string;capability_proposals?:CapabilityProposal[];auto_routed?:boolean;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;title?:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate:{low_usd:number;high_usd:number;calibrated_usd?:number|null}}};
+type Run = {id:string;status:string;kind?:string;capability_proposals?:CapabilityProposal[];auto_routed?:boolean;prompt?:string;created_at?:string;updated_at?:string;diagnoses?:Diagnosis[];supervisor?:{model_id?:string|null;calls?:number}|null;decisions?:Decision[];lead_messages?:LeadMessage[];lead_thinking?:LeadThinking|null;maintenance_id?:string|null;engineer_job_id?:string|null;waiting_diagnosis_id?:string|null;parent_run_id?:string|null;budget_usd:number;use_cli:boolean;allow_network?:boolean;project_dir?:string|null;attachments?:Attachment[];rework_rounds?:number;actual_cost_usd:number;final_result?:string;error?:string;plan:{summary:string;title?:string;nodes:PlanNode[];parts?:PlanPart[];employees?:Employee[];team_brief?:string;planning_method:string;planner_model_id?:string;planning_note?:string;choices?:{question:string;assumed:string;alternative?:string}[];planning_cost_usd:number;estimate?:{low_usd:number;high_usd:number;calibrated_usd?:number|null}|null}};
 type ReplyToDiagnosis = (run:Run, diagnosisId:string, body:{text:string;choice?:string})=>Promise<string|null>;
 type Provider = {id:string;name:string;configured:boolean;keyring_locked?:boolean};
 // The task list polls often; the model catalog is large and changes rarely.
@@ -284,7 +284,7 @@ function TaskDetails({run,onNetwork}:{run:Run;onNetwork:SetNetwork}){
     {run.plan.planning_note&&<section><h5>规划说明</h5><p className="planning-note">{run.plan.planning_note}</p></section>}
     <dl className="task-facts">
       <div><dt>规划方式</dt><dd>{run.plan.planning_method==="model"&&run.plan.planner_model_id?`由 ${modelLabel(run.plan.planner_model_id)} 规划`:"规则规划"}</dd></div>
-      <div><dt>预计花费</dt><dd>{formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</dd></div>
+      {run.plan.estimate&&<div><dt>预计花费</dt><dd>{formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</dd></div>}
       <div><dt>预算上限</dt><dd>{formatUsd(run.budget_usd)}</dd></div>
       <div><dt>会员 CLI</dt><dd>{run.use_cli?"允许":"不使用"}</dd></div>
       <div><dt>联网</dt><dd><NetworkSwitch run={run} onNetwork={onNetwork}/></dd></div>
@@ -389,7 +389,7 @@ function MissionDetail({loading,run,models,onUpdated,onPromote,onToChat,deleting
       <span>{nodes.length&&done===nodes.length?`${nodes.length} 个步骤全部完成`:`完成 ${done} / ${nodes.length} 步`}</span>
       {elapsed&&<span>用时 {elapsed}</span>}
       <span>花费 <b>{formatUsd(run.actual_cost_usd)}</b> / {money(run.budget_usd)}</span>
-      {overNote?<span className="over-estimate">{overNote}</span>:<span>预计 {formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</span>}
+      {overNote?<span className="over-estimate">{overNote}</span>:run.plan.estimate?<span>预计 {formatUsd(run.plan.estimate.low_usd)} – {formatUsd(run.plan.estimate.high_usd)}</span>:null}
     </p>
     {!!run.plan.choices?.length&&run.status==="awaiting_confirmation"&&<PlanChoices choices={run.plan.choices} editable onReplan={picks=>onChoose(run,picks)}/>}
     {run.auto_routed&&run.status==="awaiting_confirmation"&&!run.parent_run_id&&chatOn&&<p className="auto-note">已自动识别为任务。只是想问问？<button type="button" className="link-button" disabled={busy} onClick={()=>act(onToChat)}>改成对话，直接回答</button></p>}
@@ -428,7 +428,7 @@ const NOTICE: Record<string,{text:string;tone:Toast["tone"]}> = {
   succeeded:{text:"已完成",tone:"ok"},failed:{text:"失败了",tone:"bad"},paused:{text:"已暂停，需要你确认",tone:"warn"},
 };
 
-function App() {
+function AppShell() {
   const [runs,setRuns]=useState<Run[]>([]),[models,setModels]=useState<Model[]>([]),[providerList,setProviderList]=useState<Provider[]>([]);
   const [view,setView]=useState<"missions"|"models"|"engineer"|"problems"|"memory">("missions"),[engineerFocus,setEngineerFocus]=useState<string|null>(null),[platformVisit,setPlatformVisit]=useState(0),[selectedModelId,setSelectedModelId]=useState("");
   const [selected,setSelected]=useState<Run|null>(null),[selectedProvider,setSelectedProvider]=useState<Provider|null>(null),[prompt,setPrompt]=useState(""),[budget,setBudget]=useState(2),[useCli,setUseCli]=useState(true),[allowNetwork,setAllowNetwork]=useState(false),[busy,setBusy]=useState(false),[projectDir,setProjectDir]=useState(savedProjectDir);
@@ -452,7 +452,7 @@ function App() {
   const loadRevision=useRef(0),pollCount=useRef(0),autoSelected=useRef(false);
   const [quota,setQuota]=useState<Quota[]>([]);
   // Separate from the main load: an older API without this route must not look offline.
-  const loadQuota=async(init?:RequestInit,path="")=>{try{const r=await fetch(`${API}/api/models/quota${path}`,init);if(r.ok)setQuota(await r.json())}catch{}};
+  const loadQuota=async(init?:RequestInit,path="")=>{try{const r=await fetch(`${API}/api/models/quota${path}`,init);if(r.ok){const next=await r.json() as Quota[];setQuota(cur=>JSON.stringify(cur)===JSON.stringify(next)?cur:next)}}catch{}};
   // The list comes brief (no step logs) and only when it changed (ETag, 304); the task that is open
   // is read in full on its own, also only when it changed. Polling an unchanged page costs nothing.
   const briefOnly=useRef(new WeakSet<Run>());
@@ -526,12 +526,12 @@ function App() {
   const optionsSummary=[`预算 ${Number.isInteger(budget)?`$${budget}`:formatUsd(budget)}`,mode==="chat"&&chatModel?chatModels.find(model=>model.id===chatModel)?.display_name??chatModel:"自动选模型",...(useCli?[]:["不用会员 CLI"]),...(allowNetwork&&mode!=="chat"?["可联网"]:[])].join(" · ");
   async function submit(e:FormEvent){e.preventDefault();setBusy(true);setFormError("");try{const chat=mode==="chat";const r=await fetch(`${API}/api/${chat?"chats":mode==="auto"?"start":"tasks"}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(chat?{message:prompt,budget_usd:budget,use_cli:useCli,project_dir:projectDir.trim()||null,model_id:chatModel||null,attachments:attachments.ids}:{prompt,budget_usd:budget,use_cli:useCli,allow_network:allowNetwork,project_dir:projectDir.trim()||null,attachments:attachments.ids})});if(!r.ok){const body=await r.json().catch(()=>({}));throw new Error(detailText(body.detail)||(chat?`开始对话失败（${r.status}）`:`生成计划失败（${r.status}）`))}try{localStorage.setItem(PROJECT_KEY,projectDir.trim())}catch{}rememberProject(projectDir.trim());const task=await r.json();autoSelected.current=true;setSelected(task);setPrompt("");attachments.clear();setComposerOpen(false);await load(false)}catch(e){setFormError(errorText(e))}finally{setBusy(false)}}
   async function confirmRun(run:Run,runBudget:number){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/confirm`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({budget_usd:runBudget})});if(!r.ok){const body=await r.json().catch(()=>({}));return detailText(body.detail)||`确认失败（${r.status}）`}await load(false);return null}catch(e){return errorText(e)}}
-  async function chooseForPlan(run:Run,picks:string[]){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/choices`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({picks})});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`重新规划失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
-  function replaceRun(updated:Run){loadRevision.current++;setRuns(current=>current.map(item=>item.id===updated.id?updated:item));setSelected(current=>current?.id===updated.id?updated:current)}
-  async function taskToChat(run:Run){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/as-chat`,{method:"POST"});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`改成对话失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
-  async function promoteChat(run:Run,options:PromoteOptions){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/promote`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(options)});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`转成任务失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
-  async function setNetwork(run:Run,allow:boolean){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/network`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({allow})});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`修改联网设置失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
-  async function postAction(run:Run,action:"pause"|"diagnose",label:string){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/${action}`,{method:"POST"});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`${label}失败（${r.status}）`;loadRevision.current++;setRuns(current=>current.map(item=>item.id===run.id?body:item));setSelected(current=>current?.id===run.id?body:current);return null}catch(e){return errorText(e)}}
+  async function chooseForPlan(run:Run,picks:string[]){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/choices`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({picks})});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`重新规划失败（${r.status}）`;replaceRun(body);return null}catch(e){return errorText(e)}}
+  function replaceRun(updated:Run){loadRevision.current++;if(openRun.current?.id===updated.id)openRun.current=null;setRuns(current=>current.map(item=>item.id===updated.id?updated:item));setSelected(current=>current?.id===updated.id?updated:current)}
+  async function taskToChat(run:Run){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/as-chat`,{method:"POST"});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`改成对话失败（${r.status}）`;replaceRun(body);return null}catch(e){return errorText(e)}}
+  async function promoteChat(run:Run,options:PromoteOptions){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/promote`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(options)});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`转成任务失败（${r.status}）`;replaceRun(body);return null}catch(e){return errorText(e)}}
+  async function setNetwork(run:Run,allow:boolean){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/network`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({allow})});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`修改联网设置失败（${r.status}）`;replaceRun(body);return null}catch(e){return errorText(e)}}
+  async function postAction(run:Run,action:"pause"|"diagnose",label:string){try{const r=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/${action}`,{method:"POST"});const body=await r.json().catch(()=>({}));if(!r.ok)return detailText(body.detail)||`${label}失败（${r.status}）`;replaceRun(body);return null}catch(e){return errorText(e)}}
   async function replyToDiagnosis(run:Run,diagnosisId:string,body:{text:string;choice?:string;attachments?:string[]}){
     try{
       const response=await fetch(`${API}/api/tasks/${encodeURIComponent(run.id)}/diagnoses/${encodeURIComponent(diagnosisId)}/reply`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
@@ -626,7 +626,7 @@ function App() {
       onDragOver={e=>{if(e.dataTransfer.types.includes("Files")){e.preventDefault();setDragging(true)}}}
       onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as globalThis.Node|null))setDragging(false)}}
       onDrop={e=>{if(e.dataTransfer.files.length){e.preventDefault();attachments.add([...e.dataTransfer.files])}setDragging(false)}}>
-      <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} onPaste={e=>{const pasted=[...e.clipboardData.files];if(pasted.length){e.preventDefault();attachments.add(pasted)}}} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={mode==="auto"?"说说你的想法，或者把问题直接丢给我…":mode==="chat"?"想问什么？比如：这个项目的登录流程是怎么走的":"想要什么结果？比如：修复登录页失败的测试"} required minLength={mode==="chat"?1:3} aria-label={mode==="chat"?"想问的问题":"任务描述"}/>
+      <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} onPaste={e=>{const pasted=[...e.clipboardData.files];if(pasted.length&&!e.clipboardData?.getData?.("text/plain")){e.preventDefault();attachments.add(pasted)}}} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={mode==="auto"?"说说你的想法，或者把问题直接丢给我…":mode==="chat"?"想问什么？比如：这个项目的登录流程是怎么走的":"想要什么结果？比如：修复登录页失败的测试"} required minLength={mode==="chat"?1:3} aria-label={mode==="chat"?"想问的问题":"任务描述"}/>
       <AttachmentTray attachments={attachments}/>
       <div className="composer-project" hidden={!projectOpen}><ProjectField apiBase={API} value={projectDir} onChange={setProjectDir} usedProjects={usedProjects}/></div>
       <div className="composer-row">
@@ -658,4 +658,14 @@ function App() {
     </main>
   </div>
 }
+class AppErrorBoundary extends React.Component<{children:React.ReactNode},{error:Error|null}>{
+  state:{error:Error|null}={error:null};
+  static getDerivedStateFromError(error:Error){return {error}}
+  override render(){
+    if(!this.state.error)return this.props.children;
+    return <main className="app-content"><section className="panel detail"><div className="error" role="alert">页面渲染出错：{this.state.error.message}</div><button type="button" className="primary" onClick={()=>this.setState({error:null})}>重试</button></section></main>;
+  }
+}
+
+function App(){return <AppErrorBoundary><AppShell/></AppErrorBoundary>}
 createRoot(document.getElementById("root")!).render(<App/>);

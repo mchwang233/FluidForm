@@ -18,6 +18,14 @@ import type { Attachment } from "./models.js";
 import * as modelChannels from "./model-channels.js";
 import * as progress from "./progress.js";
 import { formatG, isObject, pyDumps, pyRegex, pyStr, splitlines, tail } from "./py.js";
+import { SECRET_ENV } from "./secret-names.js";
+
+/** ``process.env`` without FluidForm's stored API keys and tokens, so untrusted step commands run by a
+ *  CLI cannot read or exfiltrate them. */
+export function sanitizedCliEnv(): Record<string, string> {
+  const keys = new Set(Object.values(SECRET_ENV));
+  return Object.fromEntries(Object.entries(process.env).filter(([name, value]) => !keys.has(name) && value !== undefined)) as Record<string, string>;
+}
 
 /** Required context cannot fit: block for replanning, not model/availability fallback. */
 export class InputTooLarge extends ArtifactBlocked {
@@ -205,8 +213,8 @@ export class CliChannelRegistry {
    *  ``watch`` it is checked every progress_check_minutes instead of being killed at ``timeout``. */
   async run(spec: CliSpec, command: string[], cwd: string, stdin: Buffer | null, timeout: number, options: RunOptions = {}): Promise<string> {
     const { watch = null, idle = null, extraEnv = null, toolTrace = null, signal } = options;
-    // Tools that environment repairs installed are on PATH for every CLI.
-    const env = { ...environment.commandEnv({ ...process.env } as Record<string, string>), ...(extraEnv ?? {}) };
+    // Tools that environment repairs installed are on PATH for every CLI; FluidForm's own API keys stay out.
+    const env = { ...environment.commandEnv(sanitizedCliEnv()), ...(extraEnv ?? {}) };
     const started = Date.now() / 1000;
     const child = spawn(command[0], command.slice(1), { cwd, env, stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], detached: true });
     const log = activity.current.get();

@@ -59,6 +59,7 @@ class PlainEngineer extends Engineer {
 
 let root: string;
 let activated: Record<string, any>[];
+const built: Executor[] = [];
 beforeEach(() => {
   root = sourceCheckout(folder());
   Object.assign(settings, { platform_root: root, platform_self_repair: true });
@@ -68,12 +69,17 @@ beforeEach(() => {
   writeFileSync(guide, "---\nname: platform-engineer\n---\n# Adding a component to FluidForm\n");
   activated = [];
 });
+afterEach(async () => {
+  await Promise.all(built.splice(0).map((executor) => executor.shutdown()));
+});
 
 function build(providers: unknown = new Engineer(), db: Database | null = null): Executor {
   const executor = new Executor(db ?? new Database(join(folder(), "test.db")), providers as never, MODELS);
+  const current = activated;
   executor.activatePlatform = async (job) => {
-    activated.push(job);
+    current.push(job);
   };
+  built.push(executor);
   return executor;
 }
 

@@ -63,7 +63,15 @@ export async function get(fetcher: Fetcher, url: string, { headers = {}, params 
   if (response.body) {
     const reader = response.body.getReader();
     for (;;) {
-      const { done, value } = await reader.read();
+      let chunk: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        chunk = await reader.read();
+      } catch (error) {
+        if (error instanceof RequestTimeout || (error as Error)?.name === "TimeoutError") throw new RequestTimeout("timed out");
+        if ((error as Error)?.name === "AbortError") throw signal?.reason instanceof Error ? signal.reason : error;
+        throw new TransportError((error as Error)?.message ?? String(error));
+      }
+      const { done, value } = chunk;
       if (done) break;
       size += value.length;
       if (size > limit) {

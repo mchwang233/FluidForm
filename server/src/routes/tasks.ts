@@ -11,6 +11,7 @@ import { settings } from "../config.js";
 import { NETWORK_CHOICE } from "../diagnosis.js";
 import { DiagnosisMessageSchema, type ExecutionRun } from "../models.js";
 import { fixed } from "../py.js";
+import * as pricing from "../pricing.js";
 import { stepKey } from "../review.js";
 import * as retrospect from "../retrospect.js";
 import { eligibleForNode, NoEligibleModelError, routeNode } from "../routing.js";
@@ -72,9 +73,15 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
   });
 
   // Every task; ``brief`` leaves out what only an opened task shows.
+  let tasksCache: { key: string; body: string } | null = null;
   app.get("/api/tasks", async (request, reply) => {
+    const isBrief = queryBool(request.query as Query, "brief", false);
+    const cacheKey = `${isBrief ? 1 : 0}:${db.runsVersion}:${db.retrospectivesVersion}:${pricing.enabled() ? 1 : 0}`;
+    if (tasksCache && tasksCache.key === cacheKey) return unchangedOr(request, reply, tasksCache.body);
     const runs = await api.calibrated(db.listRuns());
-    return unchangedOr(request, reply, JSON.stringify(queryBool(request.query as Query, "brief", false) ? runs.map(brief) : runs));
+    const body = JSON.stringify(isBrief ? runs.map(brief) : runs);
+    tasksCache = { key: cacheKey, body };
+    return unchangedOr(request, reply, body);
   });
 
   // Problems that came up in at least ``min_runs`` finished tasks, most frequent first.
@@ -89,11 +96,13 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
   app.delete<{ Params: { topic: string } }>("/api/retrospectives/topics/:topic", async (request) => {
     const removed = retrospect.forget(db, { topic: request.params.topic });
     if (!removed) throw new HttpError(404, "没有这类问题");
+    db.retrospectivesVersion += 1;
     return { removed };
   });
   app.delete<{ Params: { member: string } }>("/api/retrospectives/problems/:member", async (request) => {
     const removed = retrospect.forget(db, { member: request.params.member });
     if (!removed) throw new HttpError(404, "没有这类问题");
+    db.retrospectivesVersion += 1;
     return { removed };
   });
   // With them, the shared repair records of those tasks (what earlier repairs found, told to later ones).
@@ -182,7 +191,9 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
     current.locks.delete(runId);
     current.reservations.delete(runId);
     current.budgetEvents.delete(runId);
-    for (const item of existing?.attachments ?? []) files.remove(item.id);
+    for (const item of existing?.attachments ?? []) {
+      if (!db.attachmentReferenced(item.id)) files.remove(item.id);
+    }
     return reply.code(204).send();
   });
 
@@ -220,41 +231,45 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
   // Start a task waiting for confirmation (or go on with a paused one): the page's button, and "开始"
   // said in a chat app by who asked for it (automations.ts).
   const confirmTask = async (runId: string, given: number | null = null) => {
-    const run = api.getTask(runId);
-    notWaiting(run);
-    if (run.status !== "awaiting_confirmation" && run.status !== "paused") throw new HttpError(409, `Cannot confirm task in ${pyStatus(run.status)} status`);
-    const budgetUsd = given ?? run.budget_usd;
-    const configured = configuredForRun(run);
-    const catalog = Object.values(api.models);
-    const needsVision = run.attachments.some((item) => item.kind === "image");
-    await routing(async () => {
-      for (const node of run.plan.nodes) {
-        if (node.status === "succeeded" || node.status === "running") continue;
-        if (run.plan.employees.length) {
-          await team.route(node, run.plan, catalog, configured, needsVision);
-          continue;
+    const updated = await executor().locked(runId, async () => {
+      const run = api.getTask(runId);
+      notWaiting(run);
+      if (run.status !== "awaiting_confirmation" && run.status !== "paused") throw new HttpError(409, `Cannot confirm task in ${pyStatus(run.status)} status`);
+      const budgetUsd = given ?? run.budget_usd;
+      const configured = configuredForRun(run);
+      const catalog = Object.values(api.models);
+      const needsVision = run.attachments.some((item) => item.kind === "image");
+      await routing(async () => {
+        for (const node of run.plan.nodes) {
+          if (node.status === "succeeded" || node.status === "running") continue;
+          if (run.plan.employees.length) {
+            await team.route(node, run.plan, catalog, configured, needsVision);
+            continue;
+          }
+          if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) await routeNode(node, catalog, configured, needsVision);
         }
-        if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) await routeNode(node, catalog, configured, needsVision);
-      }
+      });
+      checkBudget(run, budgetUsd);
+      run.budget_usd = budgetUsd;
+      if (run.plan.estimate) run.plan.estimate.hard_limit_usd = budgetUsd;
+      // A task paused after a diagnosis continues with its failed steps run again.
+      const reopened = run.plan.nodes.filter((node) => node.status === "failed").map((node) => node.id);
+      for (const node of run.plan.nodes) if (reopened.includes(node.id)) reopenNode(run, node);
+      if (reopened.length) run.rework_rounds = 0;
+      // Whatever paused the task, the user has now seen it and continued: the message is done.
+      run.error = null;
+      // The user said go on: the lead gets a fresh allowance of decisions.
+      run.decisions_since = new Date().toISOString();
+      // A task paused by the user may still be finishing its running steps; that loop goes on.
+      const task = executor().tasks.get(run.id);
+      run.status = task && !task.done ? "running" : "queued";
+      db.saveRun(run);
+      db.addEvent(event(run.id, "run.confirmed", { budget_usd: run.budget_usd, reopened }));
+      executor().budgetEvents.get(run.id)?.set();
+      return run;
     });
-    checkBudget(run, budgetUsd);
-    run.budget_usd = budgetUsd;
-    if (run.plan.estimate) run.plan.estimate.hard_limit_usd = budgetUsd;
-    // A task paused after a diagnosis continues with its failed steps run again.
-    const reopened = run.plan.nodes.filter((node) => node.status === "failed").map((node) => node.id);
-    for (const node of run.plan.nodes) if (reopened.includes(node.id)) reopenNode(run, node);
-    if (reopened.length) run.rework_rounds = 0;
-    // Whatever paused the task, the user has now seen it and continued: the message is done.
-    run.error = null;
-    // The user said go on: the lead gets a fresh allowance of decisions.
-    run.decisions_since = new Date().toISOString();
-    // A task paused by the user may still be finishing its running steps; that loop goes on.
-    const task = executor().tasks.get(run.id);
-    run.status = task && !task.done ? "running" : "queued";
-    db.saveRun(run);
-    db.addEvent(event(run.id, "run.confirmed", { budget_usd: run.budget_usd, reopened }));
-    executor().start(run.id);
-    return run;
+    executor().start(updated.id);
+    return updated;
   };
   api.confirmTask = (runId) => confirmTask(runId);
   app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/confirm", async (request) => {
@@ -327,7 +342,7 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
     if (!message) throw new HttpError(422, "请写下要说的话，或附上文件。");
     let started: boolean;
     try {
-      started = executor().startLeadChat(runId, message, attached);
+      started = await executor().locked(runId, () => executor().startLeadChat(runId, message, attached));
     } catch (error) {
       if (error instanceof files.AttachmentError) throw new HttpError(422, error.message);
       throw error;
@@ -393,45 +408,52 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
   app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/resume", async (request) => {
     const body = parse(ConfirmTask, request.body);
     const runId = request.params.run_id;
-    const run = api.getTask(runId);
-    notWaiting(run);
-    if (!["failed", "cancelled", "incomplete"].includes(run.status)) throw new HttpError(409, `Cannot resume task in ${pyStatus(run.status)} status`);
-    const task = executor().tasks.get(runId);
-    if (task && !task.done) throw new HttpError(409, "任务仍在结束处理中，请稍后再继续。");
-    const configured = configuredForRun(run);
-    const needsVision = run.attachments.some((item) => item.kind === "image");
-    const catalog = Object.values(api.models);
-    const reopened: string[] = [];
-    await routing(async () => {
-      for (const node of run.plan.nodes) {
-        if (node.status === "succeeded") continue;
-        if (["failed", "cancelled", "running", "unable", "blocked"].includes(node.status)) {
-          reopened.push(node.id);
-          reopenNode(run, node);
+    const updated = await executor().locked(runId, async () => {
+      const run = api.getTask(runId);
+      notWaiting(run);
+      if (!["failed", "cancelled", "incomplete"].includes(run.status)) throw new HttpError(409, `Cannot resume task in ${pyStatus(run.status)} status`);
+      const task = executor().tasks.get(runId);
+      if (task && !task.done) throw new HttpError(409, "任务仍在结束处理中，请稍后再继续。");
+      const configured = configuredForRun(run);
+      const needsVision = run.attachments.some((item) => item.kind === "image");
+      const catalog = Object.values(api.models);
+      const reopened: string[] = [];
+      await routing(async () => {
+        for (const node of run.plan.nodes) {
+          if (node.status === "succeeded") continue;
+          if (["failed", "cancelled", "running", "unable", "blocked"].includes(node.status)) {
+            reopened.push(node.id);
+            reopenNode(run, node);
+          }
+          // Its model was disabled or lost its key since; pick again under current rules.
+          if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) await routeNode(node, catalog, configured, needsVision);
         }
-        // Its model was disabled or lost its key since; pick again under current rules.
-        if (!eligibleForNode(node, catalog, configured, needsVision).some((model) => model.id === node.model_id)) await routeNode(node, catalog, configured, needsVision);
-      }
+      });
+      const budgetUsd = body.budget_usd ?? run.budget_usd;
+      checkBudget(run, budgetUsd);
+      Object.assign(run, { budget_usd: budgetUsd, rework_rounds: 0, error: null, decisions_since: new Date().toISOString(), status: "queued" });
+      if (run.plan.estimate) run.plan.estimate.hard_limit_usd = budgetUsd;
+      db.saveRun(run);
+      db.addEvent(event(run.id, "run.resumed", { budget_usd: budgetUsd, reopened }));
+      executor().budgetEvents.get(run.id)?.set();
+      return run;
     });
-    const budgetUsd = body.budget_usd ?? run.budget_usd;
-    checkBudget(run, budgetUsd);
-    Object.assign(run, { budget_usd: budgetUsd, rework_rounds: 0, error: null, decisions_since: new Date().toISOString(), status: "queued" });
-    if (run.plan.estimate) run.plan.estimate.hard_limit_usd = budgetUsd;
-    db.saveRun(run);
-    db.addEvent(event(run.id, "run.resumed", { budget_usd: budgetUsd, reopened }));
-    executor().start(run.id);
-    return run;
+    executor().start(updated.id);
+    return updated;
   });
 
   app.post<{ Params: { run_id: string } }>("/api/tasks/:run_id/cancel", async (request) => {
     const runId = request.params.run_id;
-    const run = api.getTask(runId);
-    const diagnosis = executor().diagnosing.get(runId);
-    if (FINISHED.has(run.status) && !(diagnosis && !diagnosis.done)) throw new HttpError(409, "Task has already finished");
-    // A component the lead asked for stays with the platform engineer; the user decides on it there.
-    Object.assign(run, { status: "cancelled", waiting_diagnosis_id: null, maintenance_id: null, engineer_job_id: null });
-    db.saveRun(run);
-    db.addEvent(event(run.id, "run.cancelled"));
+    const run = await executor().locked(runId, () => {
+      const latest = api.getTask(runId);
+      const diagnosis = executor().diagnosing.get(runId);
+      if (FINISHED.has(latest.status) && !(diagnosis && !diagnosis.done)) throw new HttpError(409, "Task has already finished");
+      // A component the lead asked for stays with the platform engineer; the user decides on it there.
+      Object.assign(latest, { status: "cancelled", waiting_diagnosis_id: null, maintenance_id: null, engineer_job_id: null });
+      db.saveRun(latest);
+      db.addEvent(event(latest.id, "run.cancelled"));
+      return latest;
+    });
     executor().cancel(run.id);
     return run;
   });
@@ -469,6 +491,7 @@ export function tasksRoutes(app: FastifyInstance, { api, db, executor, providers
     if (!db.getRun(runId)) throw new HttpError(404, "Task not found");
     const closed = new AbortController();
     request.raw.once("close", () => closed.abort());
-    return reply.type("text/event-stream; charset=utf-8").send(Readable.from(api.events(runId, after, closed.signal)));
+    const signal = AbortSignal.any([closed.signal, api.stopping.signal]);
+    return reply.type("text/event-stream; charset=utf-8").send(Readable.from(api.events(runId, after, signal)));
   });
 }

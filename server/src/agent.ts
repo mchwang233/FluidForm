@@ -14,7 +14,7 @@
 // reachable, this machine's local services are not, except a local proxy the user relies on.
 import { spawn } from "node:child_process";
 import {
-  closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync,
+  closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
@@ -377,6 +377,7 @@ function* walk(root: string, prune: (names: string[]) => string[] = (names) => n
  *  instead of exploring folder by folder. Binary files are summed up per folder; hidden and build
  *  folders are left out. */
 export function projectMap(root: string, summaries: Record<string, string> = {}): string {
+  const realRoot = Workspace.real(root);
   const texts: string[] = [];
   const binaries = new Map<string, string[]>();
   let more = 0;
@@ -387,6 +388,7 @@ export function projectMap(root: string, summaries: Record<string, string> = {})
       const rel = relative(root, path).split(sep).join("/");
       let data: Buffer;
       try {
+        if (!within(Workspace.real(path), realRoot)) continue;
         const size = statSync(path).size;
         const binary = BINARY_SUFFIXES.has(suffixOf(name).toLowerCase());
         if (!binary && size > MAX_COUNTED_BYTES) {
@@ -481,7 +483,7 @@ export class Workspace {
   // --- paths -----------------------------------------------------------------------------
 
   /** Path.resolve(): links followed as far as the path exists. */
-  private static real(path: string): string {
+  static real(path: string): string {
     const absolute = resolve(path);
     try {
       return realpathSync(absolute);
@@ -498,7 +500,7 @@ export class Workspace {
     try {
       path = Workspace.real(raw.startsWith("/") ? raw : join(this.root, raw));
       const parts = raw.split("/").filter((part) => part && part !== ".");
-      if (scratch && !within(path, this.root) && !within(path, scratch) && raw.startsWith("/") && parts[0] === "tmp") {
+      if (scratch && !within(resolve(raw), this.root) && !within(path, this.root) && !within(path, scratch) && raw.startsWith("/") && parts[0] === "tmp") {
         // Bash's /tmp is this attempt's own folder: the file tools see the same one.
         path = Workspace.real(join(scratch, ...parts.slice(1)));
       }
@@ -512,9 +514,8 @@ export class Workspace {
     return path;
   }
 
-  /** Whether a file found by a search may be shown (a review sees only reviewable files). */
+  /** Whether a file found by a search stays inside the workspace (and, for a review, is reviewable). */
   private visible(path: string): boolean {
-    if (!this.readOnly) return true;
     try {
       this.path(path);
       return true;
@@ -567,7 +568,7 @@ export class Workspace {
       const acting = !this.readOnly && !this.host;
       if (name === "Bash") return await this.bash(args.command, args.timeout, signal);
       if (chatActions.has(name) && acting) return await chatActions.run(name, args);
-      if (name.startsWith(mcp.PREFIX) && acting) return await mcp.call(this, name, args);
+      if (name.startsWith(mcp.PREFIX) && acting) return await mcp.call(this, name, args, signal);
       const handlers: Record<string, (args: Record<string, unknown>) => string> = { Read: (a) => this.read(a), Write: (a) => this.write(a),
         Edit: (a) => this.edit(a), MultiEdit: (a) => this.multiEdit(a), Glob: (a) => this.glob(a), Grep: (a) => this.grep(a), LS: (a) => this.ls(a) };
       if (!(name in handlers)) throw new ToolError(`unknown tool ${name}; the tools are ${TOOLS.map((tool) => tool.name).join(", ")}`);
@@ -723,7 +724,9 @@ export class Workspace {
         if (fnmatch(entry.name, part)) {
           const path = join(folder, entry.name);
           if (index === parts.length - 1) found.push(path);
-          else if (entry.isDirectory() || (entry.isSymbolicLink() && existsSync(path) && statSync(path).isDirectory())) step(path, index + 1);
+          else if (entry.isDirectory() || (entry.isSymbolicLink() && existsSync(path) && statSync(path).isDirectory() && within(Workspace.real(path), base))) {
+            step(path, index + 1);
+          }
         }
       }
     };
@@ -827,8 +830,10 @@ export class Workspace {
     if (!existsSync(path) || !statSync(path).isDirectory()) throw new ToolError(`${str(args.path)} is not a directory`);
     const ignore = (Array.isArray(args.ignore) ? args.ignore : []).filter((item): item is string => typeof item === "string");
     const entries = readdirSync(path).map((name) => join(path, name))
-      .filter((entry) => this.visible(entry) && !ignore.some((item) => fnmatch(basename(entry), item)));
+      .filter((entry) => (!this.readOnly || this.visible(entry)) && !ignore.some((item) => fnmatch(basename(entry), item)));
+    const safe = new Set(entries.filter((entry) => this.visible(entry)));
     const isFolder = (entry: string) => {
+      if (!safe.has(entry)) return false;
       try {
         return statSync(entry).isDirectory();
       } catch {
@@ -836,7 +841,8 @@ export class Workspace {
       }
     };
     entries.sort((a, b) => Number(!isFolder(a)) - Number(!isFolder(b)) || (basename(a) < basename(b) ? -1 : basename(a) > basename(b) ? 1 : 0));
-    const lines = entries.slice(0, MAX_LISTED).map((entry) => (isFolder(entry) ? `${basename(entry)}/` : `${basename(entry)} (${statSync(entry).size} bytes)`));
+    const lines = entries.slice(0, MAX_LISTED).map((entry) => (!safe.has(entry) ? `${basename(entry)} (symlink)`
+      : isFolder(entry) ? `${basename(entry)}/` : `${basename(entry)} (${statSync(entry).size} bytes)`));
     if (entries.length > MAX_LISTED) lines.push(`... ${entries.length - MAX_LISTED} more`);
     return `${this.relative(path)}/\n` + (lines.join("\n") || "(empty)");
   }
@@ -933,11 +939,36 @@ export class Workspace {
     const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => !keys.has(name) && value !== undefined)) as Record<string, string>;
     return [
       // The real /dev: a repair checks the steps' sandbox, which needs /dev/net/tun for the internet.
-      "bwrap", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--die-with-parent", "--new-session",
+      "bwrap", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--die-with-parent",
       "--clearenv", ...Object.entries(environment.commandEnv(env)).flatMap(([name, value]) => ["--setenv", name, value]),
       "--chdir", this.root, "--", "/bin/bash", "-c",
       this.script(shlexQuote(join(this.tmp(), ".sp-cwd"))), "bash", this.cwd, command,
     ];
+  }
+
+  /** Read ``path`` without loading gigabytes of command output into memory before ``clip`` cuts it. */
+  private static readOutput(path: string, limit = MAX_BASH_OUTPUT): string {
+    const fd = openSync(path, "r");
+    try {
+      const size = fstatSync(fd).size;
+      const cap = limit * 4;
+      if (size <= cap) {
+        const buf = Buffer.alloc(size);
+        readSync(fd, buf, 0, size, 0);
+        return buf.toString("utf8");
+      }
+      const half = limit * 2;
+      const start = Buffer.alloc(half);
+      const end = Buffer.alloc(half);
+      readSync(fd, start, 0, half, 0);
+      readSync(fd, end, 0, half, size - half);
+      const headText = head(new TextDecoder("utf-8", { fatal: false }).decode(start).replace(/\uFFFD+$/, ""), Math.floor(limit / 2));
+      const tailText = tail(new TextDecoder("utf-8", { fatal: false }).decode(end).replace(/^\uFFFD+/, ""), Math.floor(limit / 2));
+      const omitted = Math.max(1, size - Buffer.byteLength(headText, "utf8") - Buffer.byteLength(tailText, "utf8"));
+      return `${headText}\n[... ${omitted} bytes cut ...]\n${tailText}`;
+    } finally {
+      closeSync(fd);
+    }
   }
 
   async bash(command: unknown, timeout: unknown, signal?: AbortSignal): Promise<[string, boolean]> {
@@ -989,7 +1020,7 @@ export class Workspace {
         closeSync(fd);
       }
       const reset = this.followCwd();
-      const output = readFileSync(outputPath).toString("utf8").replace(/\n+$/, "");
+      const output = Workspace.readOutput(outputPath).replace(/\n+$/, "");
       const text = (clip(output) || "(the command printed no output)") + reset;
       if (timedOut) return [`Command timed out after ${formatG(seconds)}s and was stopped. Output before that:\n${text}`, false];
       if (code) return [`Exit code ${code}\n${text}`, false];
@@ -1003,9 +1034,14 @@ export class Workspace {
    *  working directory: then the next command starts there again, and the model is told so. */
   private followCwd(): string {
     try {
-      const where = readFileSync(join(this.tmp(), ".sp-cwd"), "utf8").trim();
-      if (where === this.root || (where.startsWith(this.root + sep) && existsSync(where) && statSync(where).isDirectory())) {
-        this.cwd = where;
+      const cwdPath = join(this.tmp(), ".sp-cwd");
+      const info = lstatSync(cwdPath);
+      if (!info.isFile() || info.size > 4096) return "";
+      const where = readFileSync(cwdPath, "utf8").trim();
+      if (!where) return "";
+      const resolved = Workspace.real(where);
+      if (resolved === this.root || (resolved.startsWith(this.root + sep) && existsSync(resolved) && statSync(resolved).isDirectory())) {
+        this.cwd = resolved;
         return "";
       }
       // Outside the working directory (a sandbox-only /tmp folder, say): start there again.

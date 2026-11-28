@@ -93,7 +93,7 @@ export class Service {
 
   send(message: Json): void {
     if (!this.child?.stdin || this.child.stdin.destroyed) throw new ServiceError("服务没有在运行");
-    this.child.stdin.write(pyDumps({ jsonrpc: "2.0", ...message }, false) + "\n");
+    this.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\n");
   }
 
   async request(method: string, params: Json, seconds = REQUEST_SECONDS): Promise<Json> {
@@ -228,7 +228,7 @@ export class ServiceHost {
   }
 
   private async runOnce(item: Service, capability: Capability, signal: AbortSignal): Promise<void> {
-    const reason = sandbox.deps.missing();
+    const reason = sandbox.deps.missing(capability.domains.length > 0);
     if (reason) throw new ServiceError(reason);
     const secrets = await packages.secretsFor(capability);
     const lacking = capability.secrets.filter((name) => !(name in secrets));

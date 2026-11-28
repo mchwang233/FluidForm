@@ -20,6 +20,7 @@ from transport import MAX_BYTES, TransportError, WebSocket, address, post
 TOPIC = "/v1.0/im/bot/messages/get"
 API = "https://api.dingtalk.com/v1.0"
 MAX_PENDING = 256
+PENDING_TTL = 1800
 MAX_SEEN = 4096
 MAX_TEXT = 20000
 FILE_NOTE = "文件请到 FluidForm 网页中查看；钉钉暂只发送文字。"
@@ -137,16 +138,21 @@ class Bridge:
             if isinstance(expires, (int, float)):
                 route.update(webhook=hook, expires=expires)
         with self.lock:
-            cutoff = self.clock() - 7200
+            now = self.clock()
+            cutoff = now - 7200
             while self.seen and next(iter(self.seen.values())) < cutoff:
                 self.seen.popitem(last=False)
+            stale_pending = [k for k, v in self.pending.items() if v.get("_queued_at", now) < now - PENDING_TTL]
+            for k in stale_pending:
+                self.pending.pop(k, None)
             if key in self.seen:
                 return
             if len(self.pending) >= MAX_PENDING:
                 raise TransportError("待回复消息过多")
             # The host replies promptly to superseded, /stop and /new messages too.
+            route["_queued_at"] = now
             self.pending[key] = route
-            self.seen[key] = self.clock()
+            self.seen[key] = now
             if len(self.seen) > MAX_SEEN:
                 self.seen.popitem(last=False)
         try:

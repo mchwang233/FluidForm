@@ -434,3 +434,24 @@ test("the environment leaves the command line of a sandbox allowed the internet 
   assert.ok(kept[0].endsWith("pasta") && kept.includes("bwrap"));
   assert.deepEqual(kept.slice(kept.lastIndexOf("--")), ["--", "/bin/bash", "-c", "echo hi"]);
 });
+
+test("Grep, Glob, LS and projectMap never follow symlinks outside the step workspace", async () => {
+  const root = join(folder, "step-ws");
+  const outside = join(folder, "secret-outside");
+  mkdirSync(root);
+  mkdirSync(outside);
+  writeFileSync(join(root, "inside.txt"), "needle-inside\n");
+  writeFileSync(join(outside, "leaked.txt"), "needle-outside\n");
+  symlinkSync(join(outside, "leaked.txt"), join(root, "escaped-file.txt"));
+  symlinkSync(outside, join(root, "escaped-dir"));
+  const ws = new Workspace(root);
+  const grepped = await ws.call("Grep", { pattern: "needle", output_mode: "content" });
+  assert.ok(grepped.includes("needle-inside") && !grepped.includes("needle-outside"), grepped);
+  const globbed = await ws.call("Glob", { pattern: "**/*.txt" });
+  assert.ok(globbed.includes("inside.txt") && !globbed.includes("escaped-file.txt") && !globbed.includes("leaked.txt"), globbed);
+  const listed = await ws.call("LS", {});
+  assert.ok(listed.includes("inside.txt") && !listed.includes("escaped-dir/") && !listed.includes("15 bytes"), listed);
+  assert.ok((await ws.call("LS", { path: "escaped-dir" })).includes("outside the working directory"));
+  const mapped = agent.projectMap(root);
+  assert.ok(mapped.includes("inside.txt") && !mapped.includes("escaped-file.txt") && !mapped.includes("leaked.txt"), mapped);
+});

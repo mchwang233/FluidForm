@@ -6,6 +6,8 @@ import { join } from "node:path";
 
 const folder = mkdtempSync(join(process.env.TMPDIR || "/tmp", "sp-tests-"));
 process.env.TMPDIR = folder;
+process.env.FLUIDFORM_DATA_DIR ??= join(folder, "data");
+process.env.FLUIDFORM_WORKSPACE_ROOT ??= join(folder, "workspaces");
 process.on("exit", () => rmSync(folder, { recursive: true, force: true }));
 
 // Every test prices with the pricing package's own code (helpers/pricing.ts).

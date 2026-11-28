@@ -130,7 +130,9 @@ export class CatalogSync {
     for (;;) {
       const due = fromPythonIso(this.state.next_sync_at);
       const aa = this.benchmarks?.cache.artificial_analysis;
-      if (!due || Date.now() >= due.getTime() || (this.benchmarks && !Object.keys(this.benchmarks.cache).length) || (this.benchmarks && aa?.status === "no_key")) {
+      const benchmarksDue = Boolean(this.benchmarks && this.benchmarks.auto
+        && (!Object.keys(this.benchmarks.cache).length || aa?.status === "no_key"));
+      if (!due || Date.now() >= due.getTime() || benchmarksDue) {
         this.trigger();
         await this.task!.settled();
       }

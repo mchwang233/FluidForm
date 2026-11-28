@@ -259,3 +259,16 @@ test("a question about a picture waits for the picture sent just after", async (
   assert.ok(performance.now() - started < 1000);
 });
 
+test("manifest domains reject IP literals, localhost and private suffixes", () => {
+  for (const bad of ["127.0.0.1", "169.254.169.254", "10.0.0.1", "[::1]", "localhost", "api.localhost", "printer.local", " metadata.internal"]) {
+    assert.throws(() => packages.read(pkg({ manifest: { domains: [bad] } })), /domains|域名/);
+  }
+  for (const ip of ["127.0.0.1", "169.254.169.254", "10.0.0.1", "::1", "[::1]"]) {
+    assert.equal(sandbox.allowed(ip, [ip]), false, ip);
+  }
+  assert.equal(sandbox.isPrivateOrReservedIp("127.0.0.1"), true);
+  assert.equal(sandbox.isPrivateOrReservedIp("169.254.169.254"), true);
+  assert.equal(sandbox.isPrivateOrReservedIp("::ffff:127.0.0.1"), true);
+  assert.equal(sandbox.isPrivateOrReservedIp("93.184.216.34"), false);
+});
+

@@ -2,6 +2,14 @@
 import * as pricing from "./pricing.js";
 import { boundBytes } from "./call-control.js";
 import { AsyncEvent } from "./py.js";
+import { currentTask, Mutex } from "./tasks.js";
+
+const reservationLocks = new WeakMap<Map<unknown, number>, Mutex>();
+function lockFor(map: Map<unknown, number>): Mutex {
+  let lock = reservationLocks.get(map);
+  if (!lock) reservationLocks.set(map, (lock = new Mutex()));
+  return lock;
+}
 
 export class ProviderError extends Error {
   constructor(message = "") {
@@ -102,25 +110,29 @@ export class RequestBudget {
     const model = this.model(modelId);
     // UTF-8 bytes plus protocol overhead bound the input tokens (pricing decides what they cost).
     const inputBytes = boundBytes(payload);
+    const lock = lockFor(this.reservations);
+    const signal = currentTask()?.signal;
     for (;;) {
-      let held = 0;
-      if (this.stepRemaining !== null) {
-        for (const [key, value] of this.reservations) {
-          if (key !== this && this.scope !== null && (key as { scope?: unknown }).scope === this.scope) held += value;
+      signal?.throwIfAborted();
+      const [seen, answer] = await lock.run(async () => {
+        const version = this.changed.version;
+        let held = 0;
+        if (this.stepRemaining !== null) {
+          for (const [key, value] of this.reservations) {
+            if (key !== this && this.scope !== null && (key as { scope?: unknown }).scope === this.scope) held += value;
+          }
         }
-      }
-      const answer = await pricing.admit(model ? { ...model, id: modelId } : null, { input_bytes: inputBytes, maximum,
-        remaining: this.remaining(), others: this.others(), step_remaining: this.stepRemaining?.() ?? null, step_held: held,
-        wait_for_step: this.waitForStep });
-      if ("output" in answer) {
-        this.reservations.set(this, answer.reserve);
-        return answer.output;
-      }
+        const res = await pricing.admit(model ? { ...model, id: modelId } : null, { input_bytes: inputBytes, maximum,
+          remaining: this.remaining(), others: this.others(), step_remaining: this.stepRemaining?.() ?? null, step_held: held,
+          wait_for_step: this.waitForStep });
+        if ("output" in res) this.reservations.set(this, res.reserve);
+        return [version, res] as const;
+      });
+      if ("output" in answer) return answer.output;
       if ("wait" in answer) {
         // Another call may release unused output reservations: contention, not a request for the
         // user to raise the budget.
-        this.changed.clear();
-        await this.changed.wait();
+        await this.changed.waitSince(seen, signal);
         continue;
       }
       if (answer.stop === "step") throw new StepLimitExceeded(answer.message);

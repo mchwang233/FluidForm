@@ -7,7 +7,7 @@ import { SERVER } from "./paths.js";
 import { PLATFORM_SCOPE } from "./models.js";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, copyFileSync, existsSync, openSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, fstatSync, openSync, mkdirSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -143,16 +143,50 @@ export function unifiedDiff(a: string[], b: string[], fromName: string, toName: 
   // The longest common subsequence's matches, then hunks around the differences.
   const n = a.length;
   const m = b.length;
-  const table: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i -= 1) for (let j = m - 1; j >= 0; j -= 1) table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  if (n === m && a.every((line, idx) => line === b[idx])) return "";
   type Op = [" " | "-" | "+", string, number, number];
   const ops: Op[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && a[i] === b[j]) ops.push([" ", a[i], i++, j++]);
-    else if (j < m && (i >= n || table[i][j + 1] >= table[i + 1][j])) ops.push(["+", b[j], i, j++]);
-    else ops.push(["-", a[i], i++, j]);
+  const MAX_CELLS = 4_000_000;
+  if (n * m <= MAX_CELLS) {
+    const table: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i -= 1) for (let j = m - 1; j >= 0; j -= 1) table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+    let i = 0;
+    let j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && a[i] === b[j]) ops.push([" ", a[i], i++, j++]);
+      else if (j < m && (i >= n || table[i][j + 1] >= table[i + 1][j])) ops.push(["+", b[j], i, j++]);
+      else ops.push(["-", a[i], i++, j]);
+    }
+  } else {
+    let prefix = 0;
+    while (prefix < n && prefix < m && a[prefix] === b[prefix]) prefix += 1;
+    let suffix = 0;
+    while (suffix < n - prefix && suffix < m - prefix && a[n - 1 - suffix] === b[m - 1 - suffix]) suffix += 1;
+    const context = 3;
+    const keepBefore = Math.max(0, prefix - context);
+    const keepAfter = Math.min(suffix, context);
+    for (let k = keepBefore; k < prefix; k += 1) ops.push([" ", a[k], k, k]);
+    const aMid = n - suffix - prefix;
+    const bMid = m - suffix - prefix;
+    if (aMid * bMid <= MAX_CELLS) {
+      const table: number[][] = Array.from({ length: aMid + 1 }, () => new Array(bMid + 1).fill(0));
+      for (let i = aMid - 1; i >= 0; i -= 1) {
+        for (let j = bMid - 1; j >= 0; j -= 1) {
+          table[i][j] = a[prefix + i] === b[prefix + j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+        }
+      }
+      let i = 0;
+      let j = 0;
+      while (i < aMid || j < bMid) {
+        if (i < aMid && j < bMid && a[prefix + i] === b[prefix + j]) ops.push([" ", a[prefix + i], prefix + i++, prefix + j++]);
+        else if (j < bMid && (i >= aMid || table[i][j + 1] >= table[i + 1][j])) ops.push(["+", b[prefix + j], prefix + i, prefix + j++]);
+        else ops.push(["-", a[prefix + i], prefix + i++, prefix + j]);
+      }
+    } else {
+      for (let k = prefix; k < n - suffix; k += 1) ops.push(["-", a[k], k, prefix]);
+      for (let k = prefix; k < m - suffix; k += 1) ops.push(["+", b[k], n - suffix, k]);
+    }
+    for (let k = 0; k < keepAfter; k += 1) ops.push([" ", a[n - suffix + k], n - suffix + k, m - suffix + k]);
   }
   if (!ops.some((op) => op[0] !== " ")) return "";
   const context = 3;
@@ -331,6 +365,20 @@ export class SourceRepairs implements PlatformRepairs {
     if ([...required].some((name) => !(name in after))) throw new RepairError("平台修复不能删除应用入口、构建配置或原有回归测试。");
     if (!files.some((name) => REGRESSION_DIRS.some((dir) => name.startsWith(dir)))) throw new RepairError("平台修复需要新增或更新能复现当前缺陷的回归测试。");
     if (!files.some((name) => CODE_DIRS.some((dir) => name.startsWith(dir)) && !name.startsWith("frontend/tests/"))) throw new RepairError("只有测试变化，没有实际的平台修复。");
+    for (const pkg of ["server/package.json", "frontend/package.json"]) {
+      if (!files.includes(pkg)) continue;
+      let beforePkg: Record<string, unknown>;
+      let afterPkg: Record<string, unknown>;
+      try {
+        beforePkg = JSON.parse(readFileSync(join(job.folder, "before", pkg), "utf8")) as Record<string, unknown>;
+        afterPkg = JSON.parse(readFileSync(join(source, pkg), "utf8")) as Record<string, unknown>;
+      } catch {
+        throw new RepairError(`${pkg} 不是有效的 JSON。`);
+      }
+      if (job.run_id && JSON.stringify(beforePkg.scripts ?? null) !== JSON.stringify(afterPkg.scripts ?? null)) {
+        throw new RepairError(`自动平台修复不能修改 ${pkg} 的构建脚本。`);
+      }
+    }
     Object.assign(job, { status: "validating", files, after, checks: [] });
     this.save(job);
     const server = join(source, "server");
@@ -392,7 +440,11 @@ export class SourceRepairs implements PlatformRepairs {
       const located = environment.which(executable);
       if (located) runtimes.add(dirname(dirname(realOr(located))));
     }
-    const mounts = [...runtimes].sort().filter((path) => existsSync(path) && statSync(path).isDirectory() && path.startsWith(home + "/")).flatMap((path) => ["--ro-bind", path, path]);
+    const safeMountPaths = [...runtimes].flatMap((prefix) => (prefix === home || prefix === join(home, ".local")
+      ? ["bin", "lib", "lib64", "include"].map((sub) => join(prefix, sub))
+      : [prefix]));
+    const mounts = [...new Set(safeMountPaths)].sort().filter((path) => existsSync(path) && statSync(path).isDirectory() && path.startsWith(home + "/"))
+      .flatMap((path) => ["--ro-bind", path, path]);
     const network = allowNetwork && deps.networkAvailable() ? agent.networkPrefix(agent.proxyPorts()) : [];
     const isolated = allowNetwork ? [] : ["--unshare-net"];
     // Tests may start a nested network sandbox; bubblewrap's private /dev would otherwise hide the TUN
@@ -427,7 +479,7 @@ export class SourceRepairs implements PlatformRepairs {
     } finally {
       closeSync(fd);
     }
-    const output = readFileSync(captured).toString("utf8");
+    const output = readBoundedOutput(captured, 1_048_576);
     rmSync(captured, { force: true });
     return { returncode: code ?? 1, output: code ? failureOutput(output) : output.slice(-8000) };
   }
@@ -453,6 +505,21 @@ export class SourceRepairs implements PlatformRepairs {
       this.save(job);
       throw new RepairError(`平台修复生效任务启动失败：${job.error}`);
     }
+  }
+}
+
+function readBoundedOutput(path: string, limit: number): string {
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    if (size <= limit * 2) return readFileSync(fd).toString("utf8");
+    const headBuf = Buffer.alloc(limit);
+    const tailBuf = Buffer.alloc(limit);
+    const headRead = readSync(fd, headBuf, 0, limit, 0);
+    const tailRead = readSync(fd, tailBuf, 0, limit, size - limit);
+    return `${headBuf.subarray(0, headRead).toString("utf8")}\n[...]\n${tailBuf.subarray(0, tailRead).toString("utf8")}`;
+  } finally {
+    closeSync(fd);
   }
 }
 

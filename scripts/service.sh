@@ -31,7 +31,10 @@ setting() {
     local key="$prefix$name"
     value="${!key:-}"
     if [[ -z "$value" && -f "$PROJECT_DIR/.env" ]]; then
-      value="$(sed -n "s/^${key}=//p" "$PROJECT_DIR/.env" | tail -n 1)"
+      value="$(sed -n "s/^[[:space:]]*\(export[[:space:]]\+\)\?${key}[[:space:]]*=[[:space:]]*//p" "$PROJECT_DIR/.env" | tail -n 1)"
+      if [[ "$value" =~ ^\"(.*)\"$ ]]; then value="${BASH_REMATCH[1]}";
+      elif [[ "$value" =~ ^\'(.*)\'$ ]]; then value="${BASH_REMATCH[1]}";
+      else value="${value%%[[:space:]]#*}"; value="${value%"${value##*[![:space:]]}"}"; fi
     fi
     [[ -n "$value" ]] && break
   done
@@ -219,7 +222,7 @@ stop_process() {
     pid="$(<"$pid_file")"
     echo "[stop] Stopping $name ($pid)..."
     kill "$pid"
-    for _ in {1..20}; do
+    for _ in {1..120}; do
       kill -0 "$pid" 2>/dev/null || break
       sleep 0.1
     done

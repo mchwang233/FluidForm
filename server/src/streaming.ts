@@ -124,8 +124,9 @@ export function anthropic(items: Json[]): Json {
     let input: unknown = {};
     try {
       input = text.trim() ? JSON.parse(text) : {};
+      if (!isObject(input)) input = { __invalid__: text };
     } catch {
-      input = {};
+      input = { __invalid__: text };
     }
     blocks.get(index)!.input = input;
   }

@@ -15,7 +15,7 @@ export type { Priced } from "./budget.js";
 export * as calls from "./calls.js";
 export * as capabilities from "./capabilities.js";
 export { AA_SOURCE } from "./catalog.js";
-export { CliError, InputTooLarge, cliUsage, codexHome, inputTooLarge } from "./cli-channels.js";
+export { CliError, InputTooLarge, cliUsage, codexHome, inputTooLarge, sanitizedCliEnv } from "./cli-channels.js";
 export type { CliChannelRegistry, CliText } from "./cli-channels.js";
 export { settings } from "./config.js";
 export * as contracts from "./contracts.js";

@@ -17,9 +17,17 @@ function errorText(e: unknown) { return e instanceof Error ? e.message : String(
 /** Files attached to the task being written: uploaded as soon as they are added. */
 export function useAttachments(apiBase: string) {
   const [items, setItems] = useState<Pending[]>([]);
+  const itemsRef = useRef<Pending[]>([]);
+  itemsRef.current = items;
+  const controllers = useRef(new Map<string, AbortController>());
+  const removed = useRef(new Set<string>());
   const counter = useRef(0);
   const update = (key: string, change: Partial<Pending>) => setItems(current => current.map(item => item.key === key ? { ...item, ...change } : item));
-  useEffect(() => () => items.forEach(item => item.preview && URL.revokeObjectURL(item.preview)), []);
+  useEffect(() => () => {
+    itemsRef.current.forEach(item => item.preview && URL.revokeObjectURL(item.preview));
+    controllers.current.forEach(controller => controller.abort());
+    controllers.current.clear();
+  }, []);
 
   function add(files: File[]) {
     const room = MAX_FILES - items.length;
@@ -33,24 +41,42 @@ export function useAttachments(apiBase: string) {
     accepted.forEach(async (file, index) => {
       const { key, name } = added[index];
       if (file.size > MAX_BYTES) { update(key, { status: "error", error: "超过 20 MB" }); return; }
+      const controller = new AbortController();
+      controllers.current.set(key, controller);
       try {
-        const response = await fetch(`${apiBase}/api/attachments?${new URLSearchParams({ name })}`, { method: "POST", body: file });
+        const response = await fetch(`${apiBase}/api/attachments?${new URLSearchParams({ name })}`, { method: "POST", body: file, signal: controller.signal });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(detailText(body.detail) || `上传失败（${response.status}）`);
+        if (removed.current.has(key)) {
+          if (body?.id) fetch(`${apiBase}/api/attachments/${body.id}`, { method: "DELETE" }).catch(() => {});
+          return;
+        }
         update(key, { status: "ready", stored: body });
-      } catch (e) { update(key, { status: "error", error: errorText(e) }); }
+      } catch (e) {
+        if (!removed.current.has(key)) update(key, { status: "error", error: errorText(e) });
+      } finally {
+        controllers.current.delete(key);
+      }
     });
   }
 
   function remove(key: string) {
-    const item = items.find(entry => entry.key === key);
+    removed.current.add(key);
+    const controller = controllers.current.get(key);
+    if (controller) { controller.abort(); controllers.current.delete(key); }
+    const item = itemsRef.current.find(entry => entry.key === key);
     if (item?.preview) URL.revokeObjectURL(item.preview);
     setItems(current => current.filter(entry => entry.key !== key));
     if (item?.stored) fetch(`${apiBase}/api/attachments/${item.stored.id}`, { method: "DELETE" }).catch(() => {});
   }
 
   /** After the task is created the files belong to it; just empty the composer. */
-  function clear() { items.forEach(item => item.preview && URL.revokeObjectURL(item.preview)); setItems([]); }
+  function clear() {
+    controllers.current.forEach(controller => controller.abort());
+    controllers.current.clear();
+    itemsRef.current.forEach(item => item.preview && URL.revokeObjectURL(item.preview));
+    setItems([]);
+  }
 
   return {
     items, add, remove, clear,
@@ -106,7 +132,7 @@ export function takesFiles(files: Files) {
   return {
     onPaste: (event: React.ClipboardEvent) => {
       const pasted = [...(event.clipboardData?.files ?? [])];
-      if (pasted.length) { event.preventDefault(); files.add(pasted); }
+      if (pasted.length && !event.clipboardData?.getData?.("text/plain")) { event.preventDefault(); files.add(pasted); }
     },
     onDragOver: (event: React.DragEvent) => { if ([...(event.dataTransfer?.types ?? [])].includes("Files")) event.preventDefault(); },
     onDrop: (event: React.DragEvent) => {

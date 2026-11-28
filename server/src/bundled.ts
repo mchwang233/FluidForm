@@ -37,7 +37,6 @@ function offered(): Offered {
  *  the packages installed or updated. */
 export async function offer(): Promise<Capability[]> {
   if (!existsSync(deps.folder())) return [];
-  const running = settings.capability_packages && !sandbox.deps.missing();
   const given = offered();
   const done: Capability[] = [];
   for (const entry of readdirSync(deps.folder(), { withFileTypes: true })) {
@@ -50,6 +49,8 @@ export async function offer(): Promise<Capability[]> {
       const manifest = JSON.parse(readFileSync(join(source, packages.MANIFEST), "utf8"));
       [id, version] = [String(manifest.id), `${manifest.version ?? ""}#${digest(source)}`];
       extension = manifest.kind === extensions.KIND;
+      const needsProxy = Array.isArray(manifest.domains) && manifest.domains.length > 0;
+      const running = settings.capability_packages && !sandbox.deps.missing(needsProxy);
       if (manifest.kind !== "interface" && !extension && !running) continue;
     } catch {
       continue;

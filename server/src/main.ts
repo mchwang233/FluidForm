@@ -25,8 +25,15 @@ await hydrateProviderKeys();
 await extensions.preload(current());
 const api = new Api();
 const app = buildApp(api);
-app.addHook("onClose", () => api.close());
+app.addHook("onClose", async () => {
+  await api.close();
+  api.db.close();
+});
 api.start();
+await api.ready;
 await app.listen({ host: values.host, port: Number(values.port) });
 log.info(`FluidForm API on http://${values.host}:${values.port}`);
-stopOn(() => app.close());
+stopOn(async () => {
+  api.stopping.abort();
+  await app.close();
+});

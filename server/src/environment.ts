@@ -21,7 +21,10 @@ import { isObject, shlexQuote } from "./py.js";
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Set by the sandbox itself, or would let a recorded value change what every command loads.
-export const RESERVED_ENV = new Set(["PATH", "HOME", "PYTHONPATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "LANG"]);
+export const RESERVED_ENV = new Set([
+  "PATH", "HOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME",
+  "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "NODE_OPTIONS", "BASH_ENV", "ENV", "LANG",
+]);
 
 export function toolsDir(): string {
   return resolve(settings.data_dir, "tools");
@@ -56,11 +59,23 @@ export function recordedEnv(): Record<string, string> {
     && !RESERVED_ENV.has(name))) as Record<string, string>;
 }
 
-/** The host ports sandboxed commands may reach: the setting's and this machine's record. */
+function ownApiPort(): number | null {
+  try {
+    const url = new URL(settings.api_base_url);
+    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (!["127.0.0.1", "localhost", "::1", "0.0.0.0"].includes(host)) return null;
+    return Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+  } catch {
+    return null;
+  }
+}
+
+/** The host ports sandboxed commands may reach: the setting's and this machine's record (never FluidForm's own API port). */
 export async function hostPorts(): Promise<number[]> {
   const recorded = overrides().host_ports;
+  const apiPort = ownApiPort();
   const ports = Array.isArray(recorded) ? recorded.filter((port) => Number.isInteger(port) && port > 0 && port < 65536) : [];
-  return [...new Set<number>([...settings.sandbox_host_ports, ...ports])].sort((a, b) => a - b);
+  return [...new Set<number>([...settings.sandbox_host_ports, ...ports])].filter((port) => port !== apiPort).sort((a, b) => a - b);
 }
 
 /** shutil.which: the first executable named ``name`` on ``path``. */

@@ -4,8 +4,8 @@
 // project changed files in the user's own checkout, so only the files its steps changed are output, and
 // that checkout is never pushed from here.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 import { settings } from "./config.js";
 import { type ExecutionRun, folderId } from "./models.js";
 import { writeZip } from "./zip.js";
@@ -55,11 +55,17 @@ export function outputFiles(run: ExecutionRun): OutputFile[] {
     };
     walk(root);
   }
+  const realRoot = realpathSync(root);
   const found: OutputFile[] = [];
   for (const path of candidates.slice(0, MAX_FILES)) {
     try {
       const info = lstatSync(path);
-      if (info.isFile()) found.push({ path: relative(root, path).split("\\").join("/"), size: info.size });
+      if (!info.isFile()) continue;
+      const resolved = realpathSync(path);
+      if (resolved !== realRoot && !resolved.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep)) continue;
+      const rel = relative(root, path).split("\\").join("/");
+      if (rel.startsWith("..") || rel.split("/").some((part) => SKIP.has(part))) continue;
+      found.push({ path: rel, size: info.size });
     } catch {
       // gone, or never there (a project's deleted file)
     }

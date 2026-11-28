@@ -13,7 +13,7 @@
 // again. A command server's ``env`` holds its plain settings. ``tools``: only these of its tools. ``price_usd``: what one call costs, charged to the call's
 // budget as a picture or a search is. A server's tool is offered as mcp__<server>__<tool>.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, openSync, rmSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -127,6 +127,7 @@ export class Session {
   private buffered = "";
   private waiting: ((line: string | null) => void) | null = null;
   private lines: (string | null)[] = [];
+  private closed = false;
 
   constructor(readonly workspace: Workspace, readonly server: string, readonly spec: Spec) {}
 
@@ -137,6 +138,7 @@ export class Session {
 
   async open(): Promise<this> {
     const { SANDBOX_PORTS_DIR, withoutEnvArgs } = await import("./agent.js");
+    if (this.closed) throw new MCPError("the server was stopped");
     const command = shlexJoin(this.spec.command as string[]);
     this.folder = mkdtempSync(join(tmpdir(), "sp-mcp-"));
     const toServer = join(this.folder, "in");
@@ -149,9 +151,15 @@ export class Session {
     const inner = byPath ? `exec ${command} <${SANDBOX_PORTS_DIR}/in >${SANDBOX_PORTS_DIR}/out` : `exec ${command}`;
     const [args, env] = withoutEnvArgs(this.workspace.sandboxArgs(inner, byPath ? this.folder : null));
     Object.assign(env, plainEnv(this.spec), await deps.secretsFor(this.server, this.spec));
+    if (this.closed) throw new MCPError("the server was stopped");
     // Opened both ways, so neither open waits for the other end.
     const inFd = openSync(toServer, "r+");
     const outFd = openSync(fromServer, "r+");
+    if (this.closed) {
+      closeSync(inFd);
+      closeSync(outFd);
+      throw new MCPError("the server was stopped");
+    }
     this.process = spawn(args[0], args.slice(1), { env, stdio: byPath ? ["ignore", "ignore", "ignore"] : [inFd, outFd, "ignore"], detached: true });
     this.process.on("error", () => this.push(null));
     this.process.on("exit", () => this.push(null));
@@ -161,6 +169,12 @@ export class Session {
     this.output.on("error", () => this.push(null));
     this.output.setEncoding("utf8").on("data", (chunk: string) => {
       this.buffered += chunk;
+      if (this.buffered.length > 16 * 1024 * 1024) {
+        this.buffered = "";
+        this.push(null);
+        this.close();
+        return;
+      }
       for (let at = this.buffered.indexOf("\n"); at >= 0; at = this.buffered.indexOf("\n")) {
         this.push(this.buffered.slice(0, at));
         this.buffered = this.buffered.slice(at + 1);
@@ -185,6 +199,8 @@ export class Session {
   }
 
   close(): void {
+    this.closed = true;
+    this.push(null);
     this.input?.destroy();
     this.output?.destroy();
     if (this.process && this.process.exitCode === null) {
@@ -194,12 +210,15 @@ export class Session {
         // already gone
       }
     }
-    if (this.folder) rmSync(this.folder, { recursive: true, force: true });
+    if (this.folder) {
+      rmSync(this.folder, { recursive: true, force: true });
+      this.folder = null;
+    }
   }
 
   send(message: Record<string, unknown>): void {
     if (!this.input || this.input.destroyed) throw new MCPError("the server stopped");
-    this.input.write(pyDumps(message, false) + "\n");
+    this.input.write(JSON.stringify(message) + "\n");
   }
 
   async request(method: string, params: Record<string, unknown>): Promise<Record<string, any>> {
@@ -252,7 +271,7 @@ export class RemoteSession {
   }
 
   private async post(message: Record<string, unknown>): Promise<Response> {
-    const response = await deps.fetch(this.spec.url as string, { method: "POST", signal: this.abort.signal, body: pyDumps(message, false),
+    const response = await deps.fetch(this.spec.url as string, { method: "POST", signal: this.abort.signal, body: JSON.stringify(message),
       headers: { ...this.headers, "content-type": "application/json", accept: "application/json, text/event-stream",
         "mcp-protocol-version": PROTOCOL, ...(this.sessionId ? { "mcp-session-id": this.sessionId } : {}) } });
     if (!response.ok) throw new MCPError(`it answered HTTP ${response.status}: ${head(await response.text().catch(() => ""), 300)}`);
@@ -289,16 +308,27 @@ export class RemoteSession {
   }
 }
 
-async function withSession<T>(workspace: Workspace, server: string, spec: Spec, seconds: number, work: (session: Session | RemoteSession) => Promise<T>): Promise<T> {
+async function withSession<T>(workspace: Workspace, server: string, spec: Spec, seconds: number,
+  work: (session: Session | RemoteSession) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
   const session = remote(spec) ? new RemoteSession(server, spec) : new Session(workspace, server, spec);
   let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   try {
     return await Promise.race([
       session.open().then(work),
-      new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new TimeoutError()), seconds * 1000))),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new TimeoutError()), seconds * 1000);
+        if (signal) {
+          onAbort = () => reject(signal.reason ?? Object.assign(new Error("aborted"), { name: "AbortError" }));
+          if (signal.aborted) onAbort();
+          else signal.addEventListener("abort", onAbort, { once: true });
+        }
+      }),
     ]);
   } finally {
     clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
     session.close();
   }
 }
@@ -368,7 +398,7 @@ export function text(result: Record<string, any>): string {
 }
 
 /** Run one MCP tool in the workspace's sandbox: its output, and whether it went through. */
-export async function call(workspace: Workspace, name: string, args: Record<string, unknown>): Promise<[string, boolean]> {
+export async function call(workspace: Workspace, name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<[string, boolean]> {
   const found = owner(name);
   if (!found) return [`Error: unknown tool ${name}`, false];
   const [server, spec, tool] = found;
@@ -378,10 +408,11 @@ export async function call(workspace: Workspace, name: string, args: Record<stri
   const seconds = typeof spec.timeout === "number" ? spec.timeout : CALL_SECONDS;
   try {
     const result = await withSession(workspace, server, spec, Math.max(1, Math.min(seconds, 600)),
-      (session) => session.request("tools/call", { name: tool, arguments: args }));
+      (session) => session.request("tools/call", { name: tool, arguments: args }), signal);
     if (price && workspace.budget?.recordUsd) await workspace.budget.recordUsd(price);
     return [text(result), !result.isError];
   } catch (error) {
+    if (signal?.aborted) throw error;
     if (error instanceof TimeoutError) return [`Error: ${server} did not answer within ${seconds}s`, false];
     return [`Error: ${server}: ${(error as Error).message ?? error}`, false];
   }

@@ -14,6 +14,7 @@ export type ZipEntry = {
   isDir: boolean;
   method: number;
   offset: number;
+  crc?: number;
 };
 
 const END = 0x06054b50;
@@ -32,6 +33,7 @@ export class ZipFile {
       if (at + 46 > data.length || data.readUInt32LE(at) !== CENTRAL) throw new BadZipFile("Bad central directory");
       const flags = data.readUInt16LE(at + 8);
       const method = data.readUInt16LE(at + 10);
+      const crc = data.readUInt32LE(at + 16);
       const compressSize = data.readUInt32LE(at + 20);
       const fileSize = data.readUInt32LE(at + 24);
       const nameLength = data.readUInt16LE(at + 28);
@@ -39,11 +41,12 @@ export class ZipFile {
       const commentLength = data.readUInt16LE(at + 32);
       const external = data.readUInt32LE(at + 38);
       const offset = data.readUInt32LE(at + 42);
+      if (at + 46 + nameLength + extraLength + commentLength > data.length) throw new BadZipFile("Bad central directory");
       const raw = data.subarray(at + 46, at + 46 + nameLength);
       // Bit 11: the name is UTF-8; otherwise cp437, which for the ASCII names packages have is the same.
       const filename = (flags & 0x800 ? raw.toString("utf8") : raw.toString("latin1"));
       if (flags & 0x1) throw new BadZipFile(`${filename}: encrypted files are not supported`);
-      this.entries.push({ filename, external_attr: external, file_size: fileSize, compress_size: compressSize, isDir: filename.endsWith("/"), method, offset });
+      this.entries.push({ filename, external_attr: external, file_size: fileSize, compress_size: compressSize, isDir: filename.endsWith("/"), method, offset, crc });
       at += 46 + nameLength + extraLength + commentLength;
     }
   }
@@ -51,7 +54,7 @@ export class ZipFile {
   private findEnd(): number {
     const data = this.data;
     for (let at = data.length - 22; at >= Math.max(0, data.length - 22 - 0xffff); at -= 1) {
-      if (data.readUInt32LE(at) === END) return at;
+      if (data.readUInt32LE(at) === END && at + 22 + data.readUInt16LE(at + 20) === data.length) return at;
     }
     throw new BadZipFile("File is not a zip file");
   }
@@ -66,6 +69,7 @@ export class ZipFile {
     const at = item.offset;
     if (at + 30 > this.data.length || this.data.readUInt32LE(at) !== LOCAL) throw new BadZipFile(`${item.filename}: bad local header`);
     const start = at + 30 + this.data.readUInt16LE(at + 26) + this.data.readUInt16LE(at + 28);
+    if (start + item.compress_size > this.data.length) throw new BadZipFile(`${item.filename}: truncated zip entry`);
     const body = this.data.subarray(start, start + item.compress_size);
     let out: Buffer;
     if (item.method === 0) out = Buffer.from(body);
@@ -77,6 +81,7 @@ export class ZipFile {
       }
     } else throw new BadZipFile(`${item.filename}: compression method ${item.method} is not supported`);
     if (out.length !== item.file_size) throw new BadZipFile(`${item.filename}: size does not match`);
+    if (item.crc !== undefined && (crc32(out) >>> 0) !== item.crc) throw new BadZipFile(`${item.filename}: bad CRC-32`);
     return out;
   }
 }

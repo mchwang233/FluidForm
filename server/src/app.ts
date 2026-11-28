@@ -73,10 +73,26 @@ export function buildApp(api: Api): FastifyInstance {
       return reply.code(200).send("OK");
     }
     const mutation = !SAFE_METHODS.has(request.method);
-    // A page FluidForm serves itself (an interface package) writes from FluidForm's own address,
-    // whose host was checked above.
-    const own = origin === `http://${request.headers.host}` || origin === `https://${request.headers.host}`;
-    if (mutation && origin && !own && !settings.allowed_origins.includes(origin)) {
+    if (mutation && request.headers["sec-fetch-site"] === "cross-site" && (!origin || !settings.allowed_origins.includes(origin))) {
+      return reply.code(403).send({ detail: "Origin not allowed" });
+    }
+    // A page FluidForm serves itself (the shipped web console) writes from FluidForm's own address,
+    // whose host was checked above; an uploaded third-party interface at /<id>/ cannot mutate the API.
+    const referer = request.headers.referer;
+    let uploadedInterface = false;
+    if (referer) {
+      try {
+        const seg = new URL(referer).pathname.split("/").filter(Boolean)[0];
+        if (seg && seg !== "web") {
+          const iface = capabilities.load(seg);
+          if (iface && iface.kind === "interface" && iface.source === "upload") uploadedInterface = true;
+        }
+      } catch {
+        // malformed referer
+      }
+    }
+    const own = !uploadedInterface && (origin === `http://${request.headers.host}` || origin === `https://${request.headers.host}`);
+    if (mutation && (uploadedInterface || (origin && !own && !settings.allowed_origins.includes(origin)))) {
       return reply.code(403).send({ detail: "Origin not allowed" });
     }
     if (mutation && executor().platformPending && !/\/(cancel|pause)$/.test(request.url.split("?")[0])) {

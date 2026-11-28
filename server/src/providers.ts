@@ -409,8 +409,8 @@ export class ProviderRegistry {
     try {
       const wire = apiProviders.ofModel(modelId)?.wire;
       if (!wire) throw new ProviderError(`${provider} 没有启用：在能力里打开它的模型包。`);
-      if (wire === "anthropic") return await this.anthropic(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
-      if (wire === "gemini") return await this.gemini(model, prompt, images, agent, spend_ok, effort, conversation, signal, dialogue);
+      if (wire === "anthropic") return await this.anthropic(model, prompt, images, agent, spend_ok, effort, agent ? conversation : null, signal, dialogue);
+      if (wire === "gemini") return await this.gemini(model, prompt, images, agent, spend_ok, effort, agent ? conversation : null, signal, dialogue);
       return await this.openaiCompatible(provider, model, prompt, images, agent, spend_ok, agent ? conversation : null, effort, signal, dialogue);
     } finally {
       agent?.close(); // this attempt's /tmp
@@ -425,7 +425,7 @@ export class ProviderRegistry {
     const timeout = AbortSignal.timeout(settings.api_request_timeout * 1000);
     let response: Response;
     if (declared.wire === "gemini") {
-      response = await this.fetch(`${declared.models_url}?${new URLSearchParams({ key })}`, { signal: timeout });
+      response = await this.fetch(declared.models_url, { headers: { "x-goog-api-key": key }, signal: timeout });
     } else if (declared.wire === "anthropic") {
       response = await this.fetch(declared.models_url, { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: timeout });
     } else {
@@ -823,7 +823,7 @@ export class ProviderRegistry {
     const notice = memory.userMessage(state.provider, "Task memory (observations, verify before accepting):\n" + pyDumps(summary, false)
       + `\nFull history: RecallHistory archive_id=${archiveId}.`);
     // No private marker is sent to providers; archive references distinguish generated memory.
-    const reduced = [...original, notice];
+    const reduced = mergeAdjacentUsers(state.provider, [...original, notice]);
     if (Math.floor(boundBytes(reduced) / 3) > context * 0.5) throw new ProviderError("必须保留的任务约束超过上下文容量，已归档；需要拆分步骤。");
     Object.assign(state, { history: reduced, summary, memory_message: notice, last_input_tokens: 0, last_history_size: 0 });
     conversation.save();
@@ -1000,7 +1000,7 @@ export class ProviderRegistry {
         body, (target, limit) => {
           target.generationConfig ??= {};
           target.generationConfig.maxOutputTokens = limit;
-        }, state, spendOk, { params: { key: process.env[PROVIDER_ENV.google]!, alt: "sse" }, stream: streaming.gemini, signal: stepSignal });
+        }, state, spendOk, { headers: { "x-goog-api-key": process.env[PROVIDER_ENV.google]! }, params: { alt: "sse" }, stream: streaming.gemini, signal: stepSignal });
       if (response.isError) throw new ProviderError(`google returned ${response.status}: ${head(response.text, 300)}`);
       const data = response.json();
       const usage = data.usageMetadata || {};
@@ -1009,7 +1009,7 @@ export class ProviderRegistry {
       const parts: Json[] = (candidate.content || {}).parts || [];
       const calls = parts.filter((part) => "functionCall" in part).map((part) => part.functionCall);
       if (calls.length) state.history.push({ role: "model", parts });
-      const text = parts.map((part) => part.text ?? "").join("");
+      const text = parts.filter((part) => !part.thought).map((part) => part.text ?? "").join("");
       return [text, calls.map((call, i): Call => [`${call.name}:${i}`, call.name, call.args || {}]),
         usage.promptTokenCount ?? 0, (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0), candidate.finishReason === "MAX_TOKENS"];
     };
@@ -1097,6 +1097,27 @@ export function trace(path: string, call: Json): void {
   } catch {
     // skipped
   }
+}
+
+/** Merge adjacent ``role: "user"`` messages for Anthropic and Gemini so compacted histories satisfy
+ *  strict role alternation without dropping any user instruction or image block. */
+function mergeAdjacentUsers(provider: string | undefined, messages: Json[]): Json[] {
+  if (provider !== "anthropic" && provider !== "google") return messages;
+  const out: Json[] = [];
+  for (const msg of messages) {
+    const prev = out.at(-1);
+    if (prev && prev.role === "user" && msg.role === "user") {
+      if (provider === "google") {
+        prev.parts = [...(Array.isArray(prev.parts) ? prev.parts : []), ...(Array.isArray(msg.parts) ? msg.parts : [])];
+      } else {
+        const blocks = (c: unknown) => (typeof c === "string" ? [{ type: "text", text: c }] : Array.isArray(c) ? c : []);
+        prev.content = [...blocks(prev.content), ...blocks(msg.content)];
+      }
+    } else {
+      out.push({ ...msg });
+    }
+  }
+  return out;
 }
 
 /** Tool arguments arrive as a JSON string; malformed ones become an error the tool reports. */

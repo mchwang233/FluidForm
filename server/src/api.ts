@@ -204,6 +204,8 @@ export class Api {
   // Tasks being planned again with the user's choices (one replanning at a time per task).
   readonly replanning = new Set<string>();
   discovery: { at: number; result: unknown } = { at: 0, result: null };
+  readonly stopping = new AbortController();
+  ready: Promise<void> = Promise.resolve();
   private readonly background: Task<void>[] = [];
 
   constructor() {
@@ -253,12 +255,14 @@ export class Api {
     // Services first: the tasks resumed below ask pricing, which waits for its service to start.
     if (settings.capability_packages) this.services.startAll();
     // Packages shipped with FluidForm, the first time (or a newer version): installed and run.
-    this.background.push(new Task(async () => {
+    const offerTask = new Task(async () => {
       for (const item of await bundled.offer()) {
         await this.services.stop(item.id);
         if (item.kind === "service" && item.status === "active") this.services.start(item);
       }
-    }));
+    });
+    this.background.push(offerTask);
+    this.ready = offerTask.settled();
     // The platform engineer's change to one package is installed without a restart.
     executor.packageHooks = {
       install: async (source) => {
@@ -312,6 +316,7 @@ export class Api {
 
   /** api.ts's lifespan, its end. */
   async close(): Promise<void> {
+    this.stopping.abort();
     for (const task of this.background) task.cancel();
     await Promise.all(this.background.map((task) => task.settled()));
     await this.automations.runner.stopAll();

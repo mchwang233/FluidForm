@@ -5,7 +5,7 @@
 // and can roll it back even when the new version does not start.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -141,16 +141,34 @@ export function installFiles(job: Job, rollback = false): void {
   const source = join(job.folder, rollback ? "before" : "source");
   const wanted = (rollback ? job.before : job.after) as Record<string, FileState>;
   const realRoot = realpathSync(root);
-  for (const name of job.files) {
+  const checkTarget = (name: string): string => {
     const destination = join(root, name);
     let parent = dirname(destination);
     while (!existsSync(parent)) parent = dirname(parent);
     const linked = existsSync(destination) || isLink(destination) ? lstatSync(destination).isSymbolicLink() : false;
     if (!inside(join(realpathSync(parent), relative(parent, destination)), realRoot) || linked) throw new RepairError(`修复路径越界或变成符号链接：${name}`);
-    if (!(name in wanted)) {
-      rmSync(destination, { force: true });
-      continue;
+    return destination;
+  };
+  for (const name of job.files) checkTarget(name);
+  // Delete removed paths deepest-first and prune newly-empty parent folders before writing files,
+  // avoiding EISDIR when replacing a folder with a file (or vice versa on rollback).
+  for (const name of [...job.files].filter((item) => !(item in wanted)).sort((a, b) => b.length - a.length)) {
+    const destination = checkTarget(name);
+    rmSync(destination, { force: true });
+    let dir = dirname(destination);
+    while (inside(dir, root)) {
+      try {
+        rmdirSync(dir);
+      } catch {
+        break;
+      }
+      dir = dirname(dir);
     }
+  }
+  for (const name of job.files) {
+    if (!(name in wanted)) continue;
+    const destination = checkTarget(name);
+    if (existsSync(destination) && statSync(destination).isDirectory()) rmdirSync(destination);
     mkdirSync(dirname(destination), { recursive: true });
     const temporary = destination + ".sp-repair-tmp";
     copyFileSync(join(source, name), temporary);

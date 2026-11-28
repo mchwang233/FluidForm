@@ -136,3 +136,23 @@ test("who shows the work hears each tool call as it starts", async () => {
   assert.deepEqual(log.map((entry) => entry.tool), ["Write"]);
   assert.equal(log[0].ok, true);
 });
+
+test("Gemini excludes thought parts from final text and sends key via header, and Anthropic rejects truncated tool JSON", async () => {
+  process.env.GEMINI_API_KEY = "secret-gemini-key";
+  const body = sse(
+    { candidates: [{ content: { role: "model", parts: [{ text: "internal reasoning", thought: true }, { text: '{"passed": true}' }] }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 4, thoughtsTokenCount: 6 } },
+  );
+  const requests: Sent[] = [];
+  const res = await registryWith([streamed(body)], [], requests).complete("google:gemini-x", "review");
+  assert.equal(res.text, '{"passed": true}');
+  assert.equal(requests[0].url.searchParams.get("key"), null);
+  assert.equal(requests[0].headers.get("x-goog-api-key"), "secret-gemini-key");
+
+  const assembled = streaming.anthropic([
+    { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "t1", name: "LS", input: {} } },
+    { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"path": "src' } },
+    { type: "message_delta", delta: { stop_reason: "max_tokens" }, usage: { output_tokens: 10 } },
+  ]);
+  assert.ok("__invalid__" in assembled.content[0].input);
+});

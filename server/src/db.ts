@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at DESC);
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
     kind TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS shared_repairs (
 CREATE TABLE IF NOT EXISTS engineer_jobs (
     id TEXT PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_jobs_created ON engineer_jobs(created_at DESC);
 CREATE TABLE IF NOT EXISTS retrospectives (
     run_id TEXT PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL
 );
@@ -54,6 +56,7 @@ CREATE TABLE IF NOT EXISTS learning_reviews (
 CREATE TABLE IF NOT EXISTS improvements (
     id TEXT PRIMARY KEY, run_id TEXT NOT NULL, body TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_improvements_run ON improvements(run_id);
 CREATE TABLE IF NOT EXISTS improvement_effects (
     improvement_id TEXT NOT NULL, run_id TEXT NOT NULL, body TEXT NOT NULL,
     PRIMARY KEY(improvement_id, run_id)
@@ -74,12 +77,17 @@ CREATE TABLE IF NOT EXISTS model_calls (
     id TEXT PRIMARY KEY, run_id TEXT, node_id TEXT, started_at TEXT NOT NULL, body TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_calls_run ON model_calls(run_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_calls_started ON model_calls(started_at DESC);
 `;
 
 export class Database {
   readonly connection: DatabaseSync;
   /** Where the file is (PRAGMA database_list's path). */
   readonly path: string;
+  runsVersion = 1;
+  retrospectivesVersion = 1;
+  private isClosed = false;
+  private readonly statements = new Map<string, ReturnType<DatabaseSync["prepare"]>>();
 
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -87,23 +95,41 @@ export class Database {
     // Wait for another writer (a repair's backup, a tool reading a copy) as Python's sqlite3 does,
     // 5 seconds, instead of failing at once.
     this.connection = new DatabaseSync(path, { timeout: 5000 });
+    try {
+      this.connection.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+    } catch {
+      // keep default journal mode if unavailable
+    }
     this.connection.exec(SCHEMA);
   }
 
   close(): void {
+    if (this.isClosed) return;
+    this.isClosed = true;
+    this.statements.clear();
     this.connection.close();
   }
 
+  private stmt(sql: string) {
+    let cached = this.statements.get(sql);
+    if (!cached) {
+      cached = this.connection.prepare(sql);
+      if (this.statements.size > 128) this.statements.clear();
+      this.statements.set(sql, cached);
+    }
+    return cached;
+  }
+
   private run(sql: string, ...values: SQLInputValue[]) {
-    return this.connection.prepare(sql).run(...values);
+    return this.stmt(sql).run(...values);
   }
 
   private one(sql: string, ...values: SQLInputValue[]): Row | undefined {
-    return this.connection.prepare(sql).get(...values) as Row | undefined;
+    return this.stmt(sql).get(...values) as Row | undefined;
   }
 
   private all(sql: string, ...values: SQLInputValue[]): Row[] {
-    return this.connection.prepare(sql).all(...values) as Row[];
+    return this.stmt(sql).all(...values) as Row[];
   }
 
   /** ``work`` in one transaction: all of it or none. */
@@ -183,6 +209,7 @@ export class Database {
   saveRetrospective(runId: string, body: Json): void {
     this.run("INSERT OR REPLACE INTO retrospectives(run_id, body, created_at) VALUES (?, ?, ?)",
       runId, JSON.stringify(body), (body.started_at as string) || "");
+    this.retrospectivesVersion += 1;
   }
 
   retrospective(runId: string): Json | null {
@@ -191,7 +218,9 @@ export class Database {
 
   /** Removes these tasks' looks back; how many there were. */
   deleteRetrospectives(runIds: string[]): number {
-    return this.transaction(() => runIds.reduce((count, id) => count + Number(this.run("DELETE FROM retrospectives WHERE run_id = ?", id).changes), 0));
+    const count = this.transaction(() => runIds.reduce((sum, id) => sum + Number(this.run("DELETE FROM retrospectives WHERE run_id = ?", id).changes), 0));
+    if (count) this.retrospectivesVersion += 1;
+    return count;
   }
 
   retrospectives(): Json[] {
@@ -271,6 +300,7 @@ export class Database {
   saveRun(run: ExecutionRun): void {
     this.run("INSERT OR REPLACE INTO runs(id, status, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
       run.id, run.status, JSON.stringify(run), columnTime(run.created_at), columnTime(run.updated_at));
+    this.runsVersion += 1;
   }
 
   getRun(runId: string): ExecutionRun | null {
@@ -281,11 +311,17 @@ export class Database {
     return this.all("SELECT body FROM runs ORDER BY created_at DESC").map((row) => this.body(row, ExecutionRunSchema)!);
   }
 
+  /** Whether any remaining run still references ``attachmentId``. */
+  attachmentReferenced(attachmentId: string): boolean {
+    if (!/^[A-Za-z0-9_-]+$/.test(attachmentId)) return false;
+    return Boolean(this.one("SELECT 1 FROM runs WHERE body LIKE ? LIMIT 1", `%"${attachmentId}"%`));
+  }
+
   /** Delete a finished run (with ``chat``, also a chat: a draft that is never run) and its events
    *  atomically, leaving workspace files alone. What was learned from it stays: its retrospective,
    *  learning review, improvements and their effects are what later tasks are planned with. */
   deleteRun(runId: string, chat = false): boolean {
-    return this.transaction(() => {
+    const ok = this.transaction(() => {
       const deleted = this.run("DELETE FROM runs WHERE id = ? AND status IN (?, ?, ?, ?, ?)",
         runId, "succeeded", "failed", "cancelled", "incomplete", chat ? "draft" : "succeeded");
       if (!deleted.changes) {
@@ -300,6 +336,8 @@ export class Database {
       }
       return true;
     });
+    if (ok) this.runsVersion += 1;
+    return ok;
   }
 
   saveConversation(runId: string, nodeId: string, body: Json): void {

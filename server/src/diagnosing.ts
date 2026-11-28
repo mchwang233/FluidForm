@@ -47,7 +47,7 @@ export abstract class Diagnosing extends Leading {
    *  and the last failure is thrown. */
   async diagnoseWith(given: ExecutionRun, diagnosis: Diagnosis, node: TaskNode | null, prompt: string, workspace: string, repair: boolean,
     edit = false): Promise<[ProviderResult, string, number]> {
-    return engineer.diagnoseWith.call(this, given, diagnosis, node, prompt, workspace, repair);
+    return engineer.diagnoseWith.call(this, given, diagnosis, node, prompt, workspace, repair, edit);
   }
 
   /** Act on the diagnosis of a failed attempt: a repair the lead asked for goes back to the lead

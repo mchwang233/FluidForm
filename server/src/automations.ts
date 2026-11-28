@@ -302,7 +302,7 @@ export class CapabilityAutomations {
         sent = this.sendFiles(capability, automation, latest, names);
         const listed = sent.map((path) => basename(path).split("-").slice(1).join("-") || basename(path)).join("、");
         if (sent.length) text = `${text ?? ""}\n\n（发了：${listed}）`.trim();
-        this.recordAnswer(latest.id, answer.id, text ?? "");
+        await this.recordAnswer(latest.id, answer.id, text ?? "");
       }
       text = await this.task(capability, asked, automation, latest, answer.id, text, origin);
       if (asked.conversation && text) {
@@ -468,7 +468,7 @@ export class CapabilityAutomations {
     const [shown, remembered] = await chats.remember(place, text, settings.user_memory && Boolean(asked.conversation));
     if (shown === text) return text;
     if (asked.conversation && settings.user_memory) for (const fact of remembered) automation.note(`记下：${cut(fact, 60)}`);
-    this.recordAnswer(chat.id, answerId, shown);
+    await this.recordAnswer(chat.id, answerId, shown);
     return shown;
   }
 
@@ -499,10 +499,12 @@ export class CapabilityAutomations {
   }
 
   /** A chat keeps an answer as the person got it (without the lines meant for FluidForm). */
-  recordAnswer(chatId: string, answerId: string, text: string): void {
-    const record = this.api.getTask(chatId);
-    for (const item of record.lead_messages) if (item.id === answerId) item.text = text;
-    this.api.db.saveRun(record);
+  async recordAnswer(chatId: string, answerId: string, text: string | null): Promise<void> {
+    await this.api.executor.locked(chatId, () => {
+      const record = this.api.getTask(chatId);
+      for (const item of record.lead_messages) if (item.id === answerId) item.text = text ?? "";
+      this.api.db.saveRun(record);
+    });
   }
 
   /** When the chat's answer asks for a task (its TASK line), plan it, with the conversation as its
@@ -534,7 +536,7 @@ export class CapabilityAutomations {
         shown = `${shown}\n\n（排计划没成功：${cut(reason, 200)}）`.trim();
       }
     }
-    this.recordAnswer(chat.id, answerId, shown);
+    await this.recordAnswer(chat.id, answerId, shown);
     return shown;
   }
 

@@ -6,7 +6,8 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { bridgeScript, hideHomes, listenScript, ownNetwork, SANDBOX_PORTS_DIR, sandboxAvailable, sandboxPorts, portBridge, Workspace } from "./agent.js";
+import { bridgeScript, hideHomes, listenScript, ownNetwork, PROXY_ENV, SANDBOX_PORTS_DIR, sandboxAvailable, sandboxPorts, portBridge, withoutEnvArgs, Workspace } from "./agent.js";
+import { settings } from "./config.js";
 import * as environment from "./environment.js";
 import { DomainProxy, PROXY_PORT } from "./capability-sandbox.js";
 import * as extensions from "./extensions.js";
@@ -15,6 +16,7 @@ import type { CliText, RunOptions } from "./cli-channels.js";
 import type { Attachment } from "./models.js";
 import type * as progress from "./progress.js";
 import * as provided from "./provided.js";
+import { SECRET_ENV } from "./secret-names.js";
 
 /** One call of a package's CLI, as FluidForm sets it up. */
 export type ChannelCall = {
@@ -173,9 +175,24 @@ export function fileSystem(channel: ModelChannel, executable: string, call: Chan
   const shared = isDir(tools) ? ["--ro-bind", tools, tools] : [];
   const readable = [...new Set(call.readable.map(real))].filter((folder) => isDir(folder) && folder !== cwd).sort()
     .flatMap((folder) => ["--ro-bind", folder, folder]);
-  return ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", ...hideHomes(), ...state,
-    ...outer, call.lead ? "--ro-bind" : "--bind", cwd, cwd, ...inner, ...masked, ...shared, ...readable, ...keepProgram,
+  return ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", ...hideHomes(), ...state, ...keepProgram,
+    ...outer, call.lead ? "--ro-bind" : "--bind", cwd, cwd, ...inner, ...masked, ...shared, ...readable,
     "--die-with-parent", "--chdir", cwd];
+}
+
+function sandboxEnv(channel: ModelChannel, cwd: string, network: boolean, extra: Record<string, string> = {}): Record<string, string> {
+  const keys = new Set(Object.values(SECRET_ENV));
+  const home = real(homedir());
+  let env: Record<string, string> = {
+    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: (channel.state ?? []).some((folder) => isDir(join(home, folder))) ? home : cwd,
+    LANG: process.env.LANG ?? "C.UTF-8",
+    TMPDIR: "/tmp",
+  };
+  for (const name of settings.sandbox_env) if (process.env[name] !== undefined && !keys.has(name)) env[name] = process.env[name]!;
+  if (network) for (const name of PROXY_ENV) if (process.env[name] !== undefined) env[name] = process.env[name]!;
+  env = environment.commandEnv(env);
+  return { ...env, ...extra };
 }
 
 const PROXY = `http://127.0.0.1:${PROXY_PORT}`;
@@ -196,8 +213,12 @@ export async function withSandbox<T>(channel: ModelChannel, argv: string[], call
   const files = fileSystem(channel, argv[0], call);
   // By its real path: a link to it (npm's bin/) may be in the hidden home.
   argv = [real(argv[0]), ...argv.slice(1)];
-  const env = { TMPDIR: "/tmp" };
-  if (network && !call.lead) return work(await deps.ownNetwork(["bwrap", ...files, "--", ...argv]), env);
+  if (network && !call.lead) {
+    const cleanEnv = sandboxEnv(channel, real(call.cwd), true);
+    const envArgs = ["--clearenv", ...Object.entries(cleanEnv).flatMap(([k, v]) => ["--setenv", k, v])];
+    const [cmd, runEnv] = withoutEnvArgs(["bwrap", ...files, ...envArgs, "--", ...argv]);
+    return work(await deps.ownNetwork(cmd), runEnv);
+  }
   const ports = call.lead ? [] : await deps.hostPorts();
   const proxy = await new DomainProxy(channel.hosts ?? [], (line) => log.info(`${channel.id}: ${line}`)).open();
   try {
@@ -205,9 +226,11 @@ export async function withSandbox<T>(channel: ModelChannel, argv: string[], call
       // The host ports' sockets and the proxy's, side by side where the listeners inside look.
       const bridge = folder ? ["--bind", folder, SANDBOX_PORTS_DIR, "--bind", `${proxy.folder}/${PROXY_PORT}.sock`, `${SANDBOX_PORTS_DIR}/${PROXY_PORT}.sock`]
         : ["--bind", proxy.folder!, SANDBOX_PORTS_DIR];
-      const command = ["bwrap", ...files, ...bridge, "--unshare-net", "--", "/bin/bash", "-c",
-        listenScript([PROXY_PORT, ...ports]) + 'exec "$@"', "bash", ...argv];
-      return work(command, { ...env, ...PROXIED_ENV });
+      const cleanEnv = sandboxEnv(channel, real(call.cwd), false, PROXIED_ENV);
+      const envArgs = ["--clearenv", ...Object.entries(cleanEnv).flatMap(([k, v]) => ["--setenv", k, v])];
+      const [command, runEnv] = withoutEnvArgs(["bwrap", ...files, ...bridge, "--unshare-net", ...envArgs, "--", "/bin/bash", "-c",
+        listenScript([PROXY_PORT, ...ports]) + 'exec "$@"', "bash", ...argv]);
+      return work(command, runEnv);
     });
   } finally {
     await proxy.close();

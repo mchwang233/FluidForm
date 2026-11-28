@@ -128,3 +128,31 @@ test("a pricing package that does not answer stops the spending", async () => {
     Object.assign(pricing.deps, saved);
   }
 });
+
+test("concurrent reservations serialize admission without over-admitting or losing wakeups", async () => {
+  const saved = { ...pricing.deps };
+  const origAsk = pricing.deps.ask!;
+  pricing.deps.ask = async (method, params) => {
+    await new Promise((done) => setTimeout(done, 5));
+    return origAsk(method, params);
+  };
+  try {
+    const reservations = new Map<unknown, number>();
+    const changed = new AsyncEvent();
+    const make = () => new RequestBudget({ models, remaining: () => 0.0015, reservations, charge, changed });
+    const a = make();
+    const b = make();
+    let peak = 0;
+    const runOne = async (item: RequestBudget) => {
+      const out = await item.reserve("test:model", { input: "work" }, 1000);
+      assert.ok(out >= 1);
+      peak = Math.max(peak, [...reservations.values()].reduce((s, v) => s + v, 0));
+      await new Promise((done) => setTimeout(done, 8));
+      item.release();
+    };
+    await Promise.all([runOne(a), runOne(b)]);
+    assert.ok(peak <= 0.0015 + 1e-9, `peak reservation ${peak} exceeded remaining 0.0015`);
+  } finally {
+    Object.assign(pricing.deps, saved);
+  }
+});

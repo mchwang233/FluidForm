@@ -90,7 +90,8 @@ export class Executor extends Preflighting {
 
   async shutdown(): Promise<void> {
     this.closing = true;
-    const all = new Set<Task<unknown>>([...this.tasks.values(), ...this.diagnosing.values(), ...this.learningTasks.values(), ...this.namingTasks.values()]);
+    const all = new Set<Task<unknown>>([...this.tasks.values(), ...this.diagnosing.values(), ...this.learningTasks.values(),
+      ...this.namingTasks.values(), ...this.leadTasks.values(), ...this.chatSummaries.values(), ...this.capabilityTasks.values()]);
     for (const task of [this.maintenanceTask, this.engineerTask]) if (task) all.add(task);
     for (const task of all) if (!task.done) task.cancel();
     await Promise.all([...all].map((task) => task.settled()));
@@ -225,7 +226,7 @@ export class Executor extends Preflighting {
     const started = new Set([...inFlight].map((item) => (item.startsWith(HEAD) ? item.slice(HEAD.length) : item)));
     const completed = new Set(run.plan.nodes.filter((node) => node.status === "succeeded").map((node) => node.id));
     const ready = run.plan.nodes.filter((node) => node.status === "pending" && !started.has(node.id) && node.dependencies.every((dep) => completed.has(dep)));
-    let reserved = run.actual_cost_usd + run.plan.nodes.filter((node) => inFlight.has(node.id)).reduce((sum, node) => sum + node.estimated_cost_usd, 0);
+    let reserved = run.actual_cost_usd + run.plan.nodes.filter((node) => started.has(node.id)).reduce((sum, node) => sum + node.estimated_cost_usd, 0);
     let heldBack = false;
     const load = new Map<string, number>();
     for (const node of run.plan.nodes) {
@@ -244,9 +245,17 @@ export class Executor extends Preflighting {
     };
     for (const node of ready) {
       if (node.status !== "pending") continue;
-      if (!(await this.admitToolChannel(run, node, reserved))) {
+      const [admitted, toLead] = await this.locked(run.id, async () => {
+        const latest = this.db.getRun(run.id) ?? run;
+        const current = latest.plan.nodes.find((item) => item.id === node.id);
+        if (!current || current.status !== "pending") return [false, false] as const;
+        const ok = await this.admitToolChannel(latest, current, reserved);
+        if (current !== node) Object.assign(node, current);
+        return [ok, handedToLead(current)] as const;
+      });
+      if (!admitted) {
         // Handed to its lead at its limit: counted as at work, so the task waits for the decision.
-        if (handedToLead(node)) {
+        if (toLead) {
           running.set(new Task(() => this.leadAtLimit(run.id, node.id)), node.id);
           started.add(node.id);
         }
@@ -268,6 +277,7 @@ export class Executor extends Preflighting {
       if (!this.canHeadStart(run, node, started)) continue;
       const model = this.modelLookup[node.model_id!];
       if (atCapacity(model) || reserved + node.estimated_cost_usd > run.budget_usd) continue;
+      reserved += node.estimated_cost_usd;
       load.set(model.provider, (load.get(model.provider) ?? 0) + 1);
       started.add(node.id);
       running.set(new Task(() => this.headStart(run.id, node.id)), HEAD + node.id);
@@ -307,11 +317,14 @@ export class Executor extends Preflighting {
     if (!begun) return;
     const [run, node] = begun;
     this.emit(runId, "node.head_start", { node_id: nodeId, model_id: node.model_id });
+    const key = stepKey(runId, nodeId);
+    const self = currentTask() as Task<void> | null;
+    if (self) this.nodeTasks.set(key, self);
     let report = "";
     let error: string | null = null;
     let skipped = false;
     const stop = new AbortController();
-    const outer = currentTask()?.signal;
+    const outer = self?.signal;
     const signal = outer ? AbortSignal.any([outer, stop.signal]) : stop.signal;
     let timer: NodeJS.Timeout | undefined;
     try {
@@ -332,6 +345,7 @@ export class Executor extends Preflighting {
       else error = head(String((problem as Error)?.message ?? problem), 500); // the step itself still runs once its inputs are ready
     } finally {
       clearTimeout(timer);
+      if (this.nodeTasks.get(key) === self) this.nodeTasks.delete(key);
       await this.locked(runId, () => {
         const latest = this.db.getRun(runId);
         const current = latest?.plan.nodes.find((item) => item.id === nodeId);

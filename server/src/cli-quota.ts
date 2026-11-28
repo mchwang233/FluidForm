@@ -142,8 +142,16 @@ export async function askCodex(home: string | null = null, timeout = ASK_TIMEOUT
   const env = { ...process.env, ...(home ? { CODEX_HOME: home } : {}) };
   const messages = [{ jsonrpc: "2.0", id: 1, method: "initialize", params: { clientInfo: { name: "fluidform", version: "1" } } },
     { jsonrpc: "2.0", method: "initialized" }, { jsonrpc: "2.0", id: 2, method: "account/rateLimits/read" }];
-  const child = spawn(executable, ["app-server"], { stdio: ["pipe", "pipe", "ignore"], env });
-  const timer = setTimeout(() => child.kill("SIGKILL"), timeout * 1000);
+  const child = spawn(executable, ["app-server"], { stdio: ["pipe", "pipe", "ignore"], env, detached: true });
+  const killTree = () => {
+    try {
+      if (child.pid) process.kill(-child.pid, "SIGKILL");
+      else child.kill("SIGKILL");
+    } catch {
+      child.kill("SIGKILL");
+    }
+  };
+  const timer = setTimeout(killTree, timeout * 1000);
   const closed = new Promise((done) => child.on("close", done));
   child.on("error", () => undefined);
   child.stdin!.on("error", () => undefined);
@@ -168,7 +176,7 @@ export async function askCodex(home: string | null = null, timeout = ASK_TIMEOUT
     return null;
   } finally {
     clearTimeout(timer);
-    child.kill("SIGKILL");
+    killTree();
     await closed;
   }
 }
