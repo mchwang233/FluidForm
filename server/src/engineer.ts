@@ -14,9 +14,9 @@ import { nowIso } from "./lax.js";
 import { type Attachment, type Diagnosis, ENGINEER_DONE, FINISHED, ENGINEER_WAITING, type EngineerJob, EngineerJobSchema, EngineerMessageSchema, type ExecutionRun, type TaskNode, isPlatformScope } from "./models.js";
 import type { Capability } from "./models.js";
 import { log } from "./log.js";
-import { RepairError, type RepairJob } from "./platform-repair.js";
+import { COMPONENT_GUIDES, failureOutput, REPAIR_GUIDES, RepairError, repairGuide, type RepairJob } from "./platform-repair.js";
 import * as worker from "./repair-worker.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ProviderResult, SpendOk } from "./providers.js";
 import { AsyncEvent, fixed, head, pyRegex, pyRound, splitlines, tail } from "./py.js";
@@ -25,8 +25,8 @@ import { engineers } from "./routing.js";
 import { SelfRepair } from "./self-repair.js";
 import { ENGINEER_CALLERS } from "./supervisor.js";
 import { lead } from "./ports/lead.js";
-import { currentTask, isCancelled, Task } from "./tasks.js";
-import * as engineering from "./engineering.js";
+import { currentTask, isCancelled, sleep, Task } from "./tasks.js";
+import { engineer as engineerPort } from "./ports/engineer.js";
 
 // Models tried in turn when one fails (its usage ran out, say).
 export const MAX_ENGINEERS = 3;
@@ -422,8 +422,34 @@ export abstract class Engineering extends SelfRepair {
     }
   }
 
-  private engineerPlan(job: EngineerJob): Promise<void> {
-    return engineering.engineerPlan.call(this, job);
+  private async engineerPlan(job: EngineerJob): Promise<void> {
+    const port = await engineerPort("engineer");
+    job.status = "planning";
+    this.engineerSave(job);
+    const copy = await this.platform.prepare(job.run_id, null);
+    let text: string;
+    try {
+      const source = join(copy.folder, "source");
+      text = await this.engineerCall(job, port.planPrompt(job, repairGuide(source, COMPONENT_GUIDES)), source);
+    } finally {
+      rmSync(copy.folder, { recursive: true, force: true });
+    }
+    let [report, status, question, choices] = readReply(text);
+    if (status === "needs_input" && question) {
+      this.engineerAsk(job, report, question, choices);
+      return;
+    }
+    // Every component change, a retrospective's too, waits for the user's approval of its plan and
+    // again before it is applied.
+    let headline: string;
+    let plain: string;
+    [headline, plain, report] = plainLines(report);
+    job.headline = headline || job.headline;
+    job.plan_plain = plain;
+    job.plan = report;
+    job.status = "plan_ready";
+    job.messages.push(message({ role: "engineer", text: "方案写好了，请看过后批准，或回复要改的地方。" }));
+    this.engineerSave(job);
   }
 
   /** One of the platform's own checks starting (``ok`` null) or ending, in the job's log. */
@@ -448,8 +474,70 @@ export abstract class Engineering extends SelfRepair {
     this.engineerSave(job);
   }
 
-  private engineerEdit(job: EngineerJob): Promise<void> {
-    return engineering.engineerEdit.call(this, job);
+  private async engineerEdit(job: EngineerJob): Promise<void> {
+    const port = await engineerPort("engineer");
+    job.status = "editing";
+    this.engineerSave(job);
+    let copy = this.platform.load(job.repair_id);
+    const fresh = !copy || !["editing", "validating", "validated"].includes(copy.status) || this.platform.stale(copy);
+    if (fresh) {
+      // A first edit, or the live source has changed since: a fresh copy, so applying it cannot
+      // overwrite what changed.
+      copy = await this.platform.prepare(job.run_id, null);
+      copy.engineer_job_id = job.id;
+      this.platform.save(copy);
+      job.repair_id = copy.id;
+      this.engineerSave(job);
+    }
+    const source = join(copy!.folder, "source");
+    const guide = repairGuide(source, job.kind === "component" ? COMPONENT_GUIDES : REPAIR_GUIDES);
+    const done = fresh ? [] : this.platform.edited(copy!);
+    // The same copy as before (a restart cut the work off, or the user asked for changes to it): it goes
+    // on from what is there instead of starting over.
+    let feedback = done.length ? port.continueNote(done) : "";
+    let report = "";
+    let checks: { name: string }[] = [];
+    for (let attempt = 0; attempt < settings.platform_repair_attempts; attempt += 1) {
+      const text = await this.engineerCall(job, port.editPrompt(job, guide, feedback), source);
+      let status: string | null;
+      let question: string | null;
+      let choices: string[];
+      [report, status, question, choices] = readReply(text);
+      if (status === "needs_input" && question) {
+        this.engineerAsk(job, report, question, choices);
+        return;
+      }
+      job.status = "validating";
+      this.engineerSave(job);
+      try {
+        checks = await this.platform.check(copy!, (title, ok) => this.engineerCheckSeen(job, title, ok));
+        break;
+      } catch (error) {
+        if (!(error instanceof RepairError) || attempt + 1 === settings.platform_repair_attempts) throw error;
+        feedback = port.checkFailed(error.message) + "\n";
+        job.status = "editing";
+        this.engineerSave(job);
+      }
+    }
+    job.files = copy!.files;
+    job.checks = checks.map((item) => item.name);
+    let headline: string;
+    let plain: string;
+    [headline, plain, report] = plainLines(report);
+    job.headline = headline || job.headline;
+    job.plain = plain;
+    job.diff = this.platform.diff(copy!);
+    job.report = report;
+    job.error = null;
+    job.messages.push(message({ role: "engineer", text: plain || report || "改好了，检查全部通过。" }));
+    if (job.kind === "component") {
+      job.status = "ready";
+      this.engineerSave(job);
+      return;
+    }
+    // A repair applies on its own once checked, after any change already waiting to apply.
+    while (this.platformPending) await sleep(1);
+    this.engineerApply(job);
   }
 
   /** One piece of the engineer's work on the strongest model that can edit files (membership CLIs

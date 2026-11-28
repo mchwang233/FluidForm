@@ -75,7 +75,7 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 （步骤自带的检查命令、卡住检查，`review.ts`）。
 
 第 4 步已完成（2026-11-22）：怎么查、怎么修环境、怎么修和扩展 FluidForm 自身（提示词和各轮流程）都在
-`server/packages/engineer/src`，本体通过 `engineering.ts` 动态加载。留在本体的是按诊断结论改任务
+`server/packages/engineer/src`，本体通过 `engineering.ts`（2026-11-28 起是端口 `ports/engineer.ts`，包里只留提示词，诊断、修复和各轮流程回到本体，见 capability-ports.md）动态加载。留在本体的是按诊断结论改任务
 （`diagnosing.ts`）、工作记录和预算（`engineer.ts`）、复制源码、检查、应用、提交和重启（`platform-repair.ts`、
 `self-repair.ts`）。没有平台工程师时，开工前检查不通过也不再请它修，直接暂停。
 
@@ -90,7 +90,7 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 - 会话和对话的管道（`supervisor.ts`、`leading.ts`）：和聊天共用。
 
 随附扩展用得到本体的模块（同一个进程、同一份实例）；反过来本体只经过 `ports/planning.ts`、`ports/lead.ts`、
-`engineering.ts`、`ports/learning.ts` 动态加载它们，`server/tests/extension-boundary.test.ts` 保证没有直接引用。
+`ports/engineer.ts`、`ports/learning.ts` 动态加载它们，`server/tests/extension-boundary.test.ts` 保证没有直接引用。
 开关和运行中的服务（`server/tests/switching.test.ts`）：
 
 - 停用只挡新的工作：已经开始的一次决定、检查、修复照常做完。

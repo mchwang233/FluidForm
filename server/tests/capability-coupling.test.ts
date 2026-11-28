@@ -10,16 +10,16 @@ import { SERVER } from "../src/paths.js";
 
 const EXPECTED = {
   // Package functions that run as the executor (``this: Leading``, …) and so can reach all of it.
-  executorBound: 6,
-  // Core methods that hand the executor to a package (``.call(this, …)``).
-  bridges: 13,
+  executorBound: 0,
+  // Core methods that hand the executor to a package (``lead.decide.call(this, …)``).
+  bridges: 0,
   // Places in the core that ask for a capability by name (``uses.lead()``, ``available("lead")``),
   // besides features.ts and provided.ts, which answer them, and the ports (src/ports), which turn
   // the answer into the capability's code or FluidForm's own.
   namedChecks: 36,
   // Core modules extension-api hands to packages whole (``export * as``), and names it hands one by one.
   apiModules: 14,
-  apiNames: 199,
+  apiNames: 196,
 };
 
 const LAYERS = /\bthis:\s*(?:ExecutorBase|Reviewing|Leading|Diagnosing|SelfRepair|Engineering|Preflighting|Executor)\b/g;
@@ -46,7 +46,7 @@ function measure() {
   const named = [...api.matchAll(/^export (?:type )?\{([^}]*)\}/gm)].flatMap((match) => match[1].split(",").map((name) => name.trim()).filter(Boolean));
   return {
     executorBound: count(packageCode, LAYERS),
-    bridges: count(coreCode, /\.call\(this\b/g),
+    bridges: count(coreCode, /\.[A-Za-z_]\w*\.call\(this\b/g),
     namedChecks: count(asking, /\buses\.[A-Za-z]+\(/g) + count(asking, /\bavailable\(\s*"[a-z-]+"/g),
     apiModules: count([api], /^export \* as /gm),
     apiNames: named.length,

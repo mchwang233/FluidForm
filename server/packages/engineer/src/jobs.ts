@@ -1,14 +1,6 @@
-// How the platform engineer plans and makes a change to FluidForm. Jobs, their budget, and approving,
-// applying and committing are FluidForm's (server/src/engineer.ts).
-import { rmSync } from "node:fs";
-import { join } from "node:path";
-import {
-  COMPONENT_GUIDES, type Engineering, type EngineerJob, EngineerMessageSchema, failureOutput, head, plainLines, readReply, REPAIR_GUIDES,
-  RepairError, repairGuide, settings, sleep
-} from "../../../src/extension-api.js";
-
-type Json = Record<string, any>;
-const message = (fields: Json) => EngineerMessageSchema.parse(fields);
+// What the platform engineer is asked when it plans and makes a change to FluidForm. Jobs, their rounds and
+// budget, and approving, applying and committing are FluidForm's (server/src/engineer.ts).
+import { type EngineerJob, type EngineerPort, failureOutput, head } from "../../../src/extension-api.js";
 
 export const ROLE = "You are FluidForm's platform engineer: you change FluidForm itself (its backend, web "
   + "UI, tools, skills and model channels), never the user's projects. ";
@@ -61,97 +53,7 @@ export function editPrompt(job: EngineerJob, guide: string, feedback = ""): stri
 
 const conversation = (job: EngineerJob) => job.messages.slice(-20).map((item) => `${item.role}: ${head(item.text, 2000)}`).join("\n") || "(none)";
 
-export async function engineerPlan(this: Engineering, job: EngineerJob): Promise<void> {
-  job.status = "planning";
-  this.engineerSave(job);
-  const copy = await this.platform.prepare(job.run_id, null);
-  let text: string;
-  try {
-    const source = join(copy.folder, "source");
-    text = await this.engineerCall(job, planPrompt(job, repairGuide(source, COMPONENT_GUIDES)), source);
-  } finally {
-    rmSync(copy.folder, { recursive: true, force: true });
-  }
-  let [report, status, question, choices] = readReply(text);
-  if (status === "needs_input" && question) {
-    this.engineerAsk(job, report, question, choices);
-    return;
-  }
-  // Every component change, a retrospective's too, waits for the user's approval of its plan and
-  // again before it is applied.
-  let headline: string;
-  let plain: string;
-  [headline, plain, report] = plainLines(report);
-  job.headline = headline || job.headline;
-  job.plan_plain = plain;
-  job.plan = report;
-  job.status = "plan_ready";
-  job.messages.push(message({ role: "engineer", text: "方案写好了，请看过后批准，或回复要改的地方。" }));
-  this.engineerSave(job);
-}
+export const continueNote: EngineerPort["continueNote"] = (files) => `\nThe copy already has your earlier changes to: ${files.slice(0, 40).join(", ")}. Build on them: `
+  + "check what is done and finish what the conversation asks for now; do not start over.\n";
 
-export async function engineerEdit(this: Engineering, job: EngineerJob): Promise<void> {
-  job.status = "editing";
-  this.engineerSave(job);
-  let copy = this.platform.load(job.repair_id);
-  const fresh = !copy || !["editing", "validating", "validated"].includes(copy.status) || this.platform.stale(copy);
-  if (fresh) {
-    // A first edit, or the live source has changed since: a fresh copy, so applying it cannot
-    // overwrite what changed.
-    copy = await this.platform.prepare(job.run_id, null);
-    copy.engineer_job_id = job.id;
-    this.platform.save(copy);
-    job.repair_id = copy.id;
-    this.engineerSave(job);
-  }
-  const source = join(copy!.folder, "source");
-  const guide = repairGuide(source, job.kind === "component" ? COMPONENT_GUIDES : REPAIR_GUIDES);
-  const done = fresh ? [] : this.platform.edited(copy!);
-  // The same copy as before (a restart cut the work off, or the user asked for changes to it): it goes
-  // on from what is there instead of starting over.
-  let feedback = done.length ? `\nThe copy already has your earlier changes to: ${done.slice(0, 40).join(", ")}. Build on them: `
-    + "check what is done and finish what the conversation asks for now; do not start over.\n" : "";
-  let report = "";
-  let checks: { name: string }[] = [];
-  for (let attempt = 0; attempt < settings.platform_repair_attempts; attempt += 1) {
-    const text = await this.engineerCall(job, editPrompt(job, guide, feedback), source);
-    let status: string | null;
-    let question: string | null;
-    let choices: string[];
-    [report, status, question, choices] = readReply(text);
-    if (status === "needs_input" && question) {
-      this.engineerAsk(job, report, question, choices);
-      return;
-    }
-    job.status = "validating";
-    this.engineerSave(job);
-    try {
-      checks = await this.platform.check(copy!, (title, ok) => this.engineerCheckSeen(job, title, ok));
-      break;
-    } catch (error) {
-      if (!(error instanceof RepairError) || attempt + 1 === settings.platform_repair_attempts) throw error;
-      feedback = `\nThe independent check failed. Fix it and recheck:\n${failureOutput(error.message, 6000)}\n`;
-      job.status = "editing";
-      this.engineerSave(job);
-    }
-  }
-  job.files = copy!.files;
-  job.checks = checks.map((item) => item.name);
-  let headline: string;
-  let plain: string;
-  [headline, plain, report] = plainLines(report);
-  job.headline = headline || job.headline;
-  job.plain = plain;
-  job.diff = this.platform.diff(copy!);
-  job.report = report;
-  job.error = null;
-  job.messages.push(message({ role: "engineer", text: plain || report || "改好了，检查全部通过。" }));
-  if (job.kind === "component") {
-    job.status = "ready";
-    this.engineerSave(job);
-    return;
-  }
-  // A repair applies on its own once checked, after any change already waiting to apply.
-  while (this.platformPending) await sleep(1);
-  this.engineerApply(job);
-}
+export const checkFailed: EngineerPort["checkFailed"] = (output) => `\nThe independent check failed. Fix it and recheck:\n${failureOutput(output, 6000)}`;

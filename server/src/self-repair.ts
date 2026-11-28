@@ -1,15 +1,19 @@
 // Repairing FluidForm itself: an edited and checked copy (platform-repair.ts) applied
 // by a restart, while tasks wait.
 import { PLATFORM_SCOPE } from "./models.js";
+import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { settings } from "./config.js";
 import { Diagnosing } from "./diagnosing.js";
 import { nowIso } from "./lax.js";
 import type { Diagnosis, EngineerJob, ExecutionRun, TaskNode } from "./models.js";
-import { type RepairJob } from "./platform-repair.js";
+import { failureOutput, RepairError, repairGuide, type RepairJob } from "./platform-repair.js";
 import * as quality from "./quality.js";
 import { isCancelled, sleep, Task } from "./tasks.js";
-import * as engineer from "./engineering.js";
+import { parse as parseDiagnosis } from "./diagnosis.js";
+import { begun as engineerCode } from "./ports/engineer.js";
+import { pyRound } from "./py.js";
+import { MAX_ENVIRONMENT_FIXES } from "./recovery.js";
 
 // How long a checked change waits for steps that can be cut off: such a step runs again after the
 // restart (resume_after_restart), so its task need not finish first.
@@ -39,8 +43,88 @@ export abstract class SelfRepair extends Diagnosing {
   }
 
   /** Prepare source changes separately; only independent successful checks can apply them. */
-  fixPlatform(run: ExecutionRun, diagnosis: Diagnosis, node: TaskNode | null, problem: string): Promise<[string, number]> {
-    return engineer.fixPlatform.call(this, run, diagnosis, node, problem);
+  async fixPlatform(run: ExecutionRun, diagnosis: Diagnosis, node: TaskNode | null, problem: string): Promise<[string, number]> {
+    const port = await engineerCode();
+    let latest = this.db.getRun(run.id)!;
+    let record = latest.diagnoses.find((d) => d.id === diagnosis.id)!;
+    record.scope = PLATFORM_SCOPE;
+    this.save(latest);
+    if (this.platformPending) {
+      record.repair_id = this.platformPending.id;
+      this.save(latest);
+      return ["已有公共平台修复通过验证，等待自动生效。\nSTATUS: PLATFORM_PENDING", 0];
+    }
+    if (node && node.environment_fixes >= MAX_ENVIRONMENT_FIXES) throw new RepairError("同一步骤的公共修复已达到本轮上限，请结合已有验证结果重新定位，避免重复修改平台。");
+    const job = await this.platform.prepare(run.id, diagnosis.id, { allowNetwork: latest.allow_network });
+    // The platform engineer's page lists it too.
+    const recordJob = this.recordPlatformRepair(run, diagnosis, node, problem, job);
+    latest = this.db.getRun(run.id)!;
+    record = latest.diagnoses.find((d) => d.id === diagnosis.id)!;
+    record.repair_id = job.id;
+    this.save(latest);
+    this.emit(run.id, "run.platform_repair", { diagnosis_id: diagnosis.id, repair_id: job.id, phase: "editing" });
+    const replied = latest.diagnoses.filter((d) => d.messages.length).sort((a, b) => (a.messages.at(-1)!.created_at < b.messages.at(-1)!.created_at ? -1 : 1));
+    const replies = replied.slice(-5).map((d) => ({ question: d.question, answers: d.messages.slice(-5) }));
+    const base = port.platformRepairPrompt(run, problem, replies, repairGuide(join(job.folder, "source")));
+    let feedback = "";
+    let cost = 0;
+    try {
+      let result!: { text: string };
+      let modelId = "";
+      let checks: { name: string }[] = [];
+      for (let attempt = 0; attempt < settings.platform_repair_attempts; attempt += 1) {
+        let extra: number;
+        [result, modelId, extra] = await this.diagnoseWith(run, diagnosis, node, base + feedback, join(job.folder, "source"), false, true);
+        cost += extra;
+        recordJob.model_id = modelId;
+        const status = parseDiagnosis(result.text)[2];
+        if (status === "needs_input" || status === "blocked") {
+          Object.assign(job, { status: "awaiting_input", report: result.text });
+          this.platform.save(job);
+          recordJob.status = "failed";
+          recordJob.report = parseDiagnosis(result.text)[0];
+          recordJob.error = "修复需要你回答问题，已交回任务里的平台工程师。";
+          recordJob.cost_usd = pyRound(cost, 6);
+          this.engineerEnd(recordJob);
+          return [result.text, cost];
+        }
+        recordJob.status = "validating";
+        this.engineerSave(recordJob);
+        this.emit(run.id, "run.platform_repair", { repair_id: job.id, phase: "validating", attempt: attempt + 1 });
+        try {
+          // The user can change network permission while the candidate is being edited. Validation
+          // follows the current task setting too.
+          job.allow_network = Boolean(this.db.getRun(run.id)?.allow_network);
+          checks = await this.platform.check(job);
+          break;
+        } catch (error) {
+          if (!(error instanceof RepairError) || attempt + 1 === settings.platform_repair_attempts) throw error;
+          feedback = port.checkFailed(error.message);
+        }
+      }
+      let report = parseDiagnosis(result.text)[0];
+      report += "\n\n## 自动验证\n" + checks.map((check) => `- ${check.name}: 通过`).join("\n");
+      report += "\n\n## 影响范围\nFluidForm 公共代码；生效后供所有项目使用。\n修改：" + job.files.join("、");
+      Object.assign(job, { report, model_id: modelId });
+      recordJob.status = "applying";
+      recordJob.report = parseDiagnosis(result.text)[0];
+      recordJob.files = job.files;
+      recordJob.checks = checks.map((check) => check.name);
+      recordJob.diff = this.platform.diff(job);
+      recordJob.cost_usd = pyRound(cost, 6);
+      this.engineerSave(recordJob);
+      this.scheduleRepair(job);
+      return [report + "\nSTATUS: PLATFORM_PENDING", cost];
+    } catch (error) {
+      Object.assign(job, { status: "failed", error: (error as Error)?.message || this.whyStopped(run.id, error) });
+      this.platform.save(job);
+      recordJob.status = "failed";
+      recordJob.error = String(job.error).slice(0, 2000);
+      recordJob.cost_usd = pyRound(cost + (((error as Json)?.accounted_cost_usd as number) ?? 0), 6);
+      this.engineerEnd(recordJob);
+      if (error && typeof error === "object") (error as Json).accounted_cost_usd = (((error as Json).accounted_cost_usd as number) ?? 0) + cost;
+      throw error;
+    }
   }
 
   /** A checked repair is applied by a restart, which only FluidForm itself does. */

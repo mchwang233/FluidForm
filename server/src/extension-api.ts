@@ -1,7 +1,8 @@
 // What FluidForm's core gives its packages (server/packages/*/src), the one module they import it from.
 // A package that needs more of the core adds it here: what the packages depend on is then seen in one
 // place, and server/tests/extension-api.test.ts keeps them from reaching past it. The task capabilities
-// (lead, planning, engineer, learning) still run as the executor (``this``) and use its classes as they are.
+// (planning, lead, learning, engineer) meet the ports in src/ports, never the executor
+// (docs/design/capability-ports.md).
 
 export * as activity from "./activity.js";
 export * as agent from "./agent.js";
@@ -20,11 +21,8 @@ export type { CliChannelRegistry, CliText } from "./cli-channels.js";
 export { settings } from "./config.js";
 export * as contracts from "./contracts.js";
 export type { Database } from "./db.js";
-export { Diagnosing } from "./diagnosing.js";
 export { ENGINEER, ENGINEER_CALLED, INTERACTION_INSTRUCTIONS, MAX_RESULT_CHARS, NETWORK_CHOICE, OPTIONS, REPORT_FORMAT, STATUS, USER_ACTION, interaction, parse, toolSummary } from "./diagnosis.js";
 export { plainLines, readReply } from "./engineer.js";
-export type { Engineering } from "./engineer.js";
-export type { EngineerPackage } from "./engineering.js";
 export * as environment from "./environment.js";
 export type { Implements } from "./extensions.js";
 export { uses } from "./features.js";
@@ -40,6 +38,7 @@ export { difficultyFor, toPercentScale } from "./model-hooks.js";
 export { ArtifactWaiverSchema, CapabilityScoreSchema, DIFFICULTY_THRESHOLDS, DecisionSchema, DiagnosisSchema, EmployeeSchema, EngineerMessageSchema, ImprovementSchema, ModelProfileSchema, Outcome, PLATFORM_SCOPE, PlanChoiceSchema, PreflightCheckSchema, PreflightSchema, SupervisorSessionSchema, TaskNodeSchema, TaskPlanSchema, folderId, routingReady, scoreFor, utcnow } from "./models.js";
 export type { ArtifactEvidence, ArtifactWaiver, Attachment, CapabilityScore, Diagnosis, Employee, EngineerJob, ExecutionRun, Improvement, LearningReview, ModelProfile, NodeAttempt, PlanChoice, PreflightCheck, SupervisorSession, TaskNode, TaskPlan } from "./models.js";
 export { COMPONENT_GUIDES, REPAIR_GUIDES, RepairError, failureOutput, repairGuide } from "./platform-repair.js";
+export type { EngineerPort } from "./ports/engineer.js";
 export type { LeadPort, ReviewPort } from "./ports/lead.js";
 export type { LearningPort, SkillHost } from "./ports/learning.js";
 export type { PlanningPort } from "./ports/planning.js";
@@ -58,7 +57,6 @@ export type { ReviewHost } from "./review.js";
 export { NoEligibleModelError, canAct, diagnosers, engineers, loopTurns, nodeCost, pickReviewer, routeNode, vendor } from "./routing.js";
 export { writesFiles } from "./scopes.js";
 export { PROVIDER_ENV } from "./secret-names.js";
-export type { SelfRepair } from "./self-repair.js";
 export * as skills from "./skills.js";
 export * as supervisor from "./supervisor.js";
 export { ENGINEER_CALLERS, none, partOf, readEngineer, workspaceOf } from "./supervisor.js";
