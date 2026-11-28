@@ -67,7 +67,7 @@ test("a chat turns into a task planned with the conversation", async () => {
   const { api, client } = taskApi(folder());
   chatting(api, ["可以用 Redis 做缓存，命中率会更高。"]);
   const prompts: string[] = [];
-  api.deps.autonomousPlan = async (prompt: string) => {
+  api.deps.plan = async ({ prompt }: { prompt: string }) => {
     prompts.push(prompt);
     return TaskPlanSchema.parse({ summary: "加缓存", folder: "add cache", nodes: [{ id: "a", title: "加缓存", instructions: "add a cache", capability: "coding" }] });
   };
@@ -165,7 +165,7 @@ test("a chat with attachments hands them to the task it becomes", async () => {
   const { api, client } = taskApi(folder());
   chatting(api);
   const prompts: string[] = [];
-  api.deps.autonomousPlan = async (prompt: string) => {
+  api.deps.plan = async ({ prompt }: { prompt: string }) => {
     prompts.push(prompt);
     return TaskPlanSchema.parse({ summary: "修复", nodes: [{ id: "a", title: "修复", instructions: "i", capability: "coding" }] });
   };

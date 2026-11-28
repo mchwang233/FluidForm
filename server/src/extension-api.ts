@@ -43,7 +43,7 @@ export { difficultyFor, toPercentScale } from "./model-hooks.js";
 export { ArtifactWaiverSchema, CapabilityScoreSchema, DIFFICULTY_THRESHOLDS, DecisionSchema, DiagnosisSchema, EmployeeSchema, EngineerMessageSchema, ImprovementSchema, ModelProfileSchema, Outcome, PLATFORM_SCOPE, PlanChoiceSchema, PreflightCheckSchema, PreflightSchema, SupervisorSessionSchema, TaskNodeSchema, TaskPlanSchema, folderId, routingReady, scoreFor, utcnow } from "./models.js";
 export type { ArtifactEvidence, ArtifactWaiver, Attachment, CapabilityScore, Diagnosis, Employee, EngineerJob, ExecutionRun, Improvement, LearningReview, ModelProfile, NodeAttempt, PlanChoice, PreflightCheck, SupervisorSession, TaskNode, TaskPlan } from "./models.js";
 export { COMPONENT_GUIDES, REPAIR_GUIDES, RepairError, failureOutput, repairGuide } from "./platform-repair.js";
-export type { PlanningPackage } from "./planning.js";
+export type { PlanningPort } from "./ports/planning.js";
 export { Preflighting } from "./preflighting.js";
 export * as pricing from "./pricing.js";
 export * as progress from "./progress.js";

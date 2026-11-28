@@ -453,7 +453,7 @@ test("the calls API is per task and marks unknown usage", async () => {
 
 test("a plan whose artifacts do not hold is returned as blocked, not run some other way", async () => {
   const { api, client } = taskApi(folder());
-  api.deps.autonomousPlan = async () => {
+  api.deps.plan = async () => {
     throw new ContractError("missing accepted report dependency");
   };
   const response = await client.post("/api/tasks", { json: { prompt: "Generate a coverage report", budget_usd: 1 } });

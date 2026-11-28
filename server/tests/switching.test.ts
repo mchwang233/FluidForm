@@ -57,7 +57,6 @@ test("planning switched off while a request is judged: it becomes one step", asy
       restore = without("planning", "team");
       return null;
     };
-    api.deps.autonomousPlan = (await import("../src/planning.js")).autonomousPlan;
     const made = await client.post("/api/tasks", { json: { prompt: "换算 37 摄氏度", budget_usd: 1 }, headers: ORIGIN });
     assert.equal(made.status_code, 201, made.text);
     assert.equal(made.json().plan.nodes.length, 1);

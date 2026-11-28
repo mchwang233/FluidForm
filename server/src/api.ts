@@ -25,7 +25,7 @@ import {
   type Attachment, type ExecutionRun, ExecutionRunSchema, EventSchema, FINISHED, folderId, type ModelProfile,
   type SupervisorSession, SupervisorSessionSchema, type TaskPlan, TaskNodeSchema, TaskPlanSchema,
 } from "./models.js";
-import { autonomousPlan, planningBrief, quick } from "./planning.js";
+import { type PlanInput, type PlanningHost, type PlanningPort, planning, QUICK_SCOPE, SOLO_SCOPE } from "./ports/planning.js";
 import { ProjectDirError, projectContext, resolveProjectDir } from "./projects.js";
 import { ProviderRegistry } from "./providers.js";
 import * as publish from "./publish.js";
@@ -89,11 +89,6 @@ export const StartRequest = CreateTask.extend({
 /** The routed and estimated plan of a request, and what it was made with. */
 export type Made = { plan: TaskPlan; session: SupervisorSession; attached: Attachment[]; projectDir: string | null; background: string | null; lessons: Json[] };
 
-// Said to the one step a task without the lead's plan gets: do what was asked, no more. A small game
-// once came with two test suites, a headless demo and a README, and took six minutes, not one.
-export const QUICK_SCOPE = "\n\n（这是一件小事：只做要求的。做完先自己运行或检查一次，能用就交付；"
-  + "没要求的测试套件、演示脚本、说明文档都不用写。）";
-export const SOLO_SCOPE = "\n\n（做到要求的程度为止：能用、自己检查过就交付；没要求的额外测试、演示和文档不用写。）";
 
 export const MAX_BACKGROUND_FILES = 150;
 export const MAX_BACKGROUND_RESULT = 3000;
@@ -175,18 +170,6 @@ export function etagged(body: string): string {
 
 export { chosenFor, configuredFor } from "./model-choice.js";
 
-/** A task without the planning capability: the whole request as one step, done by one model (the
- *  strongest that clears the bar, a membership CLI or an API model working through tools), in the
- *  project when there is one. */
-export function oneStep(request: string, background: string | null, projectDir: string | null): TaskPlan {
-  const asked = background ? `${background}\n\n新需求：\n${request}` : request;
-  const title = [...(request.split(/\r\n|\r|\n/)[0] || request)].slice(0, 40).join("").trim() || "任务";
-  const node = TaskNodeSchema.parse({ id: randomUUID().replaceAll("-", "").slice(0, 8), title, capability: "coding", difficulty: "hard",
-    needs_workspace: Boolean(projectDir), instructions: asked + SOLO_SCOPE, acceptance_criteria: "需求里要的都做到了，结果可以直接交给用户。" });
-  return TaskPlanSchema.parse({ summary: title, title, nodes: [node], planning_note: "没有启用规划能力：整个需求作为一步，交给一个模型做",
-    in_project: Boolean(projectDir) });
-}
-
 export class Api {
   readonly db: Database;
   models: Record<string, ModelProfile>;
@@ -200,7 +183,12 @@ export class Api {
   confirmTask: ((runId: string) => Promise<ExecutionRun>) | null = null;
   /** Answers what a task asked the user, as the page's reply does (set by the app). */
   answerQuestion: ((runId: string, diagnosisId: string, answer: { text: string; choice?: string | null; attachments?: string[] }) => Promise<ExecutionRun>) | null = null;
-  readonly deps = { autonomousPlan, setProviderKey, classify: triage.classify, quick, addressed: triage.addressed };
+  // Planning goes to the planning port as it is when asked (the capability, or FluidForm's base).
+  readonly deps = {
+    plan: async (input: PlanInput, host: PlanningHost) => (await planning()).plan(input, host),
+    quick: async (...args: Parameters<PlanningPort["quick"]>) => (await planning()).quick(...args),
+    setProviderKey, classify: triage.classify, addressed: triage.addressed,
+  };
   // Tasks being planned again with the user's choices (one replanning at a time per task).
   readonly replanning = new Set<string>();
   discovery: { at: number; result: unknown } = { at: 0, result: null };
@@ -423,21 +411,19 @@ export class Api {
     const root = projectDir ?? (parent ? join(settings.workspace_root, folderId(parent)) : null);
     let brief: string | null = null;
     let briefCost = 0;
-    // The brief is the planning capability's: without it the one step reads the project itself.
-    if (root && uses.planning() && isFullFolder(root)) {
-      const writer = settings.project_brief ? await briefWriter(Object.values(this.models), configured) : null;
-      [brief, briefCost] = await planningBrief(root, settings.data_dir, this.providers, writer);
+    // The brief is the planning capability's: without it (base) the one step reads the project itself.
+    if (root && isFullFolder(root)) {
+      [brief, briefCost] = await (await planning()).brief(root, settings.data_dir, this.providers,
+        async () => (settings.project_brief ? briefWriter(Object.values(this.models), configured) : null));
     }
     const session = SupervisorSessionSchema.parse({});
     const asked = background ? `${background}\n\n新需求：\n${request}` : request;
-    // Without the planning capability the whole request is one step (FluidForm's base).
-    let plan = !uses.planning() ? oneStep(request, background, projectDir)
-      : parent || decided ? null : await this.quickPlan(body, request, background, configured, projectDir);
+    let plan = parent || decided ? null : await this.quickPlan(body, request, background, configured, projectDir);
     try {
-      // Asked again: planning may have been switched off while the request was judged.
-      if (!plan && !uses.planning()) plan = oneStep(request, background, projectDir);
-      plan ??= await this.deps.autonomousPlan(asked, Object.values(this.models), configured, this.providers,
-        projectDir ? projectContext(projectDir) : null, session, brief);
+      // Asked again (deps.plan): planning may have been switched off while the request was judged.
+      // Without the planning capability the whole request is one step (FluidForm's base).
+      plan ??= await this.deps.plan({ prompt: asked, request, background, projectDir, projectContext: projectDir ? projectContext(projectDir) : null,
+        models: Object.values(this.models), configured, session, brief }, this.providers);
     } catch (error) {
       if (error instanceof ContractError) throw new HttpError(422, { status: "blocked", reason: error.message });
       throw error;
@@ -468,7 +454,7 @@ export class Api {
    *  alone, in a project too. null: plan it as usual. */
   async quickPlan(body: CreateTask, request: string, background: string | null, configured: Set<string>, projectDir: string | null = null): Promise<TaskPlan | null> {
     if (!settings.quick_tasks && !settings.solo_tasks) return null;
-    const [step, judged] = await this.deps.quick(body.prompt, this.providers, await briefWriter(Object.values(this.models), configured),
+    const [step, judged] = await this.deps.quick(body.prompt, this.providers, () => briefWriter(Object.values(this.models), configured),
       settings.solo_tasks, Boolean(projectDir));
     if (!step || (step.shape === "quick" && !settings.quick_tasks)) return null;
     const solo = step.shape === "solo";

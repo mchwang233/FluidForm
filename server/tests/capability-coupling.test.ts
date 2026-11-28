@@ -14,8 +14,9 @@ const EXPECTED = {
   // Core methods that hand the executor to a package (``.call(this, …)``).
   bridges: 43,
   // Places in the core that ask for a capability by name (``uses.lead()``, ``available("lead")``),
-  // besides features.ts and provided.ts, which answer them.
-  namedChecks: 47,
+  // besides features.ts and provided.ts, which answer them, and the ports (src/ports), which turn
+  // the answer into the capability's code or FluidForm's own.
+  namedChecks: 43,
   // Core modules extension-api hands to packages whole (``export * as``), and names it hands one by one.
   apiModules: 14,
   apiNames: 199,
@@ -40,7 +41,7 @@ function measure() {
     .map((path) => readFileSync(path, "utf8"));
   const core = files(join(SERVER, "src"));
   const coreCode = core.map((path) => readFileSync(path, "utf8"));
-  const asking = core.filter((path) => !/[/\\](features|provided)\.ts$/.test(path)).map((path) => readFileSync(path, "utf8"));
+  const asking = core.filter((path) => !/[/\\](features|provided)\.ts$|[/\\]ports[/\\]/.test(path)).map((path) => readFileSync(path, "utf8"));
   const api = readFileSync(join(SERVER, "src", "extension-api.ts"), "utf8");
   const named = [...api.matchAll(/^export (?:type )?\{([^}]*)\}/gm)].flatMap((match) => match[1].split(",").map((name) => name.trim()).filter(Boolean));
   return {

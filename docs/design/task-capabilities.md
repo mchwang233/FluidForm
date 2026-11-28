@@ -64,7 +64,7 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 - 网页按能力显示。测试在 `server/tests/task-core.test.ts`。
 
 第 2 步已完成（2026-11-22）：排计划、改计划、委派、项目简介、快速/单人判断都在
-`server/packages/planning/src`，本体只通过 `planning.ts` 在启用时动态加载。包里的代码和本体一起编译，
+`server/packages/planning/src`，本体只通过 `planning.ts`（2026-11-28 起是端口 `ports/planning.ts`，见 capability-ports.md）在启用时动态加载。包里的代码和本体一起编译，
 构建产物因此在 `server/dist/src` 和 `server/dist/packages`。留在本体的是读任务记录要用的：员工和委派的
 记录怎么读（`team.ts`）、给步骤看项目文件（`briefing.ts`）、分辨对话和任务（`triage.ts`）、产物约定的检查
 （`contracts.ts`，执行和验收都用）。
@@ -89,7 +89,7 @@ FluidForm 的核心只保留最基础的：用命令行（或任何界面）发�
 - 产物约定（`contracts.ts`）、员工和委派的记录（`team.ts`）：执行时要用。
 - 会话和对话的管道（`supervisor.ts`、`leading.ts`）：和聊天共用。
 
-随附扩展用得到本体的模块（同一个进程、同一份实例）；反过来本体只经过 `planning.ts`、`lead.ts`、
+随附扩展用得到本体的模块（同一个进程、同一份实例）；反过来本体只经过 `ports/planning.ts`、`lead.ts`、
 `engineering.ts`、`experience.ts` 动态加载它们，`server/tests/extension-boundary.test.ts` 保证没有直接引用。
 开关和运行中的服务（`server/tests/switching.test.ts`）：
 

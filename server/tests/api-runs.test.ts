@@ -406,7 +406,7 @@ function finishedTask(api: ReturnType<typeof taskApi>["api"], status = "succeede
 }
 
 function planning(api: ReturnType<typeof taskApi>["api"], prompts: string[]): void {
-  api.deps.autonomousPlan = async (prompt: string) => {
+  api.deps.plan = async ({ prompt }: { prompt: string }) => {
     prompts.push(prompt);
     return TaskPlanSchema.parse({ summary: "加提醒", nodes: [{ id: "b", title: "提醒", instructions: "add reminders", capability: "coding" }] });
   };
@@ -540,7 +540,7 @@ test("the API keeps an employee's model at creation and at confirmation", async 
   const { api, client } = taskApi(folder());
   settings.employee_teams = true; // direct_policy
   const catalog = TEAM_MODELS.map((m, i) => ({ ...m, input_per_million: i === 0 ? 10 : 1, output_per_million: i === 0 ? 10 : 1 }));
-  api.deps.autonomousPlan = () => autonomousPlan("实现模块", TEAM_MODELS, CONFIGURED, new Planner() as any, null, SupervisorSessionSchema.parse({}));
+  api.deps.plan = () => autonomousPlan("实现模块", TEAM_MODELS, CONFIGURED, new Planner() as any, null, SupervisorSessionSchema.parse({}));
   api.models = Object.fromEntries(catalog.map((m) => [m.id, m]));
   api.providers.configuredModels = () => CONFIGURED;
   api.executor.start = () => {};

@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { join } from "node:path";
 import { test } from "node:test";
 import * as agent from "../src/agent.js";
-import { QUICK_SCOPE, SOLO_SCOPE } from "../src/api.js";
+import { QUICK_SCOPE, SOLO_SCOPE } from "../src/ports/planning.js";
 import * as capabilities from "../src/capabilities.js";
 import { settings } from "../src/config.js";
 import { EngineerJobSchema, type ExecutionRun, ExecutionRunSchema, folderId, TaskPlanSchema } from "../src/models.js";
@@ -134,7 +134,7 @@ function judging(api: Api, answer: string): [string[], string[]] {
     asked.push(prompt);
     return new ProviderResult(answer, 100, 10);
   };
-  api.deps.autonomousPlan = async (prompt: string) => {
+  api.deps.plan = async ({ prompt }: { prompt: string }) => {
     planned.push(prompt);
     return TaskPlanSchema.parse({ summary: "排好的计划", nodes: [{ id: "a", title: "做", instructions: "i", capability: "coding" }] });
   };

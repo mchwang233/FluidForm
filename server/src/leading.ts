@@ -12,7 +12,7 @@ import * as contracts from "./contracts.js";
 import { type Attachment, DecisionSchema, type ExecutionRun, folderId, LeadMessageSchema, type TaskNode } from "./models.js";
 import { head } from "./py.js";
 import * as quality from "./quality.js";
-import * as planning from "./planning.js";
+import { type PlanChanges, planning } from "./ports/planning.js";
 import { Reviewing } from "./reviewing.js";
 import * as supervisor from "./supervisor.js";
 import { currentTask, isCancelled, Task } from "./tasks.js";
@@ -59,8 +59,8 @@ export abstract class Leading extends Reviewing {
     return available("lead") ? lead.decision.call(this, runId, nodeId, prompt, modelIds, targets, final) : null;
   }
 
-  changePlan(run: ExecutionRun, change: Json, deciding: string | null): Promise<{ added: string[]; removed: string[]; updated: string[] }> {
-    return planning.changePlan(run, change, Object.values(this.modelLookup), this.configured(run), this.needsVision(run), deciding);
+  async changePlan(run: ExecutionRun, change: Json, deciding: string | null): Promise<PlanChanges> {
+    return (await planning()).changePlan(run, change, Object.values(this.modelLookup), this.configured(run), this.needsVision(run), deciding);
   }
 
   /** Why a plan change cannot be made, tried on a copy of the task; null if it can. */

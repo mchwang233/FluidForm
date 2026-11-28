@@ -29,7 +29,7 @@ import { collect } from "./routing-feedback.js";
 import * as scopes from "./scopes.js";
 import { currentTask, first, isCancelled, Task } from "./tasks.js";
 import * as team from "./team.js";
-import { delegate } from "./planning.js";
+import { planning } from "./ports/planning.js";
 
 // What a step started early (headStart) is called among the tasks at work.
 export const HEAD = "head:";
@@ -585,7 +585,7 @@ export class Executor extends Preflighting {
         if (existing.length && existing.every((n) => n.status === "succeeded")) {
           throw Object.assign(new Error("该委派已完成，请使用已有子任务结果继续原任务，不要再次委派。"), { name: "ValueError" });
         }
-        children = await delegate(run, node, payload, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
+        children = await (await planning()).delegate(run, node, payload, Object.values(this.modelLookup), this.configured(run), this.needsVision(run));
         node = run.plan.nodes.find((n) => n.id === nodeId)!;
         node.status = "pending";
         node.review_passed = null;

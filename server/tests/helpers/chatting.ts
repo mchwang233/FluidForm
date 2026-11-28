@@ -56,7 +56,7 @@ export function triaging(api: Api, verdict: string | Error, answers: string[] = 
     if (verdict instanceof Error) throw verdict;
     return new ProviderResult(verdict, 1000, 10);
   };
-  api.deps.autonomousPlan = async (prompt: string) => {
+  api.deps.plan = async ({ prompt }: { prompt: string }) => {
     sent.planned.push(prompt);
     return TaskPlanSchema.parse({ summary: "加缓存", nodes: [{ id: "a", title: "加缓存", instructions: "i", capability: "coding" }] });
   };

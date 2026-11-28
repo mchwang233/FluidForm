@@ -60,6 +60,13 @@
 ## 进度
 
 - 第 0 步已完成（2026-11-28）：`extensions.Implements` 和五个包入口的 `Contract`；`capability-coupling.test.ts`。
+- 第 1 步已完成（2026-11-28）：规划的端口是 `server/src/ports/planning.ts`（代替原来的 `planning.ts`）：
+  - `PlanningPort`：`brief`、`quick`、`plan`、`changePlan`、`delegate`；宿主 `PlanningHost` 只有 `complete` 和 `converse`
+    （代替 `providers: any`）；写简介和做判断的模型改为需要时才取，默认实现不会为它们去问计价。
+  - `base` 是没有规划能力时的做法：`oneStep`（和 `QUICK_SCOPE`、`SOLO_SCOPE` 一起从 `api.ts` 搬来），不写简介、不做快速判断，
+    改计划和委派照旧拒绝。`planning()` 给出包的代码或 `base`；`Api.makePlan` 不再按名字分支（按名字问能力 47 → 43）。
+  - 包的 `port.ts` 把端口接到原来的函数上；排计划的入口从 `autonomousPlan(prompt, …)` 改为 `plan(input, host)`，
+    测试改替换 `api.deps.plan`。快速、单人判断的结果仍由核心变成一步的计划（包返回判断，核心写计划）。
 
 ## 风险
 
