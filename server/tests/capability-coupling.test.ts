@@ -17,9 +17,11 @@ const EXPECTED = {
   // besides features.ts and provided.ts, which answer them, and the ports (src/ports), which turn
   // the answer into the capability's code or FluidForm's own.
   namedChecks: 36,
-  // Core modules extension-api hands to packages whole (``export * as``), and names it hands one by one.
-  apiModules: 14,
-  apiNames: 196,
+  // Core modules extension-api hands to packages whole (``export * as`` of a core module itself, not of
+  // its list in src/package-api), and the names a package can reach: extension-api's own, and those the
+  // lists give of a module.
+  apiModules: 0,
+  apiNames: 240,
 };
 
 const LAYERS = /\bthis:\s*(?:ExecutorBase|Reviewing|Leading|Diagnosing|SelfRepair|Engineering|Preflighting|Executor)\b/g;
@@ -43,13 +45,14 @@ function measure() {
   const coreCode = core.map((path) => readFileSync(path, "utf8"));
   const asking = core.filter((path) => !/[/\\](features|provided)\.ts$|[/\\]ports[/\\]/.test(path)).map((path) => readFileSync(path, "utf8"));
   const api = readFileSync(join(SERVER, "src", "extension-api.ts"), "utf8");
-  const named = [...api.matchAll(/^export (?:type )?\{([^}]*)\}/gm)].flatMap((match) => match[1].split(",").map((name) => name.trim()).filter(Boolean));
+  const listed = (text: string) => [...text.matchAll(/^export (?:type )?\{([^}]*)\}/gm)].flatMap((match) => match[1].split(",").map((name) => name.trim()).filter(Boolean));
+  const lists = files(join(SERVER, "src", "package-api")).map((path) => readFileSync(path, "utf8"));
   return {
     executorBound: count(packageCode, LAYERS),
     bridges: count(coreCode, /\.[A-Za-z_]\w*\.call\(this\b/g),
     namedChecks: count(asking, /\buses\.[A-Za-z]+\(/g) + count(asking, /\bavailable\(\s*"[a-z-]+"/g),
-    apiModules: count([api], /^export \* as /gm),
-    apiNames: named.length,
+    apiModules: count([api], /^export \* as \w+ from "\.\/(?!package-api\/)/gm),
+    apiNames: listed(api).length + lists.reduce((sum, text) => sum + listed(text).length, 0),
   };
 }
 

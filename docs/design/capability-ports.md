@@ -119,3 +119,12 @@
   - 核心的 `learningSource`、`allocated` 的参数改为它们真正用到的那几个方法。
   - `extension-api` 不再交出 `Database`、`ReviewHost`、`LearningHost`、`skipCancelledLearning`；
     `capability-coupling.test.ts` 检查它不交出执行器的类、整个数据库和这些宿主。
+- 第 6 步已完成（2026-11-28）：`extension-api` 收窄。
+  - 搬回核心以后没有包再用的 20 个名字删掉（`parse`、`RepairError`、`DiagnosisSchema`、`Db`、`currentTask` 等），
+    没人用的 `capabilities` 整模块不再转出。
+  - 其余 13 个整模块改为各列一张清单（`server/src/package-api/<模块>.ts`，仍以 `quality`、`skills` 等名字交给包）：
+    包写法不变，但只拿得到清单里的名字；包要更多就把名字加进清单，依赖一眼可见。
+  - 包能拿到的名字从约 519 个（196 个单独的 + 14 个整模块约 320 个）减到 240 个；整模块转出 14 → 0。
+    `capability-coupling.test.ts` 改为数包能拿到的全部名字。
+  - 还没做的：按名字问能力还有 36 处，多是执行流程里“有没有负责人、有没有平台工程师”的判断；核心内部 8 层继承链
+    没动（第 2–4 步把流程搬回核心后它更大了），是下一件事。
