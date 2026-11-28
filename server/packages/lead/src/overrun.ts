@@ -1,6 +1,6 @@
 // What the lead is asked about an attempt that runs far past its expected time.
 import {
-  activity, BudgetExceeded, type ExecutionRun, isCancelled, loopTurns, progress, pyRound, quality, type ReviewHost, settings,
+  activity, BudgetExceeded, type ExecutionRun, isCancelled, loopTurns, progress, pyRound, quality, type LeadHost, settings,
   StepLimitExceeded, type TaskNode
 } from "../../../src/extension-api.js";
 import * as prompts from "./prompts.js";
@@ -8,7 +8,7 @@ import * as prompts from "./prompts.js";
 /** A step others wait for that runs far past its expected time is not stuck, but holds the whole task:
  *  the lead says whether it goes on or stops for a faster model. Asked again after each further stretch
  *  of that length. */
-export async function criticalCheck(host: ReviewHost, runId: string, node: TaskNode, modelId: string, minutes: number, evidence: string,
+export async function criticalCheck(host: LeadHost, runId: string, node: TaskNode, modelId: string, minutes: number, evidence: string,
   asked: number[]): Promise<string | null> {
   const expected = loopTurns(node) * settings.minutes_per_turn;
   const due = expected * settings.critical_overrun_factor * (asked[0] + 1);
@@ -33,7 +33,7 @@ export async function criticalCheck(host: ReviewHost, runId: string, node: TaskN
 }
 
 /** Whether a work package's attempt far past its expected turns goes on: null, or why it stops. */
-export async function overrun(host: ReviewHost, run: ExecutionRun, node: TaskNode, modelId: string, expected: number, evidence: string,
+export async function overrun(host: LeadHost, run: ExecutionRun, node: TaskNode, modelId: string, expected: number, evidence: string,
   turns: number): Promise<string | null> {
   let reason: string | null;
   try {

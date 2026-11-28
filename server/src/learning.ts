@@ -19,7 +19,7 @@ import * as quality from "./quality.js";
 import * as retrospect from "./retrospect.js";
 import * as skills from "./skills.js";
 import { currentTask, Task } from "./tasks.js";
-import { learning } from "./ports/learning.js";
+import { base as noLearning, learning } from "./ports/learning.js";
 
 export const MAX_ITEMS = 3;
 export const MAX_APPLIED = 5;
@@ -168,6 +168,8 @@ export type LearningHost = {
   configured(run: ExecutionRun): Set<string>;
   actualCost(result: unknown, node: TaskNode | null, modelId: string): Promise<number>;
   engineerRequest(text: string, kind: string, origin: string, options: { runId?: string | null; budgetUsd?: number | null; improvementId?: string | null }): EngineerJob;
+  /** Until the task's own run has ended: a cancel can come before its last attempt is accounted for. */
+  settled(runId: string): Promise<void>;
 };
 
 export function skipCancelledLearning(host: LearningHost, runId: string): void {
@@ -190,7 +192,7 @@ export function skipCancelledLearning(host: LearningHost, runId: string): void {
   }
 }
 
-export function learningSource(host: LearningHost, review: LearningReview): ExecutionRun | null {
+export function learningSource(host: { db: Pick<Database, "getRun"> }, review: LearningReview): ExecutionRun | null {
   const run = host.db.getRun(review.run_id);
   if (run && run.status === "cancelled" && review.automatic) throw new SkippedLearning();
   return run;
@@ -240,7 +242,17 @@ export function startLearning(host: LearningHost, runId: string, { manual = fals
   review.error = null;
   host.db.saveLearningReview(review);
   // Python starts the review only inside a running event loop; ``start`` false is a caller without one.
-  if (start) host.learningTasks.set(runId, new Task(async (signal) => (await learning()).learn(host, runId, signal)));
+  // A task cancelled meanwhile: its review is skipped and its lessons stopped, once the review has saved what it got.
+  if (start) host.learningTasks.set(runId, new Task(async (signal) => {
+    const port = await learning();
+    // Switched off meanwhile: base says why, and nothing ran to clean up after.
+    if (port === noLearning) return port.learn(host, runId, signal);
+    try {
+      await port.learn(host, runId, signal);
+    } finally {
+      if (host.db.getRun(runId)) skipCancelledLearning(host, runId);
+    }
+  }));
   return review;
 }
 
@@ -275,7 +287,7 @@ export function syncImprovements(db: Database): void {
 }
 
 export const sameKey = (item: Improvement) => pyDumps([item.kind, item.content.trim(), [...item.tools].sort(), item.capability ?? null]);
-export const allocated = (db: Database, review: LearningReview) => {
+export const allocated = (db: Pick<Database, "improvements" | "engineerJobs">, review: LearningReview) => {
   const ids = new Set(db.improvements(review.run_id).filter((i) => i.revision === review.revision).map((i) => i.id));
   return db.engineerJobs(1000).filter((job) => job.improvement_id && ids.has(job.improvement_id)).reduce((sum, job) => sum + job.budget_usd, 0);
 };

@@ -24,8 +24,12 @@ export type Research = {
 /** One call of a model for the research (reading the leaderboard's page): its answer, its cost, the model. */
 export type Reader = (prompt: string, signal: AbortSignal) => Promise<{ text: string; cost_usd: number; model_id: string }>;
 
+/** The records model research reads and keeps: the model catalog, the catalog's sync state, and the
+ *  leaderboards' cached results. */
+export type ResearchStore = Pick<Database, "saveModels" | "saveBenchmarkCache" | "loadBenchmarkCache" | "saveCatalogState" | "loadCatalogState">;
+
 /** What FluidForm asks of the research package's code. */
-export type ResearchPackage = { start(db: Database, models: Record<string, ModelProfile>, reader: Reader | null): Research };
+export type ResearchPackage = { start(db: ResearchStore, models: Record<string, ModelProfile>, reader: Reader | null): Research };
 
 let running: Research | null = null;
 let runningFor: Database | null = null;

@@ -1,6 +1,6 @@
 // Public benchmark results, kept separate from the application's routing presets.
 import {
-  apiProviders, compareKeys, type Database, type Fetcher, get, HttpStatusError, log, type ModelProfile, pyQuote, pyStr, pythonIso,
+  apiProviders, compareKeys, type ResearchStore, type Fetcher, get, HttpStatusError, log, type ModelProfile, pyQuote, pyStr, pythonIso,
   RequestTimeout, settings, splitlines, TransportError, utcnow, within
 } from "../../../src/extension-api.js";
 import { readPage, type Reader } from "./model-read.js";
@@ -375,7 +375,7 @@ export class BenchmarkCatalog {
 
   /** ``reader``: a model FluidForm calls to read the leaderboard's page (model-read.ts); without one,
    *  the page is parsed by code. */
-  constructor(readonly db: Database, readonly reader: Reader | null = null) {
+  constructor(readonly db: ResearchStore, readonly reader: Reader | null = null) {
     this.cache = db.loadBenchmarkCache() as Record<string, Entry>;
   }
 

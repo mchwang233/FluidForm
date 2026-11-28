@@ -1,10 +1,10 @@
 // Looking back on a finished task and keeping what it teaches. The records, and starting and stopping
 // a review, are FluidForm's (server/src/learning.ts).
 import {
-  agent, allocated, AsyncEvent, blocks, BudgetExceeded, Cancelled, currentTask, type Database, diagnosers, evidence, type ExecutionRun,
-  head, type Improvement, ImprovementSchema, isCancelled, LearningHost, LearningProblem, type LearningReview, learningSource, MAX_ITEMS,
+  agent, allocated, AsyncEvent, blocks, BudgetExceeded, Cancelled, diagnosers, evidence, type ExecutionRun,
+  head, type Improvement, ImprovementSchema, isCancelled, type LearningPortHost, LearningProblem, type LearningReview, learningSource, MAX_ITEMS,
   message, metrics, type ModelProfile, nowIso, observe, pyDumps, pyRegex, pyRound, quality, RequestBudget, retrospect, revision, sameKey,
-  settings, skills, skipCancelledLearning, SkippedLearning, strongestModel, tail, uses
+  settings, skills, SkippedLearning, strongestModel, tail, uses
 } from "../../../src/extension-api.js";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -96,12 +96,11 @@ export async function checkSkill(item: Improvement): Promise<Record<string, any>
 /** How a learned skill's check runs; tests replace it. */
 export const checks = { skill: checkSkill };
 
-export async function learn(host: LearningHost, runId: string, signal: AbortSignal): Promise<void> {
+export async function learn(host: LearningPortHost, runId: string, signal: AbortSignal): Promise<void> {
   const review = host.db.learningReview(runId)!;
   try {
     // A cancel event can precede the last recorded attempt. Wait for that final accounting.
-    const task = host.tasks.get(runId);
-    if (task && task !== currentTask() && !task.done) await task.settled();
+    await host.settled(runId);
     const run = learningSource(host, review);
     if (!run || !retrospect.FINISHED.has(run.status)) throw new LearningProblem("任务已重新开始，未生成复盘。");
     review.revision = revision(run);
@@ -182,13 +181,13 @@ export async function learn(host: LearningHost, runId: string, signal: AbortSign
         review.status = "skipped";
         review.error = null;
       }
+      // FluidForm then stops what a cancelled task's review left (learning.skipCancelledLearning).
       host.db.saveLearningReview(review);
-      skipCancelledLearning(host, runId);
     }
   }
 }
 
-async function learningCall(host: LearningHost, review: LearningReview, modelId: string, prompt: string, signal: AbortSignal): Promise<string> {
+async function learningCall(host: LearningPortHost, review: LearningReview, modelId: string, prompt: string, signal: AbortSignal): Promise<string> {
   learningSource(host, review);
   if (review.cost_usd + review.allocated_usd > review.budget_usd) throw new BudgetExceeded("复盘预算已经用尽。");
   const charge = async (cost: number) => {
@@ -215,7 +214,7 @@ async function learningCall(host: LearningHost, review: LearningReview, modelId:
   }
 }
 
-async function validateLesson(host: LearningHost, review: LearningReview, item: Improvement, data: string, choices: ModelProfile[], signal: AbortSignal): Promise<void> {
+async function validateLesson(host: LearningPortHost, review: LearningReview, item: Improvement, data: string, choices: ModelProfile[], signal: AbortSignal): Promise<void> {
   item.status = "validating";
   host.db.saveImprovement(item);
   const check = item.kind === "skill" ? await checks.skill(item) : { type: "advisory_rule_review" };
@@ -257,7 +256,7 @@ async function validateLesson(host: LearningHost, review: LearningReview, item: 
 
 /** Why a proposed change to FluidForm waits instead of going to the platform engineer, or "": the
  *  problem came up in too few tasks, or a change for it is already under way. */
-export function notForEngineer(db: Database, item: Improvement): string {
+export function notForEngineer(db: LearningPortHost["db"], item: Improvement): string {
   if (!uses.engineer()) return "没有启用平台工程师能力，先记下。";
   if (!item.problem_kind) return "没有对应到记录里的具体问题，先记下；同样的问题再出现时再请平台工程师。";
   const runs = retrospect.runsWith(db, item.problem_kind, item.problem_key);
@@ -273,7 +272,7 @@ export function notForEngineer(db: Database, item: Improvement): string {
   return "";
 }
 
-function learningEngineer(host: LearningHost, review: LearningReview, item: Improvement, allowance: number): void {
+function learningEngineer(host: LearningPortHost, review: LearningReview, item: Improvement, allowance: number): void {
   learningSource(host, review);
   // Recover the link if a process stopped after saving the job but before saving the item.
   let job = host.db.engineerJobs(1000).find((j) => j.improvement_id === item.id) ?? null;

@@ -61,3 +61,13 @@ test("the task capabilities are no more tied to the core than before", () => {
     assert.equal(now[name], expected, `${name} went down from ${expected} to ${now[name]}: lower EXPECTED.${name} to ${now[name]} so it stays down`);
   }
 });
+
+test("packages get neither the executor nor the whole database", () => {
+  const api = readFileSync(join(SERVER, "src", "extension-api.ts"), "utf8");
+  const given = new Set([...api.matchAll(/^export (?:type )?\{([^}]*)\}/gm)].flatMap((match) => match[1].split(",").map((name) => name.trim().split(" as ").at(-1)!)));
+  // The executor's classes, all of the database, and the hosts the executor gives its own modules (with
+  // its maps of running tasks): a package gets its port's narrow host and records instead.
+  const withheld = ["ExecutorBase", "Reviewing", "Leading", "Diagnosing", "SelfRepair", "Engineering", "Preflighting", "Executor", "Database",
+    "ReviewHost", "LearningHost"];
+  assert.deepEqual(withheld.filter((name) => given.has(name)), []);
+});

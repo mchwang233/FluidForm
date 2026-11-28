@@ -4,6 +4,7 @@
 // repairing the environment, writing what it found into the task and asking a model to write a skill
 // are FluidForm's (preflighting.ts).
 import type { CliChannelRegistry } from "../cli-channels.js";
+import type { Database } from "../db.js";
 import * as extensions from "../extensions.js";
 import type { LearningHost } from "../learning.js";
 import type { ExecutionRun, ModelProfile, PreflightCheck } from "../models.js";
@@ -25,11 +26,24 @@ export interface SkillHost {
   writeSkill(name: string, tools: string[], general: Skill | null, signal: AbortSignal): Promise<string>;
 }
 
+/** The records looking back on a task reads and keeps: finished tasks and their retrospectives, its
+ *  reviews, lessons and what they did, and the platform engineer's jobs a lesson asked for. */
+export type LearningRecords = Db & Pick<Database, "learningReview" | "saveLearningReview" | "improvement" | "improvements" | "saveImprovement"
+  | "saveImprovementEffect" | "transaction">;
+
+/** What looking back on a task may ask of FluidForm: models to ask, the records above, and to wait for
+ *  the task's own run to end; nothing of the executor itself. */
+export type LearningPortHost = Pick<LearningHost, "modelLookup" | "providers" | "configured" | "actualCost" | "engineerRequest" | "settled">
+  & { db: LearningRecords };
+
+/** The records naming a task's problems reads and keeps: the retrospectives. */
+export type NamingRecords = Pick<Database, "retrospective" | "retrospectives" | "saveRetrospective">;
+
 export interface LearningPort {
   /** Look back on the finished task ``runId`` and keep what it teaches. */
-  learn(host: LearningHost, runId: string, signal: AbortSignal): Promise<void>;
+  learn(host: LearningPortHost, runId: string, signal: AbortSignal): Promise<void>;
   /** Name the problems of the task ``runId`` so that recurring ones are found. */
-  nameProblems(db: Db, complete: (modelId: string, prompt: string) => Promise<Completion>, models: ModelProfile[], configured: Set<string>,
+  nameProblems(db: NamingRecords, complete: (modelId: string, prompt: string) => Promise<Completion>, models: ModelProfile[], configured: Set<string>,
     runId: string): Promise<Review | null>;
   /** What a task's checks depend on: checks that passed for the same key a moment ago are not run again. */
   cacheKey(run: ExecutionRun): string;

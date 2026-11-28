@@ -1,7 +1,7 @@
 // Refresh model metadata without inventing quality scores or making inference calls.
 import type { BenchmarkCatalog } from "./benchmarks.js";
 import {
-  apiProviders, type Database, type Fetcher, fromPythonIso, get, HttpStatusError, type ModelProfile, ModelProfileSchema, Mutex,
+  apiProviders, type ResearchStore, type Fetcher, fromPythonIso, get, HttpStatusError, type ModelProfile, ModelProfileSchema, Mutex,
   PROVIDER_ENV, pyRegex, pythonIso, RequestTimeout, sleep, Task, TransportError, utcnow, within
 } from "../../../src/extension-api.js";
 import { rescore } from "./scoring.js";
@@ -92,7 +92,7 @@ export class CatalogSync {
   task: Task<Json> | null = null;
   scheduler: Task<void> | null = null;
 
-  constructor(readonly db: Database, readonly models: Record<string, ModelProfile>,
+  constructor(readonly db: ResearchStore, readonly models: Record<string, ModelProfile>,
     { autoSync = true, intervalHours = 24, benchmarks = null }: { autoSync?: boolean; intervalHours?: number; benchmarks?: BenchmarkCatalog | null } = {}) {
     this.autoSync = autoSync;
     this.intervalHours = intervalHours;

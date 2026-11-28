@@ -63,6 +63,13 @@ export class Executor extends Preflighting {
     return learning.startLearning(this, runId, { manual });
   }
 
+  /** Until the task's own run has ended (learning.LearningHost): a cancel can come before its last
+   *  attempt is accounted for. */
+  async settled(runId: string): Promise<void> {
+    const task = this.tasks.get(runId);
+    if (task && task !== currentTask() && !task.done) await task.settled();
+  }
+
   restoreLearning(): void {
     learning.restoreLearning(this);
   }

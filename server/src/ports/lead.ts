@@ -2,6 +2,7 @@
 // gives the lead's words and reads its replies, and reviews a step's result; asking the lead in the
 // task's conversation, and doing what it decided to the task, are FluidForm's (leading.ts). Without
 // the capability (base) FluidForm decides by its fixed rules, and a step's own check is its review.
+import type { Database } from "../db.js";
 import * as extensions from "../extensions.js";
 import type { ArtifactEvidence, Diagnosis, EngineerJob, ExecutionRun, ModelProfile, TaskNode } from "../models.js";
 import { available } from "../provided.js";
@@ -19,6 +20,11 @@ export type Failure = {
 
 /** A repair the lead asked for has ended, as ``diagnosis`` says. */
 export type Repaired = { run: ExecutionRun; node: TaskNode; diagnosis: Diagnosis; choices: ModelProfile[]; left: [number, number] };
+
+/** What reviewing a step's result, and checking on a long step, may ask of FluidForm: a model call
+ *  against the task's budget, the lead in the task's conversation, progress events, and reading the task. */
+export type LeadHost = Pick<ReviewHost, "complete" | "configured" | "emit" | "canLead" | "thinking" | "askLead" | "modelLookup">
+  & { db: Pick<Database, "getRun"> };
 
 export interface LeadPort {
   /** Whether there is a lead to ask: without one FluidForm decides by its fixed rules. */
@@ -38,14 +44,14 @@ export interface LeadPort {
   /** How to answer, said again to a lead whose reply held no valid decision. */
   decisionFormat(rework: boolean, final: boolean): string;
   /** Whether a step that has worked ``minutes`` without the outputs it promised should stop: the reason, or null. */
-  criticalCheck(host: ReviewHost, runId: string, node: TaskNode, modelId: string, minutes: number, evidence: string, asked: number[]): Promise<string | null>;
+  criticalCheck(host: LeadHost, runId: string, node: TaskNode, modelId: string, minutes: number, evidence: string, asked: number[]): Promise<string | null>;
   /** Whether a step far past its expected turns should stop: the reason, or null. */
-  overrun(host: ReviewHost, run: ExecutionRun, node: TaskNode, modelId: string, expected: number, evidence: string, turns: number): Promise<string | null>;
+  overrun(host: LeadHost, run: ExecutionRun, node: TaskNode, modelId: string, expected: number, evidence: string, turns: number): Promise<string | null>;
 }
 
 export interface ReviewPort {
   /** Another model's verdict on a step's result. */
-  reviewResult(host: ReviewHost, run: ExecutionRun, node: TaskNode, text: string, changed: string[], workspace: string | null,
+  reviewResult(host: LeadHost, run: ExecutionRun, node: TaskNode, text: string, changed: string[], workspace: string | null,
     evidence?: ArtifactEvidence | null): Promise<quality.Verdict>;
 }
 

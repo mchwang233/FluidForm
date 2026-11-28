@@ -1,5 +1,5 @@
 import {
-  Completion, Db, head, log, minBy, type ModelProfile, mostCommon, pricing, Problem, problem, program, pyDumps, pyRound, pySplit, Review
+  Completion, head, log, minBy, type ModelProfile, mostCommon, pricing, type NamingRecords, Problem, problem, program, pyDumps, pyRound, pySplit, Review
 } from "../../../src/extension-api.js";
 
 // --- Naming problems by what they are about (one cheap model call when a task ends) ---------------
@@ -37,7 +37,7 @@ export function parseNames(text: string | null | undefined, count: number): stri
 }
 
 /** The names given so far, the most used first. */
-export function knownTopics(db: Db, limit = 80): string[] {
+export function knownTopics(db: Pick<NamingRecords, "retrospectives">, limit = 80): string[] {
   const names: string[] = [];
   for (const body of db.retrospectives() as Review[]) for (const item of body.problems || []) if (item.topic) names.push(item.topic);
   return mostCommon(names).slice(0, limit);
@@ -54,7 +54,7 @@ export async function namingModel(models: ModelProfile[], configured: Set<string
 
 /** Give each problem of ``runId``'s retrospective a ``topic``: ``complete(modelId, prompt)`` is a
  *  model call. Never throws; the retrospective stays as it is when naming fails. */
-export async function nameProblems(db: Db, complete: (modelId: string, prompt: string) => Promise<Completion>, models: ModelProfile[],
+export async function nameProblems(db: NamingRecords, complete: (modelId: string, prompt: string) => Promise<Completion>, models: ModelProfile[],
   configured: Set<string>, runId: string): Promise<Review | null> {
   try {
     let body = db.retrospective(runId) as Review | null;

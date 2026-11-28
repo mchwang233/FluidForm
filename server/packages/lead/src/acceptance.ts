@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   type ArtifactEvidence, BudgetExceeded, canAct, type ExecutionRun, folderId, head, isCancelled, type ModelProfile, ModelUnavailable,
-  pickReviewer, quality, type ReviewHost, settings, StepLimitExceeded, type TaskNode
+  pickReviewer, quality, type LeadHost, settings, StepLimitExceeded, type TaskNode
 } from "../../../src/extension-api.js";
 
 type Json = Record<string, any>;
@@ -17,7 +17,7 @@ const withCost = (error: unknown, cost: number) => {
 /** Accept or reject a result: verification nodes give their own verdict; others are reviewed by another
  *  model against the node's acceptance criteria. A result whose model says part of the task cannot be
  *  done here is not accepted, whatever else it did. */
-export async function reviewResult(host: ReviewHost, run: ExecutionRun, node: TaskNode, text: string, changed: string[], workspace: string | null,
+export async function reviewResult(host: LeadHost, run: ExecutionRun, node: TaskNode, text: string, changed: string[], workspace: string | null,
   artifactEvidence: ArtifactEvidence | null = null): Promise<quality.Verdict> {
   const claim = quality.unableClaim(text);
   if (claim) return quality.verdict({ passed: false, reason: `无法完成：${claim}`, fix: claim, unable: claim });
